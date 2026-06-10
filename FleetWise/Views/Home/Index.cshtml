@@ -1,0 +1,64 @@
+﻿@model FleetWise.Models.LoginViewModel
+@{
+    Layout = "~/Views/Shared/_LoginLayout.cshtml";
+}
+
+<div class="bg-wrapper">
+    <div class="card">
+
+        <!-- Left Panel -->
+        <div class="left-panel">
+            <div class="left-content">
+                <img src="~/images/fleetwise-logo.png" alt="FleetWise Logo" class="logo" />
+                <div class="brand-name">
+                    <span class="brand-fleet">Fleet</span><span class="brand-wise">Wise</span>
+                </div>
+                <p class="brand-sub">Operator Dashboard</p>
+                <p class="tagline">Drive Your Fleet with Intelligence</p>
+            </div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="right-panel">
+            <h1 class="sign-in-title">Sign In</h1>
+
+            <form asp-action="Index" asp-controller="Home" method="post">
+                @if (!ViewData.ModelState.IsValid)
+                {
+                    <div class="error-message">
+                        @Html.ValidationSummary(true)
+                    </div>
+                }
+
+                <div class="input-group">
+                    <span class="input-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                    </span>
+                    <input asp-for="Email" class="input-field" placeholder="Email" />
+                </div>
+                <span asp-validation-for="Email" class="field-error"></span>
+
+                <div class="input-group">
+                    <span class="input-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                    </span>
+                    <input asp-for="Password" class="input-field" placeholder="Password" />
+                </div>
+                <span asp-validation-for="Password" class="field-error"></span>
+
+                <div class="forgot-password">
+                    <a href="#">Forgot Password?</a>
+                </div>
+
+                <button type="submit" class="sign-in-btn">Sign In</button>
+            </form>
+        </div>
+
+    </div>
+</div>

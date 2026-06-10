@@ -1,0 +1,354 @@
+@{
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
+    var currentAction     = ViewContext.RouteData.Values["action"]?.ToString();
+
+    bool IsActive(string controller, string action = "Index")
+        => string.Equals(currentController, controller, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(currentAction,     action,     StringComparison.OrdinalIgnoreCase);
+}
+
+@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Mvc.Rendering
+
+@*
+    ── Icon helper ─────────────────────────────────────────────────────────────
+    Each icon is a self-contained inline SVG using currentColor so it inherits
+    the link's color automatically (active = white, hover = teal, default = muted).
+*@
+@functions {
+    public static IHtmlContent NavIcon(string name)
+    {
+        var svgMap = new System.Collections.Generic.Dictionary<string, string>
+        {
+            ["dashboard"] =
+                @"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'
+                      stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>
+                    <rect x='3' y='3' width='7' height='7' rx='1'/>
+                    <rect x='14' y='3' width='7' height='7' rx='1'/>
+                    <rect x='3' y='14' width='7' height='7' rx='1'/>
+                    <rect x='14' y='14' width='7' height='7' rx='1'/>
+                  </svg>",
+
+            ["map"] =
+                @"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'
+                      stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>
+                    <path d='M12 2C8.686 2 6 4.686 6 8c0 4.418 6 12 6 12s6-7.582 6-12c0-3.314-2.686-6-6-6z'/>
+                    <circle cx='12' cy='8' r='2'/>
+                  </svg>",
+
+            ["vehicles"] =
+                @"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'
+                      stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>
+                    <path d='M5 17H3V9l2.5-4h11L19 9v8h-2'/>
+                    <circle cx='7.5' cy='17' r='1.5'/>
+                    <circle cx='16.5' cy='17' r='1.5'/>
+                    <path d='M5 9h14'/>
+                  </svg>",
+
+            ["dispatch"] =
+                @"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'
+                      stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>
+                    <circle cx='12' cy='12' r='9'/>
+                    <circle cx='12' cy='12' r='1' fill='currentColor'/>
+                    <path d='M12 3v3M12 18v3M3 12h3M18 12h3'/>
+                    <path d='M12 12l4-4'/>
+                  </svg>",
+
+
+            ["reports"] =
+                @"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'
+                      stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>
+                    <path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/>
+                    <polyline points='14 2 14 8 20 8'/>
+                    <line x1='8' y1='13' x2='16' y2='13'/>
+                    <line x1='8' y1='17' x2='13' y2='17'/>
+                  </svg>",
+
+            ["users"] =
+                @"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'
+                      stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>
+                    <path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/>
+                    <circle cx='9' cy='7' r='4'/>
+                    <path d='M23 21v-2a4 4 0 0 0-3-3.87'/>
+                    <path d='M16 3.13a4 4 0 0 1 0 7.75'/>
+                  </svg>"
+        };
+
+        return svgMap.TryGetValue(name, out var svg)
+            ? new HtmlString(svg)
+            : HtmlString.Empty;
+    }
+}
+
+@{
+    var navItems = new[]
+    {
+        new { Label = "Dashboard", Controller = "Dashboard", Action = "Index", IconKey = "dashboard" },
+        new { Label = "Fleet Map", Controller = "FleetMap",  Action = "Index", IconKey = "map"       },
+        new { Label = "Vehicles",  Controller = "Vehicles",  Action = "Index", IconKey = "vehicles"  },
+        new { Label = "Dispatch",  Controller = "Dispatch",  Action = "Index", IconKey = "dispatch"  },
+        new { Label = "Reports",   Controller = "Reports",   Action = "Index", IconKey = "reports"   },
+        new { Label = "Users",     Controller = "Users",     Action = "Index", IconKey = "users"     },
+    };
+}
+
+<aside class="fw-sidebar" id="fwSidebar">
+
+    @* Logo *@
+    <div class="fw-sidebar__logo">
+        <a asp-controller="Dashboard" asp-action="Index" class="fw-sidebar__logo-link">
+            <img src="~/images/fleetwise-logo.png" alt="FleetWise" class="fw-sidebar__logo-img" />
+            <span class="fw-sidebar__logo-text"><b>Fleet</b><strong>Wise</strong></span>
+        </a>
+        
+    </div>
+
+    <hr class="fw-sidebar__divider" />
+
+    @* Navigation *@
+    <nav class="fw-sidebar__nav" aria-label="Main navigation">
+        <ul class="fw-sidebar__list">
+            @foreach (var item in navItems)
+            {
+                var active = IsActive(item.Controller, item.Action);
+                <li class="fw-sidebar__item">
+                    <a asp-controller="@item.Controller"
+                       asp-action="@item.Action"
+                       class="fw-sidebar__link @(active ? "fw-sidebar__link--active" : "")"
+                       aria-current="@(active ? "page" : null)">
+                        <span class="fw-sidebar__icon" aria-hidden="true">
+                            @NavIcon(item.IconKey)
+                        </span>
+                        <span class="fw-sidebar__label">@item.Label</span>
+                    </a>
+                </li>
+            }
+        </ul>
+    </nav>
+
+    @* User profile *@
+    <div class="fw-sidebar__profile">
+        <img src="~/images/user-avatar.png" alt="User avatar" class="fw-sidebar__avatar" />
+        <div class="fw-sidebar__profile-info">
+            <span class="fw-sidebar__profile-name">Juan Dela Cruz</span>
+            <span class="fw-sidebar__profile-role">Administrator</span>
+        </div>
+    </div>
+
+</aside>
+
+<style>
+    /* ─── Variables ─────────────────────────────────────────── */
+    :root {
+        --fw-sidebar-collapsed: 72px;
+        --fw-sidebar-expanded:  220px;
+        --fw-teal:              #4AADA8;
+        --fw-teal-light:        #E8F6F5;
+        --fw-text-dark:         #2D3748;
+        --fw-text-muted:        #9AA5B4;
+        --fw-bg:                #FFFFFF;
+        --fw-divider:           #E8ECF0;
+        --fw-transition:        220ms ease;
+    }
+
+    /* ─── Sidebar shell ─────────────────────────────────────── */
+    .fw-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: var(--fw-sidebar-collapsed);
+        background: var(--fw-bg);
+        box-shadow: 2px 0 12px rgba(0, 0, 0, .08);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        transition: width var(--fw-transition);
+        z-index: 200;
+    }
+
+    .fw-sidebar:hover {
+        width: var(--fw-sidebar-expanded);
+    }
+
+    /* ─── Logo ──────────────────────────────────────────────── */
+    .fw-sidebar__logo {
+        padding: 18px 14px 12px;
+        flex-shrink: 0;
+    }
+
+    .fw-sidebar__logo-link {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .fw-sidebar__logo-img {
+        width: 45px;
+        height: 45px;
+        object-fit: contain;
+        flex-shrink: 0;
+    }
+
+    .fw-sidebar__logo-text {
+        font-size: 1.15rem;
+        color: var(--fw-text-dark);
+        opacity: 0;
+        transform: translateX(-6px);
+        transition: opacity var(--fw-transition), transform var(--fw-transition);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .fw-sidebar__logo-text strong { color: var(--fw-teal); }
+
+    .fw-sidebar:hover .fw-sidebar__logo-text {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    /* ─── Divider ───────────────────────────────────────────── */
+    .fw-sidebar__divider {
+        border: none;
+        border-top: 1px solid gray;
+        margin: 3px 14px 8px;
+        flex-shrink: 0;
+    }
+
+    /* ─── Nav list ──────────────────────────────────────────── */
+    .fw-sidebar__nav {
+        flex: 1;
+        overflow: hidden;
+        padding: 4px 0;
+        margin-left:2px;
+        margin-top:20px;
+    }
+
+    .fw-sidebar__list {
+        list-style: none;
+        margin-left: 2px;
+        padding: 0;
+    }
+
+    .fw-sidebar__item { padding: 3px 10px; }
+
+    /* ─── Link ──────────────────────────────────────────────── */
+    .fw-sidebar__link {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 11px 10px;
+        border-radius: 10px;
+        text-decoration: none;
+        color: var(--fw-text-muted);
+        white-space: nowrap;
+        transition: background var(--fw-transition), color var(--fw-transition);
+    }
+
+    .fw-sidebar__link:hover {
+        background: var(--fw-teal-light);
+        color: var(--fw-teal);
+    }
+
+    .fw-sidebar__link--active {
+        background: var(--fw-teal) !important;
+        color: #ffffff !important;
+        
+    }
+
+    /* ─── Icon wrapper ──────────────────────────────────────── */
+    .fw-sidebar__icon {
+        width: 22px;
+        height: 22px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* SVG inherits currentColor from the <a> tag automatically */
+    .fw-sidebar__icon svg {
+        width: 22px;
+        height: 22px;
+    }
+
+    /* ─── Labels (hidden when collapsed) ───────────────────── */
+    .fw-sidebar__label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        font-family: 'Segoe UI', sans-serif;
+        opacity: 0;
+        transform: translateX(-6px);
+        transition: opacity var(--fw-transition), transform var(--fw-transition);
+        pointer-events: none;
+    }
+
+    .fw-sidebar:hover .fw-sidebar__label {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    /* ─── Profile block ─────────────────────────────────────── */
+    .fw-sidebar__profile {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 20px 12px 30px;
+        flex-shrink: 0;
+        border-top: 1px solid #d9d9d9;
+        white-space: nowrap;
+        overflow: hidden;
+        margin-left: 2px;
+    }
+
+    .fw-sidebar__avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex-shrink: 0;
+        margin-left: 3px;
+    }
+
+    .fw-sidebar__profile-info {
+        display: flex;
+        flex-direction: column;
+        opacity: 0;
+        transform: translateX(-6px);
+        transition: opacity var(--fw-transition), transform var(--fw-transition);
+        margin-left: 3px;
+    }
+
+    .fw-sidebar:hover .fw-sidebar__profile-info {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    .fw-sidebar__profile-name {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--fw-text-dark);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .fw-sidebar__profile-role {
+        font-size: 0.75rem;
+        color: var(--fw-text-muted);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    /* ─── Push page content away from the collapsed sidebar ── */
+    .fw-main-content {
+        margin-left: var(--fw-sidebar-collapsed);
+        transition: margin-left var(--fw-transition);
+    }
+
+    /* ─── Accessibility: respect reduced motion ─────────────── */
+    @@media (prefers-reduced-motion: reduce) {
+        .fw-sidebar,
+        .fw-sidebar__label,
+        .fw-sidebar__logo-text,
+        .fw-sidebar__profile-info { transition: none; }
+    }
+</style>

@@ -1,0 +1,199 @@
+﻿/* ─── Variables ─────────────────────────────────────────── */
+:root {
+    --fw-sidebar-collapsed: 72px;
+    --fw-sidebar-expanded: 220px;
+    --fw-teal: #4AADA8;
+    --fw-teal-light: #E8F6F5;
+    --fw-text-dark: #2D3748;
+    --fw-text-muted: #9AA5B4;
+    --fw-bg: #FFFFFF;
+    --fw-divider: #E8ECF0;
+    --fw-transition: 220ms ease;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.bg-wrapper {
+    width: 100vw;
+    min-height: 100vh;
+    background: url('/images/login-bg.png') no-repeat center center;
+    background-size: cover;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.card {
+    display: flex;
+    width: 820px;
+    min-height: 460px;
+    background: #ffffff;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
+}
+
+/* Left Panel */
+.left-panel {
+    width: 45%;
+    background: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+}
+
+.left-content {
+    text-align: center;
+}
+
+.logo {
+    width: 200px;
+    
+}
+
+.tagline {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1e3a5f;
+    letter-spacing: 0.3px;
+}
+
+/* Right Panel */
+.right-panel {
+    width: 55%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 50px 55px;
+    
+}
+
+.sign-in-title {
+    font-size: 32px;
+    font-weight: 700;
+    color: #1e3a5f;
+    margin-bottom: 35px;
+    text-align: center;
+}
+
+.input-group {
+    display: flex;
+    align-items: center;
+    border: 1px solid #d0d0d0;
+    border-radius: 8px;
+    padding: 12px 15px;
+    margin-bottom: 8px;
+    background: #fff;
+}
+
+    .input-group:focus-within {
+        border-color: #3ab5a4;
+        box-shadow: 0 0 0 3px rgba(58, 181, 164, 0.15);
+    }
+
+.input-icon {
+    margin-right: 10px;
+    color: #aaa;
+    font-size: 16px;
+}
+
+.input-field {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 14px;
+    color: #333;
+    background: transparent;
+}
+
+    .input-field::placeholder {
+        color: #aaa;
+    }
+
+.field-error {
+    color: #e74c3c;
+    font-size: 12px;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.error-message {
+    background: #fdecea;
+    color: #e74c3c;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 15px;
+}
+
+.forgot-password {
+    text-align: right;
+    margin-bottom: 20px;
+    margin-top: 4px;
+}
+
+    .forgot-password a {
+        font-size: 13px;
+        color: #3ab5a4;
+        text-decoration: none;
+    }
+
+        .forgot-password a:hover {
+            text-decoration: underline;
+        }
+
+.sign-in-btn {
+    width: 100%;
+    padding: 14px;
+    background: #4AADA8;
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+    .sign-in-btn:hover {
+        background: #2e9e8e;
+    }
+
+
+.brand-name {
+    font-size: 38px;
+    font-weight: 700;
+
+}
+
+.brand-fleet {
+    color: #1e3a5f;
+}
+
+.brand-wise {
+    color: #3ab5a4;
+}
+
+.brand-sub {
+    font-size: 20px;
+    color: #888;
+    margin-bottom: 130px;
+    font-weight: 400;
+}
+
+.left-panel {
+    border-right: 2px solid #3ab5a4;
+}
