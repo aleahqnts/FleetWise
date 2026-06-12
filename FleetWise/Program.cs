@@ -14,6 +14,18 @@ builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.Requ
     .AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddControllersWithViews();
 
+// Tell the app how to create a Supabase connection
+builder.Services.AddSingleton(provider => {
+    var config = provider.GetRequiredService<IConfiguration>();
+
+    var url = config["Supabase:Url"];  // reads from appsettings.json
+    var key = config["Supabase:Key"];  // reads from appsettings.json
+
+    var client = new Supabase.Client(url, key);
+    client.InitializeAsync().Wait();   // actually opens the connection
+    return client;
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
