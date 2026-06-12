@@ -1,7 +1,1090 @@
-﻿@*
-    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-*@
-@{
+﻿@{
+    ViewData["Title"] = "Reports";
+    Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<h3>Reports</h3>
+<!-- PAGE TITLE -->
+<h2 class="rp-title">Reports</h2>
+
+<!-- STAT CARDS -->
+<div class="rp-stat-grid">
+
+    <div class="rp-stat-card">
+        <div class="rp-stat-header">
+            <span class="rp-stat-icon rp-stat-icon--green">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none"
+                     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <rect x="1" y="3" width="15" height="13" rx="2" />
+                    <path d="M16 8h4l3 3v5h-7V8z" />
+                    <circle cx="5.5" cy="18.5" r="2.5" />
+                    <circle cx="18.5" cy="18.5" r="2.5" />
+                </svg>
+            </span>
+            <span class="rp-stat-label">Total Trips</span>
+        </div>
+        <div class="rp-stat-value">25</div>
+        <div class="rp-stat-sub">Completed</div>
+    </div>
+
+    <div class="rp-stat-card">
+        <div class="rp-stat-header">
+            <span class="rp-stat-icon rp-stat-icon--red">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none"
+                     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="8" y1="12" x2="16" y2="12" />
+                </svg>
+            </span>
+            <span class="rp-stat-label">Delayed/Missed Trips</span>
+        </div>
+        <div class="rp-stat-value">10</div>
+        <div class="rp-stat-sub">Delayed</div>
+    </div>
+
+    <div class="rp-stat-card">
+        <div class="rp-stat-header">
+            <span class="rp-stat-icon rp-stat-icon--blue">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none"
+                     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+            </span>
+            <span class="rp-stat-label">Total Passengers</span>
+        </div>
+        <div class="rp-stat-value">201</div>
+        <div class="rp-stat-delta rp-delta--up">&#x25B4; +32 vs yesterday</div>
+    </div>
+
+    <div class="rp-stat-card">
+        <div class="rp-stat-header">
+            <span class="rp-stat-icon rp-stat-icon--pink">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none"
+                     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <line x1="12" y1="1" x2="12" y2="23" />
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+            </span>
+            <span class="rp-stat-label">Total Revenue</span>
+        </div>
+        <div class="rp-stat-value">&#8369;3,015</div>
+        <div class="rp-stat-delta rp-delta--up">&#x25B4; +&#8369;500 vs yesterday</div>
+    </div>
+
+</div>
+
+<!-- DAILY TRIP REPORTS TABLE -->
+<div class="rp-card rp-card--table">
+    <div class="rp-card-header">
+        <span class="rp-card-icon rp-card-icon--purple">
+            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="none"
+                 stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+                <polyline points="10 9 9 9 8 9" />
+            </svg>
+        </span>
+        <span class="rp-card-title">Daily Trip Reports</span>
+    </div>
+
+    <div class="rp-table-wrap">
+        <table class="rp-table">
+            <thead>
+                <tr>
+                    <th>Trip ID</th>
+                    <th>Driver</th>
+                    <th>Bus ID</th>
+                    <th>Route</th>
+                    <th>Shift</th>
+                    <th>Passengers</th>
+                    <th>Revenue</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @* Replace with @foreach (var trip in Model.Trips) when DB is ready *@
+                <tr>
+                    <td>TRIP-2026-001</td>
+                    <td>Juan Dela Cruz</td>
+                    <td>BUS-01<br /><span class="rp-plate">123ABC</span></td>
+                    <td>Route 01</td>
+                    <td><span class="rp-shift rp-shift--morning">Morning Shift</span></td>
+                    <td>71</td>
+                    <td>&#8369; 1,234.00</td>
+                    <td><button class="rp-btn-view">View</button></td>
+                </tr>
+                <tr>
+                    <td>TRIP-2026-002</td>
+                    <td>Aleah Quintos</td>
+                    <td>BUS-02<br /><span class="rp-plate">234GVA</span></td>
+                    <td>Route 01</td>
+                    <td><span class="rp-shift rp-shift--morning">Morning Shift</span></td>
+                    <td>104</td>
+                    <td>&#8369; 2,254.00</td>
+                    <td><button class="rp-btn-view">View</button></td>
+                </tr>
+                <tr>
+                    <td>TRIP-2026-003</td>
+                    <td>Marc Malapajo</td>
+                    <td>BUS-03<br /><span class="rp-plate">738BGS</span></td>
+                    <td>Route 01</td>
+                    <td><span class="rp-shift rp-shift--morning">Morning Shift</span></td>
+                    <td>109</td>
+                    <td>&#8369; 1,568.00</td>
+                    <td><button class="rp-btn-view">View</button></td>
+                </tr>
+                <tr>
+                    <td>TRIP-2026-004</td>
+                    <td>Anela Bantog</td>
+                    <td>BUS-04<br /><span class="rp-plate">456TYT</span></td>
+                    <td>Route 02</td>
+                    <td><span class="rp-shift rp-shift--afternoon">Afternoon Shift</span></td>
+                    <td>121</td>
+                    <td>&#8369; 1,456.00</td>
+                    <td><button class="rp-btn-view">View</button></td>
+                </tr>
+                <tr>
+                    <td>TRIP-2026-005</td>
+                    <td>Stephen Quintans</td>
+                    <td>BUS-05<br /><span class="rp-plate">947JTD</span></td>
+                    <td>Route 02</td>
+                    <td><span class="rp-shift rp-shift--afternoon">Afternoon Shift</span></td>
+                    <td>95</td>
+                    <td>&#8369; 1,897.00</td>
+                    <td><button class="rp-btn-view">View</button></td>
+                </tr>
+                <tr>
+                    <td>TRIP-2026-006</td>
+                    <td>Max Bautista</td>
+                    <td>BUS-06<br /><span class="rp-plate">652HSF</span></td>
+                    <td>Route 02</td>
+                    <td><span class="rp-shift rp-shift--evening">Evening Shift</span></td>
+                    <td>135</td>
+                    <td>&#8369; 1,324.00</td>
+                    <td><button class="rp-btn-view">View</button></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="rp-pagination">
+        <span class="rp-pagination-info">Showing 1 to 6 of 45 trips</span>
+        <div class="rp-pagination-controls">
+            <button class="rp-page-btn rp-page-btn--nav" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <polyline points="15 18 9 12 15 6" />
+                </svg>
+            </button>
+            <button class="rp-page-btn rp-page-btn--active">1</button>
+            <button class="rp-page-btn">2</button>
+            <button class="rp-page-btn">3</button>
+            <button class="rp-page-btn rp-page-btn--nav">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <polyline points="9 18 15 12 9 6" />
+                </svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- SUMMARY ROW -->
+<div class="rp-summary-grid">
+
+    <!-- Passenger Summary -->
+    <div class="rp-card">
+        <div class="rp-card-header">
+            <span class="rp-card-icon rp-card-icon--purple">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="none"
+                     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                </svg>
+            </span>
+            <span class="rp-card-title">Passenger Summary</span>
+            <div class="rp-period-select-wrap ms-auto">
+                <select class="rp-period-select">
+                    <option>This Day</option>
+                    <option>This Week</option>
+                    <option>Last Week</option>
+                    <option>This Month</option>
+                </select>
+                <span class="rp-select-arrow">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                        <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                </span>
+            </div>
+        </div>
+
+        <div class="rp-summary-body">
+            <div class="rp-summary-left">
+                <div class="rp-summary-sublabel">Total Passengers</div>
+                <div class="rp-summary-big">14,230</div>
+                <div class="rp-delta-row rp-delta--up">&#x25B4; 12.4%</div>
+                <div class="rp-vs-label">vs Last Week</div>
+            </div>
+            <div class="rp-summary-right">
+                <div class="rp-mini-chart-wrap">
+                    <canvas id="passengerMiniChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bar chart: Top Routes by Passengers -->
+        <div class="rp-bar-section">
+            <div class="rp-bar-title">Top Routes by Passengers</div>
+            <canvas id="passengerBarChart" class="rp-bar-canvas"></canvas>
+        </div>
+    </div>
+
+    <!-- Revenue Summary -->
+    <div class="rp-card">
+        <div class="rp-card-header">
+            <span class="rp-card-icon rp-card-icon--green">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="none"
+                     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                </svg>
+            </span>
+            <span class="rp-card-title">Revenue Summary</span>
+            <div class="rp-period-select-wrap ms-auto">
+                <select class="rp-period-select">
+                    <option>This Day</option>
+                    <option>This Week</option>
+                    <option>Last Week</option>
+                    <option>This Month</option>
+                </select>
+                <span class="rp-select-arrow">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                        <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                </span>
+            </div>
+        </div>
+
+        <div class="rp-summary-body">
+            <div class="rp-summary-left">
+                <div class="rp-summary-sublabel">Total Revenue</div>
+                <div class="rp-summary-big">&#8369;245,680.00</div>
+                <div class="rp-delta-row rp-delta--up">&#x25B4; 18.6%</div>
+                <div class="rp-vs-label">vs Last Week</div>
+            </div>
+            <div class="rp-summary-right">
+                <div class="rp-mini-chart-wrap">
+                    <canvas id="revenueMiniChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Earning Routes -->
+        <div class="rp-bar-section">
+            <div class="rp-bar-title">Top Earning Routes</div>
+            <div class="rp-route-bars">
+                @* Replace with @foreach when DB is ready *@
+                <div class="rp-route-bar-row">
+                    <span class="rp-route-name">Route 01</span>
+                    <span class="rp-route-amount">&#8369;98,250</span>
+                    <div class="rp-progress-wrap">
+                        <div class="rp-progress-bar" style="width:50%;background:#4285F4;"></div>
+                    </div>
+                    <span class="rp-route-pct">50%</span>
+                </div>
+                <div class="rp-route-bar-row">
+                    <span class="rp-route-name">Route 02</span>
+                    <span class="rp-route-amount">&#8369;87,930</span>
+                    <div class="rp-progress-wrap">
+                        <div class="rp-progress-bar" style="width:30%;background:#4AADA8;"></div>
+                    </div>
+                    <span class="rp-route-pct">30%</span>
+                </div>
+                <div class="rp-route-bar-row">
+                    <span class="rp-route-name">Route 03</span>
+                    <span class="rp-route-amount">&#8369;79,292</span>
+                    <div class="rp-progress-wrap">
+                        <div class="rp-progress-bar" style="width:20%;background:#9B59B6;"></div>
+                    </div>
+                    <span class="rp-route-pct">20%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- REPORT TEMPLATES -->
+<div class="rp-card rp-card--templates">
+    <div class="rp-templates-inner">
+        <div class="rp-templates-label">
+            <span class="rp-card-icon rp-card-icon--purple">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="none"
+                     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                </svg>
+            </span>
+            <span class="rp-card-title">Report Templates</span>
+        </div>
+        <div class="rp-template-btns">
+            <button class="rp-template-btn rp-template-btn--green">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <rect x="1" y="3" width="15" height="13" rx="2" />
+                    <path d="M16 8h4l3 3v5h-7V8z" />
+                    <circle cx="5.5" cy="18.5" r="2.5" />
+                    <circle cx="18.5" cy="18.5" r="2.5" />
+                </svg>
+                Daily Trip Reports
+            </button>
+            <button class="rp-template-btn rp-template-btn--blue">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                </svg>
+                Passenger Reports
+            </button>
+            <button class="rp-template-btn rp-template-btn--pink">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <line x1="12" y1="1" x2="12" y2="23" />
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+                Revenue Reports
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+    // ── Mini line charts ── Replace data arrays with model binding when DB is ready
+    const weekLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    function miniLineChart(id, data, color) {
+    new Chart(document.getElementById(id).getContext('2d'), {
+    type: 'line',
+    data: {
+    labels: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+    datasets: [{
+    data: data,
+    borderColor: color,
+    borderWidth: 1.8,
+    pointRadius: 3,
+    pointBackgroundColor: '#fff',
+    pointBorderColor: color,
+    pointBorderWidth: 1.5,
+    tension: 0.35,
+    fill: false
+    }]
+    },
+    options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    scales: {
+    x: {
+    display: true,
+    grid: { display: false },
+    border: { display: false },
+    ticks: { font: { size: 10, family: 'Segoe UI' }, color: '#9AA5B4', maxRotation: 0 }
+    },
+    y: {
+    display: true,
+    position: 'left',
+    grid: { color: '#F0F0F0' },
+    border: { display: false },
+    ticks: { font: { size: 10, family: 'Segoe UI' }, color: '#9AA5B4', maxTicksLimit: 5 },
+    grace: '10%'
+    }
+    },
+    layout: { padding: { left: 0, right: 4, top: 4, bottom: 0 } }
+    }
+    });
+    }
+
+    // Replace these arrays with Html.Raw(Json.Serialize(Model.PassengerWeekData)) etc.
+    miniLineChart('passengerMiniChart', [1800, 2100, 1950, 2300, 2100, 2400, 1580], '#9B59B6');
+    miniLineChart('revenueMiniChart',   [28000, 34000, 31000, 38000, 35000, 42000, 37680], '#4AADA8');
+
+    // ── Bar chart: Top Routes by Passengers ──
+    // Replace with Html.Raw(Json.Serialize(Model.RoutePassengerData)) when DB is ready
+    new Chart(document.getElementById('passengerBarChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+    labels: ['Route 01', 'Route 02', 'Route 03'],
+    datasets: [{
+    data: [6250, 4850, 3880],
+    backgroundColor: ['#7C6FE0', '#4AADA8', '#4DB6C4'],
+    borderRadius: 6,
+    borderSkipped: false
+    }]
+    },
+    options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+    legend: { display: false },
+    tooltip: {
+    backgroundColor: '#fff',
+    titleColor: '#2D3748',
+    bodyColor: '#2D3748',
+    borderColor: '#E8ECF0',
+    borderWidth: 1,
+    padding: 10,
+    callbacks: {
+    label: (item) => ` ${item.parsed.y.toLocaleString()} passengers`
+    }
+    }
+    },
+    scales: {
+    x: { grid: { display: false }, ticks: { font: { size: 11, family: 'Segoe UI' }, color: '#9AA5B4' } },
+    y: { grid: { color: '#F0F0F0' }, ticks: { font: { size: 11, family: 'Segoe UI' }, color: '#9AA5B4' } }
+    }
+    }
+    });
+</script>
+
+<style>
+    :root {
+    --rp-text: #2D3748;
+    --rp-muted: #9AA5B4;
+    --rp-border: #E8ECF0;
+    --rp-bg: #F8F9FA;
+    --rp-white: #FFFFFF;
+    --rp-teal: #4AADA8;
+    --rp-radius: 14px;
+    --rp-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+
+    /* ── Topbar filters ─────────────────────────────────────── */
+    .rp-route-wrap, .rp-date-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    }
+
+    .rp-filter-label {
+    font-size: 0.88rem;
+    font-family: 'Segoe UI', sans-serif;
+    color: var(--rp-text);
+    font-weight: 500;
+    white-space: nowrap;
+    }
+
+    .rp-select-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    }
+
+    .rp-select {
+    appearance: none;
+    padding: 6px 32px 6px 12px;
+    border: 1.5px solid var(--rp-border);
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-family: 'Segoe UI', sans-serif;
+    color: var(--rp-text);
+    background: var(--rp-bg);
+    cursor: pointer;
+    outline: none;
+    font-weight: 500;
+    }
+
+    .rp-select-arrow {
+    position: absolute;
+    right: 10px;
+    pointer-events: none;
+    color: var(--rp-text);
+    display: flex;
+    }
+
+    .rp-input-wrap {
+    position: relative;
+    }
+
+    .rp-date-input {
+    padding: 6px 12px;
+    border: 1.5px solid var(--rp-border);
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-family: 'Segoe UI', sans-serif;
+    color: var(--rp-text);
+    background: var(--rp-bg);
+    outline: none;
+    cursor: pointer;
+    }
+
+    .rp-date-input:focus {
+    border-color: var(--rp-teal);
+    }
+
+    /* ── Page title ─────────────────────────────────────────── */
+    .rp-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--rp-text);
+    font-family: 'Segoe UI', sans-serif;
+    margin-bottom: 20px;
+    }
+
+    /* ── Stat grid ──────────────────────────────────────────── */
+    .rp-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+    }
+
+    .rp-stat-card {
+    background: var(--rp-white);
+    border: 1px solid var(--rp-border);
+    border-radius: var(--rp-radius);
+    padding: 20px 22px;
+    box-shadow: var(--rp-shadow);
+    }
+
+    .rp-stat-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    }
+
+    .rp-stat-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    }
+
+    .rp-stat-icon--green {
+    background: #E8F8EE;
+    color: #27AE60;
+    }
+
+    .rp-stat-icon--red {
+    background: #FEECEC;
+    color: #E74C3C;
+    }
+
+    .rp-stat-icon--blue {
+    background: #EAF3FF;
+    color: #3B82F6;
+    }
+
+    .rp-stat-icon--pink {
+    background: #FDF0F8;
+    color: #D63384;
+    }
+
+    .rp-stat-label {
+    font-size: 0.82rem;
+    font-family: 'Segoe UI', sans-serif;
+    color: var(--rp-muted);
+    font-weight: 500;
+    }
+
+    .rp-stat-value {
+    font-size: 1.85rem;
+    font-weight: 700;
+    color: var(--rp-text);
+    font-family: 'Segoe UI', sans-serif;
+    line-height: 1.1;
+    }
+
+    .rp-stat-sub {
+    font-size: 0.78rem;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    margin-top: 4px;
+    }
+
+    .rp-stat-delta {
+    font-size: 0.78rem;
+    font-family: 'Segoe UI', sans-serif;
+    margin-top: 5px;
+    }
+
+    .rp-delta--up {
+    color: #27AE60;
+    }
+
+    .rp-delta--down {
+    color: #E74C3C;
+    }
+
+    /* ── Shared card ────────────────────────────────────────── */
+    .rp-card {
+    background: var(--rp-white);
+    border: 1px solid var(--rp-border);
+    border-radius: var(--rp-radius);
+    padding: 20px 22px;
+    box-shadow: var(--rp-shadow);
+    margin-bottom: 20px;
+    }
+
+    .rp-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    }
+
+    .rp-card-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    }
+
+    .rp-card-icon--purple {
+    background: #F0EEFF;
+    color: #7C6FE0;
+    }
+
+    .rp-card-icon--green {
+    background: #E8F8EE;
+    color: #27AE60;
+    }
+
+    .rp-card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--rp-text);
+    font-family: 'Segoe UI', sans-serif;
+    }
+
+    /* ── Table ──────────────────────────────────────────────── */
+    .rp-table-wrap {
+    overflow-x: auto;
+    }
+
+    .rp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 0.875rem;
+    }
+
+    .rp-table thead tr {
+    border-bottom: 1.5px solid var(--rp-border);
+    }
+
+    .rp-table th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--rp-muted);
+    white-space: nowrap;
+    }
+
+    .rp-table td {
+    padding: 13px 14px;
+    color: var(--rp-text);
+    border-bottom: 1px solid var(--rp-border);
+    vertical-align: middle;
+    }
+
+    .rp-table tbody tr:last-child td {
+    border-bottom: none;
+    }
+
+    .rp-table tbody tr:hover {
+    background: #FAFBFC;
+    }
+
+    .rp-plate {
+    font-size: 0.75rem;
+    color: var(--rp-muted);
+    }
+
+    /* ── Shift badges ───────────────────────────────────────── */
+    .rp-shift {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: 'Segoe UI', sans-serif;
+    white-space: nowrap;
+    }
+
+    .rp-shift--morning {
+    background: #FFF8E1;
+    color: #F59E0B;
+    }
+
+    .rp-shift--afternoon {
+    background: #E8F8EE;
+    color: #27AE60;
+    }
+
+    .rp-shift--evening {
+    background: #EAF3FF;
+    color: #3B82F6;
+    }
+
+    /* ── View button ────────────────────────────────────────── */
+    .rp-btn-view {
+    padding: 6px 18px;
+    border: 1.5px solid var(--rp-border);
+    border-radius: 8px;
+    background: var(--rp-white);
+    font-size: 0.8rem;
+    font-family: 'Segoe UI', sans-serif;
+    color: var(--rp-text);
+    cursor: pointer;
+    font-weight: 500;
+    transition: border-color 180ms, background 180ms;
+    }
+
+    .rp-btn-view:hover {
+    border-color: var(--rp-teal);
+    color: var(--rp-teal);
+    }
+
+    /* ── Pagination ─────────────────────────────────────────── */
+    .rp-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+    }
+
+    .rp-pagination-info {
+    font-size: 0.82rem;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    }
+
+    .rp-pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    }
+
+    .rp-page-btn {
+    width: 32px;
+    height: 32px;
+    border: 1.5px solid var(--rp-border);
+    border-radius: 7px;
+    background: var(--rp-white);
+    font-size: 0.82rem;
+    font-family: 'Segoe UI', sans-serif;
+    color: var(--rp-text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 180ms;
+    }
+
+    .rp-page-btn:hover:not(:disabled) {
+    border-color: var(--rp-teal);
+    color: var(--rp-teal);
+    }
+
+    .rp-page-btn--active {
+    background: var(--rp-teal);
+    border-color: var(--rp-teal);
+    color: #fff;
+    }
+
+    .rp-page-btn--nav:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    }
+
+    /* ── Summary grid ───────────────────────────────────────── */
+    .rp-summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+    }
+
+    .rp-summary-grid .rp-card {
+    margin-bottom: 0;
+    }
+
+    .rp-summary-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 20px;
+    }
+
+    .rp-summary-left {
+    flex: 1;
+    }
+
+    .rp-summary-right {
+    flex: 1;
+    min-width: 0;
+    }
+
+    .rp-mini-chart-wrap {
+    position: relative;
+    width: 100%;
+    height: 140px;
+    }
+
+    .rp-mini-chart-wrap canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+    }
+
+    .rp-summary-sublabel {
+    font-size: 0.78rem;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    margin-bottom: 4px;
+    }
+
+    .rp-summary-big {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--rp-text);
+    font-family: 'Segoe UI', sans-serif;
+    line-height: 1.2;
+    }
+
+    .rp-delta-row {
+    font-size: 0.82rem;
+    font-family: 'Segoe UI', sans-serif;
+    margin-top: 4px;
+    font-weight: 600;
+    }
+
+    .rp-vs-label {
+    font-size: 0.75rem;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    margin-top: 2px;
+    }
+
+    /* ── Bar section ────────────────────────────────────────── */
+    .rp-bar-section {
+    border-top: 1px solid var(--rp-border);
+    padding-top: 16px;
+    }
+
+    .rp-bar-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--rp-text);
+    font-family: 'Segoe UI', sans-serif;
+    margin-bottom: 12px;
+    }
+
+    .rp-bar-canvas {
+    height: 160px !important;
+    width: 100% !important;
+    }
+
+    /* ── Route progress bars ────────────────────────────────── */
+    .rp-route-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    }
+
+    .rp-route-bar-row {
+    display: grid;
+    grid-template-columns: 70px 90px 1fr 40px;
+    align-items: center;
+    gap: 10px;
+    }
+
+    .rp-route-name {
+    font-size: 0.82rem;
+    color: var(--rp-text);
+    font-family: 'Segoe UI', sans-serif;
+    font-weight: 500;
+    }
+
+    .rp-route-amount {
+    font-size: 0.82rem;
+    color: var(--rp-text);
+    font-family: 'Segoe UI', sans-serif;
+    }
+
+    .rp-progress-wrap {
+    height: 8px;
+    background: #F0F0F0;
+    border-radius: 4px;
+    overflow: hidden;
+    }
+
+    .rp-progress-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 600ms ease;
+    }
+
+    .rp-route-pct {
+    font-size: 0.78rem;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    text-align: right;
+    }
+
+    /* ── Period select ──────────────────────────────────────── */
+    .rp-period-select-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    }
+
+    .rp-period-select {
+    appearance: none;
+    padding: 5px 26px 5px 10px;
+    border: 1.5px solid var(--rp-border);
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-family: 'Segoe UI', sans-serif;
+    color: var(--rp-text);
+    background: var(--rp-bg);
+    cursor: pointer;
+    outline: none;
+    font-weight: 500;
+    }
+
+    /* ── Report templates ───────────────────────────────────── */
+    .rp-card--templates {
+    margin-bottom: 0;
+    }
+
+    .rp-templates-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    }
+
+    .rp-templates-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    }
+
+    .rp-template-btns {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    }
+
+    .rp-template-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 28px;
+    border-radius: 12px;
+    border: 1.5px solid var(--rp-border);
+    font-size: 0.9rem;
+    font-family: 'Segoe UI', sans-serif;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 180ms;
+    background: var(--rp-bg);
+    white-space: nowrap;
+    }
+
+    .rp-template-btn--green {
+    color: #27AE60;
+    }
+
+    .rp-template-btn--blue {
+    color: #3B82F6;
+    }
+
+    .rp-template-btn--pink {
+    color: #D63384;
+    }
+
+    .rp-template-btn:hover {
+    background: var(--rp-bg);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0,0,0,.08);
+    }
+
+    /* ── Responsive ─────────────────────────────────────────── */
+    @@media (max-width: 1100px) {
+    .rp-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+    }
+
+    .rp-summary-grid {
+    grid-template-columns: 1fr;
+    }
+    }
+
+    @@media (max-width: 640px) {
+    .rp-stat-grid {
+    grid-template-columns: 1fr;
+    }
+
+    .rp-route-bar-row {
+    grid-template-columns: 60px 1fr 40px;
+    }
+
+    .rp-route-amount {
+    display: none;
+    }
+    }
+</style>
+
+@section TopbarContent {
+    <div class="rp-route-wrap">
+        <span class="rp-filter-label">Route:</span>
+        <div class="rp-select-wrap">
+            <select class="rp-select">
+                <option>All Routes</option>
+                <option>Route 01</option>
+                <option>Route 02</option>
+                <option>Route 03</option>
+            </select>
+            <span class="rp-select-arrow">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
+            </span>
+        </div>
+    </div>
+
+    <div class="rp-date-wrap">
+        <span class="rp-filter-label">Date:</span>
+        <div class="rp-input-wrap">
+            <input type="date" class="rp-date-input" value="2026-05-27" />
+        </div>
+    </div>
+}

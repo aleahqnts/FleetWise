@@ -1,4 +1,5 @@
-﻿@{
+﻿@model FleetWise.Models.DashboardViewModel
+@{
     ViewData["Title"] = "Dashboard";
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
@@ -24,7 +25,7 @@
             </span>
             <span class="db-stat-label">Active Trips</span>
         </div>
-        <div class="db-stat-value">25</div>
+        <div class="db-stat-value">@Model.ActiveTrips</div>
     </div>
 
     <div class="db-stat-card">
@@ -38,7 +39,7 @@
             </span>
             <span class="db-stat-label">Flagged Vehicles</span>
         </div>
-        <div class="db-stat-value">10</div>
+        <div class="db-stat-value">@Model.FlaggedVehicles</div>
     </div>
 
     <div class="db-stat-card">
@@ -51,8 +52,14 @@
             </span>
             <span class="db-stat-label">Total Passengers</span>
         </div>
-        <div class="db-stat-value">201</div>
-        <div class="db-stat-delta db-stat-delta--up">&#x2B06; +32 vs yesterday</div>
+        <div class="db-stat-value">@Model.TotalPassengers</div>
+        @if (Model.PassengerDelta != 0)
+        {
+            var deltaClass = Model.PassengerDelta >= 0 ? "db-stat-delta--up" : "db-stat-delta--down";
+            var deltaArrow = Model.PassengerDelta >= 0 ? "&#x2B06;" : "&#x2B07;";
+            var deltaSign = Model.PassengerDelta >= 0 ? "+" : "";
+            <div class="db-stat-delta @deltaClass">@Html.Raw(deltaArrow) @deltaSign@Model.PassengerDelta vs yesterday</div>
+        }
     </div>
 
     <div class="db-stat-card">
@@ -66,8 +73,14 @@
             </span>
             <span class="db-stat-label">Total Revenue</span>
         </div>
-        <div class="db-stat-value">&#8369;3,015</div>
-        <div class="db-stat-delta db-stat-delta--up">&#x2B06; +&#8369;500 vs yesterday</div>
+        <div class="db-stat-value">&#8369;@Model.TotalRevenue.ToString("N0")</div>
+        @if (Model.RevenueDelta != 0)
+        {
+            var deltaClass = Model.RevenueDelta >= 0 ? "db-stat-delta--up" : "db-stat-delta--down";
+            var deltaArrow = Model.RevenueDelta >= 0 ? "&#x2B06;" : "&#x2B07;";
+            var deltaSign = Model.RevenueDelta >= 0 ? "+" : "";
+            <div class="db-stat-delta @deltaClass">@Html.Raw(deltaArrow) &#8369;@deltaSign@Model.RevenueDelta.ToString("N0") vs yesterday</div>
+        }
     </div>
 
 </div>
@@ -97,7 +110,6 @@
     </div>
 
     <!-- Fleet Map -->
-
     <div class="db-card db-card--map">
         <div class="db-card-header">
             <span class="db-card-icon db-card-icon--green">
@@ -110,7 +122,7 @@
             </span>
             <span class="db-card-title">Fleet Map</span>
         </div>
-       @* <div class="db-map-body">
+        @* <div class="db-map-body">
             <div class="db-map-placeholder">
                 <!-- Simulated map background -->
                 <div class="db-map-grid"></div>
@@ -129,514 +141,523 @@
         </div>
     </div>*@
 
-</div>
-
-
-<!-- Chart.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script>
-    const ctx = document.getElementById('demandChart').getContext('2d');
-    new Chart(ctx, {
-    type: 'line',
-    data: {
-    labels: ['8:00 AM','9:00 AM','10:00 AM','11:00 AM','12:00 PM','1:00 PM','2:00 PM'],
-    datasets: [{
-    label: 'All Routes',
-    data: [320, 310, 210, 245, 155, 230, 200],
-    borderColor: '#4AADA8',
-    backgroundColor: 'rgba(74,173,168,0.08)',
-    borderWidth: 2.2,
-    pointBackgroundColor: '#4AADA8',
-    pointRadius: 5,
-    pointHoverRadius: 7,
-    tension: 0,
-    fill: true
-    }]
-    },
-    options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    scales: {
-    x: {
-    grid: { color: '#F0F0F0' },
-    ticks: { font: { size: 11, family: 'Segoe UI' }, color: '#9AA5B4' }
-    },
-    y: {
-    min: 0,
-    max: 400,
-    ticks: {
-    stepSize: 100,
-    font: { size: 11, family: 'Segoe UI' },
-    color: '#9AA5B4'
-    },
-    grid: { color: '#F0F0F0' }
-    }
-    }
-    }
-    });
-</script>
-
-<style>
-    /* ── Variables (inherit from sidebar) ──────────────────── */
-    :root {
-    --db-teal: #4AADA8;
-    --db-teal-light: #E8F6F5;
-    --db-text: #2D3748;
-    --db-muted: #9AA5B4;
-    --db-border: #E8ECF0;
-    --db-bg: #F8F9FA;
-    --db-white: #FFFFFF;
-    --db-radius: 14px;
-    --db-shadow: 0 1px 4px rgba(0,0,0,.06);
-    }
-
-    /* ── Top bar ────────────────────────────────────────────── */
-    .db-topbar {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    margin-bottom: 28px;
-    }
-
-    .db-search-wrap {
-    position: relative;
-    flex: 1;
-    max-width: 460px;
-    }
-
-    .db-search-icon {
-    position: absolute;
-    left: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    align-items: center;
-    }
-
-    .db-search-input {
-    width: 100%;
-    padding: 7px 14px 7px 38px;
-    font-size: 0.82rem;
-    background: #f8f9fa;
-    border: 1.5px solid var(--db-border);
-    border-radius: 10px;
-    font-family: 'Segoe UI', sans-serif;
-    color: var(--db-text);
-    outline: none;
-    transition: border-color 180ms;
-    }
-
-    .db-search-input:focus {
-    border-color: var(--db-teal);
-    }
-
-    .db-route-wrap {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    }
-
-    .db-route-label {
-    font-size: 0.9rem;
-    font-family: 'Segoe UI', sans-serif;
-    color: var(--db-text);
-    font-weight: 500;
-    }
-
-    .db-route-select-wrap {
-    position: relative;
-    display: flex;
-    align-items: center;
-    }
-
-    .db-route-select {
-    width: 150px;
-    appearance: none;
-    padding: 7px 14px 7px 14px;
-    font-size: 0.82rem;
-    background: #f8f9fa;
-    border: 1.5px solid var(--db-border);
-    border-radius: 10px;
-    font-family: 'Segoe UI', sans-serif;
-    color: var(--db-text);
-    cursor: pointer;
-    outline: none;
-    font-weight: 400;
-    }
-
-    .db-select-arrow {
-    position: absolute;
-    right: 12px;
-    pointer-events: none;
-    color: var(--db-text);
-    }
-
-    /* ── Page title ─────────────────────────────────────────── */
-    .db-title {
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: var(--db-text);
-    font-family: 'Segoe UI', sans-serif;
-    margin-bottom: 20px;
-    }
-
-    /* ── Stat grid ──────────────────────────────────────────── */
-    .db-stat-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 20px;
-    }
-
-    .db-stat-card {
-    background: var(--db-white);
-    border: 1px solid var(--db-border);
-    border-radius: var(--db-radius);
-    padding: 20px 22px;
-    box-shadow: var(--db-shadow);
-    }
-
-    .db-stat-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-    }
-
-    .db-stat-icon {
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    }
-
-    .db-stat-icon--green {
-    background: #E8F8EE;
-    color: #27AE60;
-    }
-
-    .db-stat-icon--red {
-    background: #FEECEC;
-    color: #E74C3C;
-    }
-
-    .db-stat-icon--blue {
-    background: #EAF3FF;
-    color: #3B82F6;
-    }
-
-    .db-stat-icon--pink {
-    background: #FDF0F8;
-    color: #D63384;
-    }
-
-    .db-stat-label {
-    font-size: 0.85rem;
-    font-family: 'Segoe UI', sans-serif;
-    color: var(--db-muted);
-    font-weight: 500;
-    }
-
-    .db-stat-value {
-    font-size: 1.85rem;
-    font-weight: 700;
-    color: var(--db-text);
-    font-family: 'Segoe UI', sans-serif;
-    line-height: 1.1;
-    }
-
-    .db-stat-delta {
-    font-size: 0.78rem;
-    font-family: 'Segoe UI', sans-serif;
-    margin-top: 6px;
-    }
-
-    .db-stat-delta--up {
-    color: #27AE60;
-    }
-
-    /* ── Middle row ─────────────────────────────────────────── */
-    .db-mid-grid {
-    display: grid;
-    grid-template-columns: 1.4fr 1fr;
-    gap: 16px;
-    margin-bottom: 20px;
-    }
-
-    /* ── Shared card ────────────────────────────────────────── */
-    .db-card {
-    background: var(--db-white);
-    border: 1px solid var(--db-border);
-    border-radius: var(--db-radius);
-    padding: 20px 22px;
-    box-shadow: var(--db-shadow);
-    }
-
-    .db-card-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-    }
-
-    .db-card-icon {
-    width: 30px;
-    height: 30px;
-    border-radius: 7px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    }
-
-    .db-card-icon--teal {
-    background: var(--db-teal-light);
-    color: var(--db-teal);
-    }
-
-    .db-card-icon--green {
-    background: #E8F8EE;
-    color: #27AE60;
-    }
-
-    .db-card-icon--red {
-    background: #FEECEC;
-    color: #E74C3C;
-    }
-
-    .db-card-icon--orange {
-    background: #FEF3E8;
-    color: #F4723B;
-    }
-
-    .db-card-title {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--db-text);
-    font-family: 'Segoe UI', sans-serif;
-    }
-
-    .db-badge {
-    font-size: 0.72rem;
-    font-weight: 600;
-    font-family: 'Segoe UI', sans-serif;
-    padding: 3px 10px;
-    border-radius: 20px;
-    }
-
-    .db-badge--teal {
-    background: var(--db-teal-light);
-    color: var(--db-teal);
-    }
-
-    .db-chart-legend {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-left: auto;
-    }
-
-    .db-legend-swatch {
-    width: 26px;
-    height: 12px;
-    border-radius: 3px;
-    display: inline-block;
-    }
-
-    .db-legend-text {
-    font-size: 0.78rem;
-    color: var(--db-muted);
-    font-family: 'Segoe UI', sans-serif;
-    }
-
-    /* ── Chart canvas ───────────────────────────────────────── */
-    .db-chart-canvas {
-    height: 260px !important;
-    width: 100% !important;
-    }
-
-    /* ── Map ────────────────────────────────────────────────── */
-    .db-card--map {
-    display: flex;
-    flex-direction: column;
-    }
-
-    .db-map-body {
-    flex: 1;
-    }
-
-    .db-map-placeholder {
-    position: relative;
-    height: 280px;
-    background: #E8EFF7;
-    border-radius: 10px;
-    overflow: hidden;
-    }
-
-    .db-map-grid {
-    position: absolute;
-    inset: 0;
-    background-image: linear-gradient(rgba(255,255,255,.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.35) 1px, transparent 1px);
-    background-size: 40px 40px;
-    }
-
-    .db-bus-marker {
-    position: absolute;
-    padding: 5px 10px;
-    border-radius: 6px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    font-family: 'Segoe UI', sans-serif;
-    color: #fff;
-    white-space: nowrap;
-    transform: translate(-50%, -50%);
-    }
-
-    .db-bus--orange {
-    background: #F4723B;
-    }
-
-    .db-bus--teal {
-    background: #4AADA8;
-    }
-
-    .db-bus-dot {
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    border: 3px solid #fff;
-    transform: translate(-50%, -50%);
-    box-shadow: 0 0 0 3px rgba(74,173,168,.3);
-    }
-
-    .db-map-legend {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    background: #fff;
-    border-radius: 8px;
-    padding: 10px 14px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.1);
-    font-family: 'Segoe UI', sans-serif;
-    }
-
-    .db-map-legend-title {
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: var(--db-text);
-    margin-bottom: 6px;
-    }
-
-    .db-map-legend-item {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 0.78rem;
-    color: var(--db-text);
-    margin-bottom: 4px;
-    }
-
-    .db-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    display: inline-block;
-    flex-shrink: 0;
-    }
-
-    /* ── Bottom row ─────────────────────────────────────────── */
-    .db-bottom-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    }
-
-    .db-card--bottom {
-    padding: 18px 20px;
-    }
-
-    .db-card-icon-wrap {
-    width: 30px;
-    height: 30px;
-    border-radius: 7px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 4px;
-    }
-
-    .db-card-body-text {
-    font-size: 0.85rem;
-    color: var(--db-muted);
-    font-family: 'Segoe UI', sans-serif;
-    margin: 0;
-    line-height: 1.5;
-    }
-
-    .db-card-body-text strong {
-    color: var(--db-text);
-    }
-
-    /* ── Responsive ─────────────────────────────────────────── */
-    @@media (max-width: 1100px) {
-    .db-stat-grid {
-    grid-template-columns: repeat(2, 1fr);
-    }
-
-    .db-mid-grid {
-    grid-template-columns: 1fr;
-    }
-    }
-
-    @@media (max-width: 640px) {
-    .db-stat-grid {
-    grid-template-columns: 1fr;
-    }
-
-    .db-bottom-grid {
-    grid-template-columns: 1fr;
-    }
-
-    .db-topbar {
-    flex-direction: column;
-    align-items: stretch;
-    }
-    }
-</style>
-
-@section TopbarContent {
-    <div class="db-search-wrap">
-        <span class="db-search-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
-                 stroke="#9AA5B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-        </span>
-        <input type="text" class="db-search-input" placeholder="Search" />
     </div>
 
-    <div class="db-route-wrap">
-        <span class="db-route-label">Route:</span>
-        <div class="db-route-select-wrap">
-            <select class="db-route-select">
-                <option>All Routes</option>
-                <option>Route 01</option>
-                <option>Route 02</option>
-                <option>Route 03</option>
-            </select>
-            <span class="db-select-arrow">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none"
-                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                    <polyline points="6 9 12 15 18 9" />
+
+    <!-- Chart.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script>
+        // Data injected from the ViewModel — replace hardcoded arrays with server values
+        const chartLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ChartLabels));
+        const chartData   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ChartData));
+
+        const ctx = document.getElementById('demandChart').getContext('2d');
+        new Chart(ctx, {
+        type: 'line',
+        data: {
+        labels: chartLabels,
+        datasets: [{
+        label: 'All Routes',
+        data: chartData,
+        borderColor: '#4AADA8',
+        backgroundColor: 'rgba(74,173,168,0.08)',
+        borderWidth: 2.2,
+        pointBackgroundColor: '#4AADA8',
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        tension: 0,
+        fill: true
+        }]
+        },
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+        x: {
+        grid: { color: '#F0F0F0' },
+        ticks: { font: { size: 11, family: 'Segoe UI' }, color: '#9AA5B4' }
+        },
+        y: {
+        min: 0,
+        max: @Model.ChartYMax,
+        ticks: {
+        stepSize: @Model.ChartYStep,
+        font: { size: 11, family: 'Segoe UI' },
+        color: '#9AA5B4'
+        },
+        grid: { color: '#F0F0F0' }
+        }
+        }
+        }
+        });
+    </script>
+
+    <style>
+        /* ── Variables (inherit from sidebar) ──────────────────── */
+        :root {
+        --db-teal: #4AADA8;
+        --db-teal-light: #E8F6F5;
+        --db-text: #2D3748;
+        --db-muted: #9AA5B4;
+        --db-border: #E8ECF0;
+        --db-bg: #F8F9FA;
+        --db-white: #FFFFFF;
+        --db-radius: 14px;
+        --db-shadow: 0 1px 4px rgba(0,0,0,.06);
+        }
+
+        /* ── Top bar ────────────────────────────────────────────── */
+        .db-topbar {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 28px;
+        }
+
+        .db-search-wrap {
+        position: relative;
+        flex: 1;
+        max-width: 460px;
+        }
+
+        .db-search-icon {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+        }
+
+        .db-search-input {
+        width: 100%;
+        padding: 7px 14px 7px 38px;
+        font-size: 0.82rem;
+        background: #f8f9fa;
+        border: 1.5px solid var(--db-border);
+        border-radius: 10px;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--db-text);
+        outline: none;
+        transition: border-color 180ms;
+        }
+
+        .db-search-input:focus {
+        border-color: var(--db-teal);
+        }
+
+        .db-route-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        }
+
+        .db-route-label {
+        font-size: 0.9rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--db-text);
+        font-weight: 500;
+        }
+
+        .db-route-select-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+        }
+
+        .db-route-select {
+        width: 150px;
+        appearance: none;
+        padding: 7px 14px 7px 14px;
+        font-size: 0.82rem;
+        background: #f8f9fa;
+        border: 1.5px solid var(--db-border);
+        border-radius: 10px;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--db-text);
+        cursor: pointer;
+        outline: none;
+        font-weight: 400;
+        }
+
+        .db-select-arrow {
+        position: absolute;
+        right: 12px;
+        pointer-events: none;
+        color: var(--db-text);
+        }
+
+        /* ── Page title ─────────────────────────────────────────── */
+        .db-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--db-text);
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 20px;
+        }
+
+        /* ── Stat grid ──────────────────────────────────────────── */
+        .db-stat-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 20px;
+        }
+
+        .db-stat-card {
+        background: var(--db-white);
+        border: 1px solid var(--db-border);
+        border-radius: var(--db-radius);
+        padding: 20px 22px;
+        box-shadow: var(--db-shadow);
+        }
+
+        .db-stat-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+        }
+
+        .db-stat-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        }
+
+        .db-stat-icon--green {
+        background: #E8F8EE;
+        color: #27AE60;
+        }
+
+        .db-stat-icon--red {
+        background: #FEECEC;
+        color: #E74C3C;
+        }
+
+        .db-stat-icon--blue {
+        background: #EAF3FF;
+        color: #3B82F6;
+        }
+
+        .db-stat-icon--pink {
+        background: #FDF0F8;
+        color: #D63384;
+        }
+
+        .db-stat-label {
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--db-muted);
+        font-weight: 500;
+        }
+
+        .db-stat-value {
+        font-size: 1.85rem;
+        font-weight: 700;
+        color: var(--db-text);
+        font-family: 'Segoe UI', sans-serif;
+        line-height: 1.1;
+        }
+
+        .db-stat-delta {
+        font-size: 0.78rem;
+        font-family: 'Segoe UI', sans-serif;
+        margin-top: 6px;
+        }
+
+        .db-stat-delta--up {
+        color: #27AE60;
+        }
+
+        .db-stat-delta--down {
+        color: #E74C3C;
+        }
+
+        /* ── Middle row ─────────────────────────────────────────── */
+        .db-mid-grid {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: 16px;
+        margin-bottom: 20px;
+        }
+
+        /* ── Shared card ────────────────────────────────────────── */
+        .db-card {
+        background: var(--db-white);
+        border: 1px solid var(--db-border);
+        border-radius: var(--db-radius);
+        padding: 20px 22px;
+        box-shadow: var(--db-shadow);
+        }
+
+        .db-card-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+        }
+
+        .db-card-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        }
+
+        .db-card-icon--teal {
+        background: var(--db-teal-light);
+        color: var(--db-teal);
+        }
+
+        .db-card-icon--green {
+        background: #E8F8EE;
+        color: #27AE60;
+        }
+
+        .db-card-icon--red {
+        background: #FEECEC;
+        color: #E74C3C;
+        }
+
+        .db-card-icon--orange {
+        background: #FEF3E8;
+        color: #F4723B;
+        }
+
+        .db-card-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--db-text);
+        font-family: 'Segoe UI', sans-serif;
+        }
+
+        .db-badge {
+        font-size: 0.72rem;
+        font-weight: 600;
+        font-family: 'Segoe UI', sans-serif;
+        padding: 3px 10px;
+        border-radius: 20px;
+        }
+
+        .db-badge--teal {
+        background: var(--db-teal-light);
+        color: var(--db-teal);
+        }
+
+        .db-chart-legend {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
+        }
+
+        .db-legend-swatch {
+        width: 26px;
+        height: 12px;
+        border-radius: 3px;
+        display: inline-block;
+        }
+
+        .db-legend-text {
+        font-size: 0.78rem;
+        color: var(--db-muted);
+        font-family: 'Segoe UI', sans-serif;
+        }
+
+        /* ── Chart canvas ───────────────────────────────────────── */
+        .db-chart-canvas {
+        height: 260px !important;
+        width: 100% !important;
+        }
+
+        /* ── Map ────────────────────────────────────────────────── */
+        .db-card--map {
+        display: flex;
+        flex-direction: column;
+        }
+
+        .db-map-body {
+        flex: 1;
+        }
+
+        .db-map-placeholder {
+        position: relative;
+        height: 280px;
+        background: #E8EFF7;
+        border-radius: 10px;
+        overflow: hidden;
+        }
+
+        .db-map-grid {
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(rgba(255,255,255,.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.35) 1px, transparent 1px);
+        background-size: 40px 40px;
+        }
+
+        .db-bus-marker {
+        position: absolute;
+        padding: 5px 10px;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        font-family: 'Segoe UI', sans-serif;
+        color: #fff;
+        white-space: nowrap;
+        transform: translate(-50%, -50%);
+        }
+
+        .db-bus--orange {
+        background: #F4723B;
+        }
+
+        .db-bus--teal {
+        background: #4AADA8;
+        }
+
+        .db-bus-dot {
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 3px solid #fff;
+        transform: translate(-50%, -50%);
+        box-shadow: 0 0 0 3px rgba(74,173,168,.3);
+        }
+
+        .db-map-legend {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: #fff;
+        border-radius: 8px;
+        padding: 10px 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.1);
+        font-family: 'Segoe UI', sans-serif;
+        }
+
+        .db-map-legend-title {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--db-text);
+        margin-bottom: 6px;
+        }
+
+        .db-map-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 0.78rem;
+        color: var(--db-text);
+        margin-bottom: 4px;
+        }
+
+        .db-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+        }
+
+        /* ── Bottom row ─────────────────────────────────────────── */
+        .db-bottom-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        }
+
+        .db-card--bottom {
+        padding: 18px 20px;
+        }
+
+        .db-card-icon-wrap {
+        width: 30px;
+        height: 30px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 4px;
+        }
+
+        .db-card-body-text {
+        font-size: 0.85rem;
+        color: var(--db-muted);
+        font-family: 'Segoe UI', sans-serif;
+        margin: 0;
+        line-height: 1.5;
+        }
+
+        .db-card-body-text strong {
+        color: var(--db-text);
+        }
+
+        /* ── Responsive ─────────────────────────────────────────── */
+        @@media (max-width: 1100px) {
+        .db-stat-grid {
+        grid-template-columns: repeat(2, 1fr);
+        }
+
+        .db-mid-grid {
+        grid-template-columns: 1fr;
+        }
+        }
+
+        @@media (max-width: 640px) {
+        .db-stat-grid {
+        grid-template-columns: 1fr;
+        }
+
+        .db-bottom-grid {
+        grid-template-columns: 1fr;
+        }
+
+        .db-topbar {
+        flex-direction: column;
+        align-items: stretch;
+        }
+        }
+    </style>
+
+    @section TopbarContent {
+        <div class="db-search-wrap">
+            <span class="db-search-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
+                     stroke="#9AA5B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
             </span>
+            <input type="text" class="db-search-input" placeholder="Search" />
         </div>
-    </div>
-}
+
+        <div class="db-route-wrap">
+            <span class="db-route-label">Route:</span>
+            <div class="db-route-select-wrap">
+                <select class="db-route-select">
+                    <option value="">All Routes</option>
+                    @foreach (var route in Model.Routes)
+                    {
+                        <option value="@route.Value">@route.Text</option>
+                    }
+                </select>
+                <span class="db-select-arrow">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                        <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                </span>
+            </div>
+        </div>
+    }
