@@ -21,10 +21,12 @@
             <!-- MAIN AREA -->
             <div class="main-area">
 
-                <!-- TOP BAR (now inside main area) -->
                 <header class="topbar">
                     <div class="container-fluid d-flex align-items-center gap-5">
-                        @await RenderSectionAsync("TopbarContent", required: false)
+                        @if (IsSectionDefined("TopbarContent"))
+                        {
+                            @await RenderSectionAsync("TopbarContent", required: false)
+                        }
                         <div>
                             <!-- optional user/profile/actions -->
                         </div>
@@ -45,7 +47,10 @@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
-    @await RenderSectionAsync("Scripts", required: false)
+    @if (IsSectionDefined("Scripts"))
+    {
+        @await RenderSectionAsync("Scripts", required: false)
+    }
 
 </body>
 </html>
