@@ -1,3 +1,5 @@
+using FleetWise.Data;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -16,6 +18,9 @@ builder.Services.AddSingleton(provider => {
 });
 
 var app = builder.Build();
+
+// Seed empty Supabase tables with demo data (idempotent; logs a warning and continues if Supabase is unreachable)
+await DbSeeder.SeedAsync(app.Services.GetRequiredService<Supabase.Client>(), app.Logger);
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
