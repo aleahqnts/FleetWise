@@ -22,7 +22,7 @@
             </span>
             <span class="rp-stat-label">Total Trips</span>
         </div>
-        <div class="rp-stat-value">25</div>
+        <div class="rp-stat-value" id="statTotalTrips">25</div>
         <div class="rp-stat-sub">Completed</div>
     </div>
 
@@ -37,7 +37,7 @@
             </span>
             <span class="rp-stat-label">Delayed/Missed Trips</span>
         </div>
-        <div class="rp-stat-value">10</div>
+        <div class="rp-stat-value" id="statDelayedTrips">10</div>
         <div class="rp-stat-sub">Delayed</div>
     </div>
 
@@ -54,8 +54,8 @@
             </span>
             <span class="rp-stat-label">Total Passengers</span>
         </div>
-        <div class="rp-stat-value">201</div>
-        <div class="rp-stat-delta rp-delta--up">&#x25B4; +32 vs yesterday</div>
+        <div class="rp-stat-value" id="statTotalPassengers">201</div>
+        <div class="rp-stat-delta rp-delta--up" id="statPassengerDelta">&#x25B4; +32 vs yesterday</div>
     </div>
 
     <div class="rp-stat-card">
@@ -69,8 +69,8 @@
             </span>
             <span class="rp-stat-label">Total Revenue</span>
         </div>
-        <div class="rp-stat-value">&#8369;3,015</div>
-        <div class="rp-stat-delta rp-delta--up">&#x25B4; +&#8369;500 vs yesterday</div>
+        <div class="rp-stat-value" id="statTotalRevenue">&#8369;3,015</div>
+        <div class="rp-stat-delta rp-delta--up" id="statRevenueDelta">&#x25B4; +&#8369;500 vs yesterday</div>
     </div>
 
 </div>
@@ -105,91 +105,17 @@
                     <th>Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                @* Replace with @foreach (var trip in Model.Trips) when DB is ready *@
-                <tr>
-                    <td>TRIP-2026-001</td>
-                    <td>Juan Dela Cruz</td>
-                    <td>BUS-01<br /><span class="rp-plate">123ABC</span></td>
-                    <td>Route 01</td>
-                    <td><span class="rp-shift rp-shift--morning">Morning Shift</span></td>
-                    <td>71</td>
-                    <td>&#8369; 1,234.00</td>
-                    <td><button class="rp-btn-view">View</button></td>
-                </tr>
-                <tr>
-                    <td>TRIP-2026-002</td>
-                    <td>Aleah Quintos</td>
-                    <td>BUS-02<br /><span class="rp-plate">234GVA</span></td>
-                    <td>Route 01</td>
-                    <td><span class="rp-shift rp-shift--morning">Morning Shift</span></td>
-                    <td>104</td>
-                    <td>&#8369; 2,254.00</td>
-                    <td><button class="rp-btn-view">View</button></td>
-                </tr>
-                <tr>
-                    <td>TRIP-2026-003</td>
-                    <td>Marc Malapajo</td>
-                    <td>BUS-03<br /><span class="rp-plate">738BGS</span></td>
-                    <td>Route 01</td>
-                    <td><span class="rp-shift rp-shift--morning">Morning Shift</span></td>
-                    <td>109</td>
-                    <td>&#8369; 1,568.00</td>
-                    <td><button class="rp-btn-view">View</button></td>
-                </tr>
-                <tr>
-                    <td>TRIP-2026-004</td>
-                    <td>Anela Bantog</td>
-                    <td>BUS-04<br /><span class="rp-plate">456TYT</span></td>
-                    <td>Route 02</td>
-                    <td><span class="rp-shift rp-shift--afternoon">Afternoon Shift</span></td>
-                    <td>121</td>
-                    <td>&#8369; 1,456.00</td>
-                    <td><button class="rp-btn-view">View</button></td>
-                </tr>
-                <tr>
-                    <td>TRIP-2026-005</td>
-                    <td>Stephen Quintans</td>
-                    <td>BUS-05<br /><span class="rp-plate">947JTD</span></td>
-                    <td>Route 02</td>
-                    <td><span class="rp-shift rp-shift--afternoon">Afternoon Shift</span></td>
-                    <td>95</td>
-                    <td>&#8369; 1,897.00</td>
-                    <td><button class="rp-btn-view">View</button></td>
-                </tr>
-                <tr>
-                    <td>TRIP-2026-006</td>
-                    <td>Max Bautista</td>
-                    <td>BUS-06<br /><span class="rp-plate">652HSF</span></td>
-                    <td>Route 02</td>
-                    <td><span class="rp-shift rp-shift--evening">Evening Shift</span></td>
-                    <td>135</td>
-                    <td>&#8369; 1,324.00</td>
-                    <td><button class="rp-btn-view">View</button></td>
-                </tr>
+            <tbody id="tripsTableBody">
+                <tr><td colspan="8" style="text-align:center; padding:20px; color:#9AA5B4;">Loading…</td></tr>
             </tbody>
         </table>
     </div>
 
     <!-- Pagination -->
     <div class="rp-pagination">
-        <span class="rp-pagination-info">Showing 1 to 6 of 45 trips</span>
-        <div class="rp-pagination-controls">
-            <button class="rp-page-btn rp-page-btn--nav" disabled>
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none"
-                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                    <polyline points="15 18 9 12 15 6" />
-                </svg>
-            </button>
-            <button class="rp-page-btn rp-page-btn--active">1</button>
-            <button class="rp-page-btn">2</button>
-            <button class="rp-page-btn">3</button>
-            <button class="rp-page-btn rp-page-btn--nav">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none"
-                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                    <polyline points="9 18 15 12 9 6" />
-                </svg>
-            </button>
+        <span class="rp-pagination-info" id="paginationInfo">Showing 0 to 0 of 0 trips</span>
+        <div class="rp-pagination-controls" id="paginationControls">
+            <!-- buttons rendered by JS -->
         </div>
     </div>
 </div>
@@ -209,9 +135,9 @@
             </span>
             <span class="rp-card-title">Passenger Summary</span>
             <div class="rp-period-select-wrap ms-auto">
-                <select class="rp-period-select">
+                <select class="rp-period-select" id="passengerPeriodSelect">
                     <option>This Day</option>
-                    <option>This Week</option>
+                    <option selected>This Week</option>
                     <option>Last Week</option>
                     <option>This Month</option>
                 </select>
@@ -227,9 +153,9 @@
         <div class="rp-summary-body">
             <div class="rp-summary-left">
                 <div class="rp-summary-sublabel">Total Passengers</div>
-                <div class="rp-summary-big">14,230</div>
-                <div class="rp-delta-row rp-delta--up">&#x25B4; 12.4%</div>
-                <div class="rp-vs-label">vs Last Week</div>
+                <div class="rp-summary-big" id="passengerSummaryTotal">14,230</div>
+                <div class="rp-delta-row rp-delta--up" id="passengerSummaryDelta">&#x25B4; 12.4%</div>
+                <div class="rp-vs-label" id="passengerSummaryVsLabel">vs Last Week</div>
             </div>
             <div class="rp-summary-right">
                 <div class="rp-mini-chart-wrap">
@@ -257,9 +183,9 @@
             </span>
             <span class="rp-card-title">Revenue Summary</span>
             <div class="rp-period-select-wrap ms-auto">
-                <select class="rp-period-select">
+                <select class="rp-period-select" id="revenuePeriodSelect">
                     <option>This Day</option>
-                    <option>This Week</option>
+                    <option selected>This Week</option>
                     <option>Last Week</option>
                     <option>This Month</option>
                 </select>
@@ -275,9 +201,9 @@
         <div class="rp-summary-body">
             <div class="rp-summary-left">
                 <div class="rp-summary-sublabel">Total Revenue</div>
-                <div class="rp-summary-big">&#8369;245,680.00</div>
-                <div class="rp-delta-row rp-delta--up">&#x25B4; 18.6%</div>
-                <div class="rp-vs-label">vs Last Week</div>
+                <div class="rp-summary-big" id="revenueSummaryTotal">&#8369;245,680.00</div>
+                <div class="rp-delta-row rp-delta--up" id="revenueSummaryDelta">&#x25B4; 18.6%</div>
+                <div class="rp-vs-label" id="revenueSummaryVsLabel">vs Last Week</div>
             </div>
             <div class="rp-summary-right">
                 <div class="rp-mini-chart-wrap">
@@ -289,32 +215,8 @@
         <!-- Top Earning Routes -->
         <div class="rp-bar-section">
             <div class="rp-bar-title">Top Earning Routes</div>
-            <div class="rp-route-bars">
-                @* Replace with @foreach when DB is ready *@
-                <div class="rp-route-bar-row">
-                    <span class="rp-route-name">Route 01</span>
-                    <span class="rp-route-amount">&#8369;98,250</span>
-                    <div class="rp-progress-wrap">
-                        <div class="rp-progress-bar" style="width:50%;background:#4285F4;"></div>
-                    </div>
-                    <span class="rp-route-pct">50%</span>
-                </div>
-                <div class="rp-route-bar-row">
-                    <span class="rp-route-name">Route 02</span>
-                    <span class="rp-route-amount">&#8369;87,930</span>
-                    <div class="rp-progress-wrap">
-                        <div class="rp-progress-bar" style="width:30%;background:#4AADA8;"></div>
-                    </div>
-                    <span class="rp-route-pct">30%</span>
-                </div>
-                <div class="rp-route-bar-row">
-                    <span class="rp-route-name">Route 03</span>
-                    <span class="rp-route-amount">&#8369;79,292</span>
-                    <div class="rp-progress-wrap">
-                        <div class="rp-progress-bar" style="width:20%;background:#9B59B6;"></div>
-                    </div>
-                    <span class="rp-route-pct">20%</span>
-                </div>
+            <div class="rp-route-bars" id="topEarningRoutes">
+                <!-- rows rendered by JS -->
             </div>
         </div>
     </div>
@@ -335,7 +237,7 @@
             <span class="rp-card-title">Report Templates</span>
         </div>
         <div class="rp-template-btns">
-            <button class="rp-template-btn rp-template-btn--green">
+            <button class="rp-template-btn rp-template-btn--green" data-report-type="DailyTrip">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none"
                      stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                     <rect x="1" y="3" width="15" height="13" rx="2" />
@@ -345,7 +247,7 @@
                 </svg>
                 Daily Trip Reports
             </button>
-            <button class="rp-template-btn rp-template-btn--blue">
+            <button class="rp-template-btn rp-template-btn--blue" data-report-type="Passenger">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none"
                      stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -353,7 +255,7 @@
                 </svg>
                 Passenger Reports
             </button>
-            <button class="rp-template-btn rp-template-btn--pink">
+            <button class="rp-template-btn rp-template-btn--pink" data-report-type="Revenue">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none"
                      stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                     <line x1="12" y1="1" x2="12" y2="23" />
@@ -365,17 +267,260 @@
     </div>
 </div>
 
+<!-- ── Report Generation Modal ───────────────────────────── -->
+<div id="reportGenModal" class="rg-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="rgModalTitle">
+    <div class="rg-modal">
+
+        <!-- Header -->
+        <div class="rg-modal-header">
+            <div class="rg-modal-title-wrap">
+                <span class="rg-modal-icon" id="rgModalIcon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none"
+                         stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                </span>
+                <h3 class="rg-title" id="rgModalTitle">Daily Trip Reports</h3>
+            </div>
+            <button class="rg-close" id="rgModalClose" aria-label="Close">&times;</button>
+        </div>
+
+        <!-- Body: two-column -->
+        <div class="rg-body">
+
+            <!-- LEFT: Filters -->
+            <div class="rg-filters">
+                <div class="rg-filters-heading">Filters</div>
+
+                <div class="rg-field">
+                    <label class="rg-label">Date</label>
+                    <input type="date" class="rg-input" id="rgDate" />
+                </div>
+
+                <div class="rg-field">
+                    <label class="rg-label">Route</label>
+                    <div class="rg-select-wrap">
+                        <select class="rg-select" id="rgRoute">
+                            <option value="">All Routes</option>
+                        </select>
+                        <span class="rg-select-arrow">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none"
+                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="rg-field" id="rgDriverField">
+                    <label class="rg-label">Driver</label>
+                    <div class="rg-select-wrap">
+                        <select class="rg-select" id="rgDriver">
+                            <option value="">All Drivers</option>
+                        </select>
+                        <span class="rg-select-arrow">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none"
+                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="rg-field" id="rgVehicleField">
+                    <label class="rg-label">Vehicles</label>
+                    <div class="rg-select-wrap">
+                        <select class="rg-select" id="rgVehicle">
+                            <option value="">All Vehicles</option>
+                        </select>
+                        <span class="rg-select-arrow">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none"
+                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Preview -->
+            <div class="rg-preview">
+                <div class="rg-preview-sheet" id="rgPreviewSheet">
+                    <!-- Loading -->
+                    <div id="rgPreviewLoading" class="rg-preview-loading">
+                        <div class="rg-spinner"></div>
+                        <span>Generating preview…</span>
+                    </div>
+                    <!-- Content -->
+                    <div id="rgPreviewContent" style="display:none;">
+                        <div class="rg-preview-meta" id="rgPreviewMeta"></div>
+                        <div class="rg-preview-report-title" id="rgPreviewReportTitle"></div>
+                        <div id="rgPreviewTables"></div>
+                    </div>
+                    <!-- Error -->
+                    <div id="rgPreviewError" class="rg-preview-error" style="display:none;">
+                        Unable to generate preview. Please try again.
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div class="rg-footer">
+            <button class="rg-btn-cancel" id="rgCancelBtn">Cancel</button>
+            <div class="rg-format-toggle">
+                <span class="rg-format-label">Format:</span>
+                <div class="rg-toggle-group">
+                    <button class="rg-toggle-btn rg-toggle-btn--active" id="rgFmtPdf" data-fmt="pdf">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        PDF
+                    </button>
+                    <button class="rg-toggle-btn" id="rgFmtCsv" data-fmt="csv">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <path d="M3 9h18M3 15h18M9 3v18" />
+                        </svg>
+                        CSV
+                    </button>
+                </div>
+            </div>
+            <button class="rg-btn-download" id="rgDownloadBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Download
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<!-- ── Daily Trip Report Modal ────────────────────────────── -->
+<div id="tripModal" class="tr-modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="tripModalTitle">
+    <div class="tr-modal">
+        <div class="tr-modal-header">
+            <h3 class="tr-modal-title" id="tripModalTitle">Daily Trip Report</h3>
+            <button class="tr-modal-close" id="tripModalClose" aria-label="Close">&times;</button>
+        </div>
+
+        <div id="tripModalBody" class="tr-modal-body">
+            <!-- Loading state -->
+            <div id="tripModalLoading" class="tr-modal-loading">
+                <div class="tr-spinner"></div>
+                <span>Loading trip details...</span>
+            </div>
+
+            <!-- Content (hidden until loaded) -->
+            <div id="tripModalContent" style="display:none;">
+
+                <div class="tr-section tr-section--id">
+                    <span id="mdTripId" class="tr-trip-id-badge"></span>
+                    <div class="tr-info-row"><span class="tr-info-label">Shift Type:</span> <span id="mdShiftType"></span></div>
+                    <div class="tr-info-row"><span class="tr-info-label">Shift Time:</span> <span id="mdShiftTime"></span></div>
+                    <div class="tr-info-row"><span class="tr-info-label">Route:</span> <span id="mdRoute"></span></div>
+                </div>
+
+                <div class="tr-section">
+                    <div class="tr-section-title">Vehicle Details</div>
+                    <div class="tr-info-row"><span class="tr-info-label">Vehicle Type:</span> <span id="mdVehicleType"></span></div>
+                    <div class="tr-info-row"><span class="tr-info-label">Vehicle ID:</span> <span id="mdVehicleId"></span></div>
+                    <div class="tr-info-row"><span class="tr-info-label">Plate Number:</span> <span id="mdPlate"></span></div>
+                </div>
+
+                <div class="tr-section">
+                    <div class="tr-section-title">Driver Details</div>
+                    <div class="tr-info-row"><span class="tr-info-label">Driver Name:</span> <span id="mdDriverName"></span></div>
+                    <div class="tr-info-row"><span class="tr-info-label">Driver ID:</span> <span id="mdDriverId"></span></div>
+                </div>
+
+                <div class="tr-section tr-section--last">
+                    <div class="tr-section-title">Trip Details</div>
+                    <div class="tr-info-row"><span class="tr-info-label">Date:</span> <span id="mdDate"></span></div>
+                    <div class="tr-info-row"><span class="tr-info-label">Shift Start:</span> <span id="mdStartTime"></span></div>
+                    <div class="tr-info-row"><span class="tr-info-label">Shift End:</span> <span id="mdEndTime"></span></div>
+                    <div class="tr-info-row"><span class="tr-info-label">Total Passengers:</span> <span id="mdPassengers"></span></div>
+                    <div class="tr-info-row"><span class="tr-info-label">Estimated Revenue:</span> <span id="mdRevenue"></span></div>
+                    <div class="tr-info-row"><span class="tr-info-label">Status:</span> <span id="mdStatus" class="rp-shift"></span></div>
+                </div>
+
+            </div>
+
+            <!-- Error state -->
+            <div id="tripModalError" class="tr-modal-error" style="display:none;">
+                Unable to load trip details. Please try again.
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <!-- Chart.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
-    // ── Mini line charts ── Replace data arrays with model binding when DB is ready
-    const weekLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    /* ───────────────────────────────────────────────────────────
+    State
+    ─────────────────────────────────────────────────────────── */
+    let currentPage = 1;
+    let passengerChart, revenueChart, passengerBarChart;
 
-    function miniLineChart(id, data, color) {
-    new Chart(document.getElementById(id).getContext('2d'), {
+    function getFilters() {
+    return {
+    routeId: document.getElementById('routeFilter').value,
+    date: document.getElementById('dateFilter').value,
+    passengerPeriod: document.getElementById('passengerPeriodSelect').value,
+    revenuePeriod: document.getElementById('revenuePeriodSelect').value
+    };
+    }
+
+    /* ───────────────────────────────────────────────────────────
+    Helpers
+    ─────────────────────────────────────────────────────────── */
+    function formatCurrency(amount) {
+    return '₱ ' + Number(amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    }
+
+    function formatCurrencyCompact(amount) {
+    return '₱' + Number(amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    }
+
+    function formatNumber(n) {
+    return Number(n || 0).toLocaleString('en-US');
+    }
+
+    function getShiftClass(shiftType) {
+    const s = (shiftType || '').toLowerCase();
+    if (s.includes('afternoon')) return 'rp-shift--afternoon';
+    if (s.includes('evening'))   return 'rp-shift--evening';
+    return 'rp-shift--morning';
+    }
+
+    function deltaArrow(value) {
+    return value >= 0 ? '&#x25B4;' : '&#x25BE;';
+    }
+
+    function deltaClass(value) {
+    return value >= 0 ? 'rp-delta--up' : 'rp-delta--down';
+    }
+
+    /* ───────────────────────────────────────────────────────────
+    Charts
+    ─────────────────────────────────────────────────────────── */
+    function miniLineChart(id, labels, data, color) {
+    return new Chart(document.getElementById(id).getContext('2d'), {
     type: 'line',
     data: {
-    labels: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+    labels: labels,
     datasets: [{
     data: data,
     borderColor: color,
@@ -413,18 +558,13 @@
     });
     }
 
-    // Replace these arrays with Html.Raw(Json.Serialize(Model.PassengerWeekData)) etc.
-    miniLineChart('passengerMiniChart', [1800, 2100, 1950, 2300, 2100, 2400, 1580], '#9B59B6');
-    miniLineChart('revenueMiniChart',   [28000, 34000, 31000, 38000, 35000, 42000, 37680], '#4AADA8');
-
-    // ── Bar chart: Top Routes by Passengers ──
-    // Replace with Html.Raw(Json.Serialize(Model.RoutePassengerData)) when DB is ready
-    new Chart(document.getElementById('passengerBarChart').getContext('2d'), {
+    function initBarChart(labels, data) {
+    return new Chart(document.getElementById('passengerBarChart').getContext('2d'), {
     type: 'bar',
     data: {
-    labels: ['Route 01', 'Route 02', 'Route 03'],
+    labels: labels,
     datasets: [{
-    data: [6250, 4850, 3880],
+    data: data,
     backgroundColor: ['#7C6FE0', '#4AADA8', '#4DB6C4'],
     borderRadius: 6,
     borderSkipped: false
@@ -452,6 +592,617 @@
     y: { grid: { color: '#F0F0F0' }, ticks: { font: { size: 11, family: 'Segoe UI' }, color: '#9AA5B4' } }
     }
     }
+    });
+    }
+
+    /* ───────────────────────────────────────────────────────────
+    Rendering
+    ─────────────────────────────────────────────────────────── */
+    function renderRoutes(routes) {
+    const select = document.getElementById('routeFilter');
+    if (select.dataset.populated) return; // only populate once
+    routes.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.name;
+    select.appendChild(opt);
+    });
+    select.dataset.populated = '1';
+    }
+
+    function renderStats(stats) {
+    document.getElementById('statTotalTrips').textContent = formatNumber(stats.totalTrips);
+    document.getElementById('statDelayedTrips').textContent = formatNumber(stats.delayedTrips);
+    document.getElementById('statTotalPassengers').textContent = formatNumber(stats.totalPassengers);
+    document.getElementById('statTotalRevenue').innerHTML = formatCurrencyCompact(stats.totalRevenue);
+
+    const pEl = document.getElementById('statPassengerDelta');
+    pEl.className = 'rp-stat-delta ' + deltaClass(stats.passengerDelta);
+    pEl.innerHTML = `${deltaArrow(stats.passengerDelta)} ${stats.passengerDelta >= 0 ? '+' : ''}${formatNumber(stats.passengerDelta)} vs yesterday`;
+
+    const rEl = document.getElementById('statRevenueDelta');
+    rEl.className = 'rp-stat-delta ' + deltaClass(stats.revenueDelta);
+    rEl.innerHTML = `${deltaArrow(stats.revenueDelta)} ${stats.revenueDelta >= 0 ? '+' : '-'}${formatCurrencyCompact(Math.abs(stats.revenueDelta))} vs yesterday`;
+    }
+
+    function renderTable(table) {
+    const tbody = document.getElementById('tripsTableBody');
+    tbody.innerHTML = '';
+
+    if (!table.rows || table.rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px; color:#9AA5B4;">No trips found.</td></tr>';
+    } else {
+    table.rows.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+    <td>${row.tripId}</td>
+    <td>${row.driverName}</td>
+    <td>${row.vehicleId}<br /><span class="rp-plate">${row.plateNumber}</span></td>
+    <td>${row.routeName}</td>
+    <td><span class="rp-shift ${getShiftClass(row.shiftType)}">${row.shiftType || ''}</span></td>
+    <td>${formatNumber(row.passengers)}</td>
+    <td>${formatCurrency(row.revenue)}</td>
+    <td><button class="rp-btn-view" data-trip-id="${row.tripId}">View</button></td>
+    `;
+    tbody.appendChild(tr);
+    });
+    }
+
+    // re-wire view buttons for the newly rendered rows
+    tbody.querySelectorAll('.rp-btn-view[data-trip-id]').forEach(btn => {
+    btn.addEventListener('click', () => loadTripDetail(btn.dataset.tripId));
+    });
+
+    renderPagination(table);
+    }
+
+    function renderPagination(table) {
+    const info = document.getElementById('paginationInfo');
+    info.textContent = table.totalCount === 0
+    ? 'Showing 0 of 0 trips'
+    : `Showing ${table.from} to ${table.to} of ${table.totalCount} trips`;
+
+    const controls = document.getElementById('paginationControls');
+    controls.innerHTML = '';
+
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'rp-page-btn rp-page-btn--nav';
+    prevBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" /></svg>`;
+    prevBtn.disabled = table.page <= 1;
+    prevBtn.addEventListener('click', () => { currentPage = table.page - 1; loadAll(); });
+    controls.appendChild(prevBtn);
+
+    for (let p = 1; p <= table.totalPages; p++) {
+    const btn = document.createElement('button');
+    btn.className = 'rp-page-btn' + (p === table.page ? ' rp-page-btn--active' : '');
+    btn.textContent = p;
+    btn.addEventListener('click', () => { currentPage = p; loadAll(); });
+    controls.appendChild(btn);
+    }
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'rp-page-btn rp-page-btn--nav';
+    nextBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>`;
+    nextBtn.disabled = table.page >= table.totalPages;
+    nextBtn.addEventListener('click', () => { currentPage = table.page + 1; loadAll(); });
+    controls.appendChild(nextBtn);
+    }
+
+    function renderPassengerSummary(summary) {
+    document.getElementById('passengerSummaryTotal').textContent = formatNumber(summary.total);
+
+    const deltaEl = document.getElementById('passengerSummaryDelta');
+    deltaEl.className = 'rp-delta-row ' + deltaClass(summary.deltaPct);
+    deltaEl.innerHTML = `${deltaArrow(summary.deltaPct)} ${Math.abs(summary.deltaPct)}%`;
+
+    document.getElementById('passengerSummaryVsLabel').textContent = summary.comparisonLabel;
+
+    if (!passengerChart) {
+    passengerChart = miniLineChart('passengerMiniChart', summary.weekLabels, summary.weekData, '#9B59B6');
+    } else {
+    passengerChart.data.labels = summary.weekLabels;
+    passengerChart.data.datasets[0].data = summary.weekData;
+    passengerChart.update();
+    }
+
+    const labels = summary.topRoutes.map(r => r.name);
+    const values = summary.topRoutes.map(r => r.value);
+    if (!passengerBarChart) {
+    passengerBarChart = initBarChart(labels, values);
+    } else {
+    passengerBarChart.data.labels = labels;
+    passengerBarChart.data.datasets[0].data = values;
+    passengerBarChart.update();
+    }
+    }
+
+    function renderRevenueSummary(summary) {
+    document.getElementById('revenueSummaryTotal').innerHTML = formatCurrencyCompact(summary.total);
+
+    const deltaEl = document.getElementById('revenueSummaryDelta');
+    deltaEl.className = 'rp-delta-row ' + deltaClass(summary.deltaPct);
+    deltaEl.innerHTML = `${deltaArrow(summary.deltaPct)} ${Math.abs(summary.deltaPct)}%`;
+
+    document.getElementById('revenueSummaryVsLabel').textContent = summary.comparisonLabel;
+
+    if (!revenueChart) {
+    revenueChart = miniLineChart('revenueMiniChart', summary.weekLabels, summary.weekData, '#4AADA8');
+    } else {
+    revenueChart.data.labels = summary.weekLabels;
+    revenueChart.data.datasets[0].data = summary.weekData;
+    revenueChart.update();
+    }
+
+    const colors = ['#4285F4', '#4AADA8', '#9B59B6'];
+    const container = document.getElementById('topEarningRoutes');
+    container.innerHTML = '';
+
+    if (!summary.topRoutes || summary.topRoutes.length === 0) {
+    container.innerHTML = '<div class="rp-route-bar-row">No data for this period.</div>';
+    return;
+    }
+
+    summary.topRoutes.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.className = 'rp-route-bar-row';
+    row.innerHTML = `
+    <span class="rp-route-name">${r.name}</span>
+    <span class="rp-route-amount">${formatCurrencyCompact(r.value)}</span>
+    <div class="rp-progress-wrap">
+    <div class="rp-progress-bar" style="width:${r.pct}%;background:${colors[i % colors.length]};"></div>
+    </div>
+    <span class="rp-route-pct">${r.pct}%</span>
+    `;
+    container.appendChild(row);
+    });
+    }
+
+    /* ───────────────────────────────────────────────────────────
+    Main loader
+    ─────────────────────────────────────────────────────────── */
+    async function loadAll() {
+    const f = getFilters();
+    const params = new URLSearchParams({
+    page: currentPage,
+    passengerPeriod: f.passengerPeriod,
+    revenuePeriod: f.revenuePeriod
+    });
+    if (f.routeId && f.routeId !== '0') params.set('routeId', f.routeId);
+    if (f.date) params.set('date', f.date);
+
+    try {
+    const res = await fetch(`/Reports/GetData?${params.toString()}`);
+    if (!res.ok) throw new Error('Failed to fetch report data');
+    const data = await res.json();
+
+    renderRoutes(data.routes);
+    renderStats(data.stats);
+    renderTable(data.table);
+    renderPassengerSummary(data.passengerSummary);
+    renderRevenueSummary(data.revenueSummary);
+
+    currentPage = data.table.page;
+    } catch (e) {
+    console.error(e);
+    }
+    }
+
+    /* ───────────────────────────────────────────────────────────
+    Filter event wiring
+    ─────────────────────────────────────────────────────────── */
+    document.getElementById('routeFilter').addEventListener('change', () => { currentPage = 1; loadAll(); });
+    document.getElementById('dateFilter').addEventListener('change', () => { currentPage = 1; loadAll(); });
+    document.getElementById('passengerPeriodSelect').addEventListener('change', () => loadAll());
+    document.getElementById('revenuePeriodSelect').addEventListener('change', () => loadAll());
+
+    document.getElementById('dateFilter').value = new Date().toISOString().split('T')[0];
+
+    loadAll();
+</script>
+
+<script>
+    /* ═══════════════════════════════════════════════════════════
+    Report Generation Modal
+    ═══════════════════════════════════════════════════════════ */
+    (function () {
+
+    // ── Config per report type ────────────────────────────────
+    const REPORT_CONFIG = {
+    DailyTrip: {
+    title: 'Daily Trip Reports',
+    iconColor: '#27AE60',
+    showDriver: true,
+    showVehicle: true,
+    },
+    Passenger: {
+    title: 'Passenger Reports',
+    iconColor: '#3B82F6',
+    showDriver: true,
+    showVehicle: false,
+    },
+    Revenue: {
+    title: 'Revenue Reports',
+    iconColor: '#D63384',
+    showDriver: false,
+    showVehicle: false,
+    }
+    };
+
+    let currentReportType = 'DailyTrip';
+    let currentFormat = 'pdf';
+    let previewDebounce = null;
+
+    // ── DOM refs ──────────────────────────────────────────────
+    const overlay       = document.getElementById('reportGenModal');
+    const modalTitle    = document.getElementById('rgModalTitle');
+    const modalIcon     = document.getElementById('rgModalIcon');
+    const closeBtn      = document.getElementById('rgModalClose');
+    const cancelBtn     = document.getElementById('rgCancelBtn');
+    const downloadBtn   = document.getElementById('rgDownloadBtn');
+    const fmtPdfBtn     = document.getElementById('rgFmtPdf');
+    const fmtCsvBtn     = document.getElementById('rgFmtCsv');
+    const dateInput     = document.getElementById('rgDate');
+    const routeSelect   = document.getElementById('rgRoute');
+    const driverSelect  = document.getElementById('rgDriver');
+    const vehicleSelect = document.getElementById('rgVehicle');
+    const driverField   = document.getElementById('rgDriverField');
+    const vehicleField  = document.getElementById('rgVehicleField');
+
+    const previewLoading = document.getElementById('rgPreviewLoading');
+    const previewContent = document.getElementById('rgPreviewContent');
+    const previewError   = document.getElementById('rgPreviewError');
+    const previewMeta    = document.getElementById('rgPreviewMeta');
+    const previewTitle   = document.getElementById('rgPreviewReportTitle');
+    const previewTables  = document.getElementById('rgPreviewTables');
+
+    // ── Cached filter options ─────────────────────────────────
+    let allDrivers  = [];
+    let allVehicles = [];
+    let optionsLoaded = false;
+
+    // ── Open modal ────────────────────────────────────────────
+    function openReportModal(type) {
+    currentReportType = type;
+    const cfg = REPORT_CONFIG[type];
+
+    modalTitle.textContent = cfg.title;
+    modalIcon.style.color  = cfg.iconColor;
+    driverField.style.display  = cfg.showDriver  ? '' : 'none';
+    vehicleField.style.display = cfg.showVehicle ? '' : 'none';
+
+    // Default date to today
+    dateInput.value = new Date().toISOString().split('T')[0];
+
+    // Reset all selects
+    routeSelect.value  = '';
+    driverSelect.value = '';
+    vehicleSelect.value = '';
+
+    // Reset format to PDF
+    currentFormat = 'pdf';
+    fmtPdfBtn.classList.add('rg-toggle-btn--active');
+    fmtCsvBtn.classList.remove('rg-toggle-btn--active');
+
+    overlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    if (!optionsLoaded) {
+    populateDropdowns();
+    } else {
+    refreshCascade();
+    }
+    schedulePreview();
+    }
+
+    function closeReportModal() {
+    overlay.style.display = 'none';
+    document.body.style.overflow = '';
+    }
+
+    // ── Populate route / driver / vehicle dropdowns ───────────
+    async function populateDropdowns() {
+    try {
+    const res  = await fetch('/Reports/GetFilterOptions');
+    const data = await res.json();
+
+    // Cache all drivers and vehicles for cascading
+    allDrivers  = data.drivers  || [];
+    allVehicles = data.vehicles || [];
+    optionsLoaded = true;
+
+    // Routes (static — never cascades)
+    routeSelect.innerHTML = '<option value="">All Routes</option>';
+    (data.routes || []).forEach(r => {
+    const o = document.createElement('option');
+    o.value = r.id; o.textContent = r.name;
+    routeSelect.appendChild(o);
+    });
+
+    refreshCascade();
+    } catch (e) {
+    console.error('Failed to load filter options', e);
+    }
+    }
+
+    // ── Cascade: filter drivers & vehicles by selected route ──
+    function refreshCascade() {
+    const selectedRoute = parseInt(routeSelect.value) || null;
+
+    const filteredDrivers = selectedRoute
+    ? allDrivers.filter(d => d.routeIds && d.routeIds.includes(selectedRoute))
+    : allDrivers;
+
+    const filteredVehicles = selectedRoute
+    ? allVehicles.filter(v => v.routeIds && v.routeIds.includes(selectedRoute))
+    : allVehicles;
+
+    const prevDriver  = driverSelect.value;
+    const prevVehicle = vehicleSelect.value;
+
+    driverSelect.innerHTML = '<option value="">All Drivers</option>';
+    filteredDrivers.forEach(d => {
+    const o = document.createElement('option');
+    o.value = d.id; o.textContent = d.name;
+    if (String(d.id) === prevDriver) o.selected = true;
+    driverSelect.appendChild(o);
+    });
+
+    vehicleSelect.innerHTML = '<option value="">All Vehicles</option>';
+    filteredVehicles.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v.id; o.textContent = v.label;
+    if (v.id === prevVehicle) o.selected = true;
+    vehicleSelect.appendChild(o);
+    });
+
+    // If previously selected value is no longer available, reset it
+    if (prevDriver  && !filteredDrivers.find(d => String(d.id) === prevDriver))  driverSelect.value  = '';
+    if (prevVehicle && !filteredVehicles.find(v => v.id === prevVehicle)) vehicleSelect.value = '';
+    }
+
+    // ── Preview ───────────────────────────────────────────────
+    function schedulePreview() {
+    clearTimeout(previewDebounce);
+    previewDebounce = setTimeout(loadPreview, 350);
+    }
+
+    function showPreviewLoading() {
+    previewLoading.style.display = 'flex';
+    previewContent.style.display = 'none';
+    previewError.style.display   = 'none';
+    }
+
+    function showPreviewContent() {
+    previewLoading.style.display = 'none';
+    previewContent.style.display = 'block';
+    previewError.style.display   = 'none';
+    }
+
+    function showPreviewError() {
+    previewLoading.style.display = 'none';
+    previewContent.style.display = 'none';
+    previewError.style.display   = 'block';
+    }
+
+    async function loadPreview() {
+    showPreviewLoading();
+    const params = buildParams();
+    try {
+    const res  = await fetch(`/Reports/GenerateReport?${params}`);
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    renderPreview(data);
+    showPreviewContent();
+    } catch (e) {
+    showPreviewError();
+    }
+    }
+
+    function buildParams() {
+    const p = new URLSearchParams({ reportType: currentReportType });
+    if (dateInput.value)     p.set('date',      dateInput.value);
+    if (routeSelect.value)   p.set('routeId',   routeSelect.value);
+    if (driverSelect.value)  p.set('driverId',  driverSelect.value);
+    if (vehicleSelect.value) p.set('vehicleId', vehicleSelect.value);
+    return p.toString();
+    }
+
+    function renderPreview(data) {
+    const dateLabel = dateInput.value
+    ? new Date(dateInput.value + 'T00:00:00').toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
+    : new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    previewMeta.textContent  = dateLabel;
+    previewTitle.textContent = REPORT_CONFIG[currentReportType].title + ' Summary';
+    previewTables.innerHTML  = '';
+
+    if (!data.groups || data.groups.length === 0) {
+    previewTables.innerHTML = '<div class="rg-no-data">No data found for the selected filters.</div>';
+    return;
+    }
+
+    data.groups.forEach(group => {
+    // Group header
+    const header = document.createElement('div');
+    header.className = 'rg-group-header';
+    header.textContent = group.groupName;
+    previewTables.appendChild(header);
+
+    // Table
+    const table = document.createElement('table');
+    table.className = 'rg-preview-table';
+
+    // thead
+    const thead = document.createElement('thead');
+    const hrow  = document.createElement('tr');
+    group.columns.forEach(col => {
+    const th = document.createElement('th');
+    th.textContent = col;
+    hrow.appendChild(th);
+    });
+    thead.appendChild(hrow);
+    table.appendChild(thead);
+
+    // tbody
+    const tbody = document.createElement('tbody');
+    if (group.rows.length === 0) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = group.columns.length;
+    td.textContent = 'No records.';
+    td.style.textAlign = 'center';
+    td.style.color = '#9AA5B4';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    } else {
+    group.rows.forEach(rowData => {
+    const tr = document.createElement('tr');
+    rowData.forEach(cell => {
+    const td = document.createElement('td');
+    td.textContent = cell;
+    tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+    });
+    }
+    table.appendChild(tbody);
+    previewTables.appendChild(table);
+    });
+    }
+
+    // ── Download ──────────────────────────────────────────────
+    function downloadReport() {
+    const params = buildParams();
+    const endpoint = currentFormat === 'csv' ? 'DownloadReportCsv' : 'DownloadReport';
+    window.location.href = `/Reports/${endpoint}?${params}`;
+    }
+
+    // ── Format toggle ─────────────────────────────────────────
+    [fmtPdfBtn, fmtCsvBtn].forEach(btn => {
+    btn.addEventListener('click', () => {
+    currentFormat = btn.dataset.fmt;
+    fmtPdfBtn.classList.toggle('rg-toggle-btn--active', currentFormat === 'pdf');
+    fmtCsvBtn.classList.toggle('rg-toggle-btn--active', currentFormat === 'csv');
+    });
+    });
+
+    // ── Wire up template buttons ──────────────────────────────
+    document.querySelectorAll('[data-report-type]').forEach(btn => {
+    btn.addEventListener('click', () => openReportModal(btn.dataset.reportType));
+    });
+
+    // ── Wire up modal controls ────────────────────────────────
+    closeBtn.addEventListener('click',   closeReportModal);
+    cancelBtn.addEventListener('click',  closeReportModal);
+    downloadBtn.addEventListener('click', downloadReport);
+
+    overlay.addEventListener('click', e => {
+    if (e.target === overlay) closeReportModal();
+    });
+
+    document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && overlay.style.display !== 'none') closeReportModal();
+    });
+
+    // Re-preview on filter change; cascade drivers/vehicles when route changes
+    routeSelect.addEventListener('change', () => { refreshCascade(); schedulePreview(); });
+    [dateInput, driverSelect, vehicleSelect].forEach(el => {
+    el.addEventListener('change', schedulePreview);
+    });
+
+    })();
+</script>
+
+<script>
+    // ── Trip Detail Modal ──────────────────────────────────────
+    const modal        = document.getElementById('tripModal');
+    const modalClose   = document.getElementById('tripModalClose');
+    const modalLoading = document.getElementById('tripModalLoading');
+    const modalContent = document.getElementById('tripModalContent');
+    const modalError   = document.getElementById('tripModalError');
+
+    function openModal() {
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+    }
+
+    function showLoading() {
+    modalLoading.style.display = 'flex';
+    modalContent.style.display = 'none';
+    modalError.style.display   = 'none';
+    }
+
+    function showContent() {
+    modalLoading.style.display = 'none';
+    modalContent.style.display = 'block';
+    modalError.style.display   = 'none';
+    }
+
+    function showError() {
+    modalLoading.style.display = 'none';
+    modalContent.style.display = 'none';
+    modalError.style.display   = 'block';
+    }
+
+    function getStatusClass(status) {
+    if (!status) return '';
+    const s = status.toLowerCase();
+    if (s.includes('active'))    return 'rp-shift--morning';
+    if (s.includes('completed')) return 'rp-shift--afternoon';
+    if (s.includes('pending'))   return 'rp-shift--evening';
+    return 'rp-shift--morning';
+    }
+
+    async function loadTripDetail(tripId) {
+    openModal();
+    showLoading();
+
+    try {
+    const res = await fetch(`/Reports/TripDetail?tripId=${encodeURIComponent(tripId)}`);
+    if (!res.ok) throw new Error('Failed to fetch');
+    const d = await res.json();
+
+    document.getElementById('mdTripId').textContent      = d.tripId;
+    document.getElementById('mdShiftType').textContent   = d.shiftType;
+    document.getElementById('mdShiftTime').textContent   = `${d.shiftStart} - ${d.shiftEnd}`;
+    document.getElementById('mdRoute').textContent       = d.routeName;
+    document.getElementById('mdVehicleType').textContent = d.vehicleType;
+    document.getElementById('mdVehicleId').textContent   = d.vehicleId;
+    document.getElementById('mdPlate').textContent       = d.plateNumber;
+    document.getElementById('mdDriverName').textContent  = d.driverName;
+    document.getElementById('mdDriverId').textContent    = 'DRV' + String(d.driverId).padStart(3, '0');
+    document.getElementById('mdDate').textContent        = d.date;
+    document.getElementById('mdStartTime').textContent   = d.shiftStart;
+    document.getElementById('mdEndTime').textContent     = d.shiftEnd;
+    document.getElementById('mdPassengers').textContent  = d.totalPassengers;
+    document.getElementById('mdRevenue').textContent     = formatCurrency(d.estimatedRevenue);
+
+    const statusEl = document.getElementById('mdStatus');
+    statusEl.textContent  = d.tripStatus;
+    statusEl.className    = 'rp-shift ' + getStatusClass(d.tripStatus);
+
+    showContent();
+    } catch (e) {
+    showError();
+    }
+    }
+
+    // Close on X button
+    modalClose.addEventListener('click', closeModal);
+
+    // Close on overlay click
+    modal.addEventListener('click', e => {
+    if (e.target === modal) closeModal();
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && modal.style.display !== 'none') closeModal();
     });
 </script>
 
@@ -1060,17 +1811,546 @@
     display: none;
     }
     }
+
+    /* ── Trip Modal ─────────────────────────────────────────── */
+    .tr-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    }
+
+    .tr-modal {
+    background: #fff;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 520px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 40px rgba(0,0,0,.18);
+    display: flex;
+    flex-direction: column;
+    }
+
+    .tr-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid var(--rp-border);
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1;
+    border-radius: 16px 16px 0 0;
+    }
+
+    .tr-modal-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1A2B4A;
+    font-family: 'Segoe UI', sans-serif;
+    margin: 0;
+    }
+
+    .tr-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.4rem;
+    color: var(--rp-muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+    transition: color 150ms;
+    }
+
+    .tr-modal-close:hover {
+    color: var(--rp-text);
+    }
+
+    .tr-modal-body {
+    padding: 0;
+    }
+
+    .tr-section {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--rp-border);
+    }
+
+    .tr-section--last {
+    border-bottom: none;
+    padding-bottom: 24px;
+    }
+
+    .tr-section--id {
+    background: #F8F9FA;
+    border-radius: 0;
+    }
+
+    .tr-trip-id-badge {
+    display: inline-block;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1A2B4A;
+    font-family: 'Segoe UI', sans-serif;
+    margin-bottom: 10px;
+    }
+
+    .tr-section-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 10px;
+    }
+
+    .tr-info-row {
+    font-size: 0.88rem;
+    font-family: 'Segoe UI', sans-serif;
+    color: var(--rp-text);
+    margin-bottom: 6px;
+    display: flex;
+    gap: 6px;
+    }
+
+    .tr-info-row:last-child {
+    margin-bottom: 0;
+    }
+
+    .tr-info-label {
+    font-weight: 600;
+    color: var(--rp-text);
+    white-space: nowrap;
+    }
+
+    /* Loading spinner */
+    .tr-modal-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 48px 24px;
+    font-size: 0.88rem;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    }
+
+    .tr-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2.5px solid var(--rp-border);
+    border-top-color: var(--rp-teal);
+    border-radius: 50%;
+    animation: tr-spin .7s linear infinite;
+    flex-shrink: 0;
+    }
+
+    @@keyframes tr-spin {
+    to {
+    transform: rotate(360deg);
+    }
+    }
+
+    /* ── Report Generation Modal ────────────────────────────── */
+    .rg-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    }
+
+    .rg-modal {
+    background: #fff;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 860px;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 48px rgba(0,0,0,.2);
+    overflow: hidden;
+    }
+
+    .rg-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--rp-border);
+    flex-shrink: 0;
+    }
+
+    .rg-modal-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    }
+
+    .rg-modal-icon {
+    width: 34px;
+    height: 34px;
+    background: #F0FDF4;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #27AE60;
+    flex-shrink: 0;
+    }
+
+    .rg-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1A2B4A;
+    font-family: 'Segoe UI', sans-serif;
+    margin: 0;
+    }
+
+    .rg-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--rp-muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+    transition: color 150ms;
+    }
+
+    .rg-close:hover {
+    color: var(--rp-text);
+    }
+
+    .rg-body {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    flex: 1;
+    overflow: hidden;
+    }
+
+    /* ── Filters panel ──────────────────────────────────────── */
+    .rg-filters {
+    padding: 20px 18px;
+    border-right: 1px solid var(--rp-border);
+    background: #FAFBFC;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    }
+
+    .rg-filters-heading {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--rp-text);
+    font-family: 'Segoe UI', sans-serif;
+    margin-bottom: 4px;
+    }
+
+    .rg-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    }
+
+    .rg-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    }
+
+    .rg-input {
+    padding: 7px 10px;
+    font-size: 0.82rem;
+    font-family: 'Segoe UI', sans-serif;
+    border: 1.5px solid var(--rp-border);
+    border-radius: 9px;
+    color: var(--rp-text);
+    background: #fff;
+    outline: none;
+    transition: border-color 180ms;
+    }
+
+    .rg-input:focus {
+    border-color: var(--rp-teal);
+    }
+
+    .rg-select-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    }
+
+    .rg-select {
+    width: 100%;
+    appearance: none;
+    padding: 7px 28px 7px 10px;
+    font-size: 0.82rem;
+    font-family: 'Segoe UI', sans-serif;
+    border: 1.5px solid var(--rp-border);
+    border-radius: 9px;
+    color: var(--rp-text);
+    background: #fff;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 180ms;
+    }
+
+    .rg-select:focus {
+    border-color: var(--rp-teal);
+    }
+
+    .rg-select-arrow {
+    position: absolute;
+    right: 9px;
+    pointer-events: none;
+    color: var(--rp-muted);
+    }
+
+    /* ── Preview panel ──────────────────────────────────────── */
+    .rg-preview {
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 20px;
+    background: #F0F2F5;
+    min-width: 0;
+    }
+
+    .rg-preview-sheet {
+    background: #fff;
+    border-radius: 10px;
+    padding: 20px;
+    min-height: 340px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    overflow-x: auto;
+    }
+
+    .rg-preview-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 60px 0;
+    font-size: 0.88rem;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    }
+
+    .rg-preview-error {
+    padding: 60px 0;
+    text-align: center;
+    font-size: 0.88rem;
+    color: #E74C3C;
+    font-family: 'Segoe UI', sans-serif;
+    }
+
+    .rg-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2.5px solid var(--rp-border);
+    border-top-color: var(--rp-teal);
+    border-radius: 50%;
+    animation: tr-spin .7s linear infinite;
+    flex-shrink: 0;
+    }
+
+    .rg-preview-meta {
+    font-size: 0.78rem;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    margin-bottom: 4px;
+    }
+
+    .rg-preview-report-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--rp-text);
+    font-family: 'Segoe UI', sans-serif;
+    margin-bottom: 18px;
+    }
+
+    .rg-group-header {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin: 16px 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1.5px solid var(--rp-border);
+    }
+
+    .rg-group-header:first-child {
+    margin-top: 0;
+    }
+
+    .rg-preview-table {
+    width: 100%;
+    min-width: max-content;
+    border-collapse: collapse;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 0.78rem;
+    margin-bottom: 12px;
+    }
+
+    .rg-preview-table th {
+    background: #F8F9FA;
+    color: var(--rp-muted);
+    font-weight: 600;
+    text-align: left;
+    padding: 7px 12px;
+    border-bottom: 1.5px solid var(--rp-border);
+    white-space: nowrap;
+    }
+
+    .rg-preview-table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--rp-border);
+    color: var(--rp-text);
+    white-space: nowrap;
+    }
+
+    .rg-preview-table tbody tr:last-child td {
+    border-bottom: none;
+    }
+
+    .rg-no-data {
+    text-align: center;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 0.88rem;
+    padding: 48px 0;
+    }
+
+    /* ── Footer ─────────────────────────────────────────────── */
+    .rg-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--rp-border);
+    flex-shrink: 0;
+    background: #fff;
+    }
+
+    .rg-format-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: auto;
+    }
+
+    .rg-format-label {
+    font-size: 0.82rem;
+    font-weight: 500;
+    font-family: 'Segoe UI', sans-serif;
+    color: var(--rp-muted);
+    }
+
+    .rg-toggle-group {
+    display: flex;
+    border: 1.5px solid var(--rp-border);
+    border-radius: 9px;
+    overflow: hidden;
+    }
+
+    .rg-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    font-family: 'Segoe UI', sans-serif;
+    font-weight: 600;
+    border: none;
+    background: #fff;
+    color: var(--rp-muted);
+    cursor: pointer;
+    transition: background 150ms, color 150ms;
+    }
+
+    .rg-toggle-btn:first-child {
+    border-right: 1.5px solid var(--rp-border);
+    }
+
+    .rg-toggle-btn--active {
+    background: var(--rp-teal);
+    color: #fff;
+    }
+
+    .rg-toggle-btn:not(.rg-toggle-btn--active):hover {
+    background: #F8F9FA;
+    color: var(--rp-text);
+    }
+
+    .rg-btn-cancel {
+    padding: 10px 24px;
+    border-radius: 10px;
+    border: 1.5px solid var(--rp-border);
+    background: #fff;
+    font-size: 0.88rem;
+    font-family: 'Segoe UI', sans-serif;
+    font-weight: 600;
+    color: var(--rp-text);
+    cursor: pointer;
+    transition: background 150ms;
+    }
+
+    .rg-btn-cancel:hover {
+    background: #F8F9FA;
+    }
+
+    .rg-btn-download {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 24px;
+    border-radius: 10px;
+    border: none;
+    background: #27AE60;
+    font-size: 0.88rem;
+    font-family: 'Segoe UI', sans-serif;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+    transition: background 150ms;
+    }
+
+    .rg-btn-download:hover {
+    background: #219a52;
+    }
+
+    @@media (max-width: 640px) {
+    .rg-body {
+    grid-template-columns: 1fr;
+    }
+
+    .rg-filters {
+    border-right: none;
+    border-bottom: 1px solid var(--rp-border);
+    }
+    }
 </style>
 
 @section TopbarContent {
     <div class="rp-route-wrap">
         <span class="rp-filter-label">Route:</span>
         <div class="rp-select-wrap">
-            <select class="rp-select">
-                <option>All Routes</option>
-                <option>Route 01</option>
-                <option>Route 02</option>
-                <option>Route 03</option>
+            <select class="rp-select" id="routeFilter">
+                <option value="0">All Routes</option>
             </select>
             <span class="rp-select-arrow">
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none"
@@ -1084,7 +2364,7 @@
     <div class="rp-date-wrap">
         <span class="rp-filter-label">Date:</span>
         <div class="rp-input-wrap">
-            <input type="date" class="rp-date-input" value="2026-05-27" />
+            <input type="date" class="rp-date-input" id="dateFilter" />
         </div>
     </div>
 }
