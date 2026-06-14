@@ -100,10 +100,10 @@
                 </svg>
             </span>
             <span class="db-card-title">Passenger Count</span>
-            <span class="db-badge db-badge--teal">All Routes</span>
+            <span class="db-badge db-badge--teal">@Model.SelectedRouteName</span>
             <div class="db-chart-legend">
                 <span class="db-legend-swatch" style="background:#4AADA8;"></span>
-                <span class="db-legend-text">All Routes</span>
+                <span class="db-legend-text">@Model.SelectedRouteName</span>
             </div>
         </div>
         <canvas id="demandChart" class="db-chart-canvas"></canvas>
@@ -157,7 +157,7 @@
         data: {
         labels: chartLabels,
         datasets: [{
-        label: 'All Routes',
+        label: '@Model.SelectedRouteName',
         data: chartData,
         borderColor: '#4AADA8',
         backgroundColor: 'rgba(74,173,168,0.08)',
@@ -191,6 +191,12 @@
         }
         }
         });
+
+        // ── Filter form helper ────────────────────────────────────────
+        // Re-submits the filter form whenever the route dropdown changes.
+        document.getElementById('routeSelect').addEventListener('change', function () {
+        document.getElementById('filterForm').submit();
+        });
     </script>
 
     <style>
@@ -213,38 +219,6 @@
         align-items: center;
         gap: 20px;
         margin-bottom: 28px;
-        }
-
-        .db-search-wrap {
-        position: relative;
-        flex: 1;
-        max-width: 460px;
-        }
-
-        .db-search-icon {
-        position: absolute;
-        left: 14px;
-        top: 50%;
-        transform: translateY(-50%);
-        display: flex;
-        align-items: center;
-        }
-
-        .db-search-input {
-        width: 100%;
-        padding: 7px 14px 7px 38px;
-        font-size: 0.82rem;
-        background: #f8f9fa;
-        border: 1.5px solid var(--db-border);
-        border-radius: 10px;
-        font-family: 'Segoe UI', sans-serif;
-        color: var(--db-text);
-        outline: none;
-        transition: border-color 180ms;
-        }
-
-        .db-search-input:focus {
-        border-color: var(--db-teal);
         }
 
         .db-route-wrap {
@@ -279,6 +253,11 @@
         cursor: pointer;
         outline: none;
         font-weight: 400;
+        transition: border-color 180ms;
+        }
+
+        .db-route-select:focus {
+        border-color: var(--db-teal);
         }
 
         .db-select-arrow {
@@ -631,33 +610,34 @@
     </style>
 
     @section TopbarContent {
-        <div class="db-search-wrap">
-            <span class="db-search-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
-                     stroke="#9AA5B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-            </span>
-            <input type="text" class="db-search-input" placeholder="Search" />
-        </div>
+        @* Single form — sends routeId on every submit *@
+        <form id="filterForm" method="get" action="@Url.Action("Index", "Dashboard")" style="display:contents;">
 
-        <div class="db-route-wrap">
-            <span class="db-route-label">Route:</span>
-            <div class="db-route-select-wrap">
-                <select class="db-route-select">
-                    <option value="">All Routes</option>
-                    @foreach (var route in Model.Routes)
-                    {
-                        <option value="@route.Value">@route.Text</option>
-                    }
-                </select>
-                <span class="db-select-arrow">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none"
-                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                        <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                </span>
+            <div class="db-route-wrap">
+                <span class="db-route-label">Route:</span>
+                <div class="db-route-select-wrap">
+                    <select id="routeSelect" name="routeId" class="db-route-select">
+                        <option value="">All Routes</option>
+                        @foreach (var route in Model.Routes)
+                        {
+                            if (route.Selected)
+                            {
+                                <option value="@route.Value" selected>@route.Text</option>
+                            }
+                            else
+                            {
+                                <option value="@route.Value">@route.Text</option>
+                            }
+                        }
+                    </select>
+                    <span class="db-select-arrow">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </span>
+                </div>
             </div>
-        </div>
+
+        </form>
     }
