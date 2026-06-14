@@ -1,6 +1,6 @@
 @model List<UserListItemViewModel>
 @{
-    ViewData["Title"] = "Users";
+    ViewData["Title"] = "User Management";
     Layout = "~/Views/Shared/_Layout.cshtml";
 
     var roles = ViewBag.Roles as List<SelectListItem> ?? new List<SelectListItem>();
@@ -9,44 +9,55 @@
 }
 
 <!-- PAGE TITLE -->
-<h2 class="us-title">Users</h2>
+<h2 class="us-title">User Management</h2>
+
+@if (TempData["Success"] is string successMsg)
+{
+    <div class="us-alert us-alert--success" role="alert">@successMsg</div>
+}
+@if (TempData["Error"] is string errorMsg)
+{
+    <div class="us-alert us-alert--error" role="alert">@errorMsg</div>
+}
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="us-alert us-alert--error" role="alert">Please correct the highlighted fields.</div>
+}
+
+<!-- TOOLBAR -->
+<div class="us-toolbar">
+    <div class="us-actions">
+        <button type="button" class="us-btn us-btn--primary" data-bs-toggle="modal" data-bs-target="#addUserModal">+ Add User</button>
+        <button type="button" class="us-btn us-btn--outline us-btn--dashed" data-bs-toggle="modal" data-bs-target="#manageRolesModal">Manage Roles</button>
+    </div>
+
+    <form method="get" class="us-search-form">
+        <input type="hidden" name="role" value="@selectedRole" />
+        <div class="us-search-wrap">
+            <span class="us-search-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
+                     stroke="#9AA5B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+            </span>
+            <input type="text" name="search" value="@searchTerm" class="us-search-input" placeholder="Search by name or email" />
+        </div>
+    </form>
+</div>
 
 <!-- USERS TABLE CARD -->
 <div class="us-card">
-    <div class="us-toolbar">
-        <form method="get" class="us-filters">
-            <div class="us-select-wrap">
-                <select name="role" class="us-select" onchange="this.form.submit()">
-                    <option value="">All Roles</option>
-                    @foreach (var r in roles)
-                    {
-                        <option value="@r.Value" selected="@(r.Value == selectedRole)">@r.Text</option>
-                    }
-                </select>
-                <span class="us-select-arrow">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none"
-                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                        <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                </span>
-            </div>
-
-            <div class="us-search-wrap">
-                <span class="us-search-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
-                         stroke="#9AA5B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                        <circle cx="11" cy="11" r="8" />
-                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                </span>
-                <input type="text" name="search" value="@searchTerm" class="us-search-input" placeholder="Search by name or email" />
-            </div>
-        </form>
-
-        <div class="us-actions">
-            <button type="button" class="us-btn us-btn--outline" disabled>Manage Roles</button>
-            <button type="button" class="us-btn us-btn--primary" disabled>+ Add User</button>
-        </div>
+    <div class="us-card-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <line x1="10" y1="9" x2="8" y2="9" />
+        </svg>
+        <span>User Information</span>
     </div>
 
     <div class="us-table-wrap">
@@ -60,36 +71,114 @@
                     <th>Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                @if (Model.Count == 0)
-                {
-                    <tr>
-                        <td colspan="5" class="us-empty">No users found.</td>
-                    </tr>
-                }
-                else
-                {
-                    @foreach (var user in Model)
-                    {
-                        var statusClass = user.AccountStatus == "Activated" ? "us-status--active" : "us-status--inactive";
-                        <tr>
-                            <td>@user.FullName</td>
-                            <td>@user.Email</td>
-                            <td>@user.RoleName</td>
-                            <td><span class="us-status @statusClass">@user.AccountStatus</span></td>
-                            <td><button type="button" class="us-btn-edit" disabled>Edit</button></td>
-                        </tr>
-                    }
-                }
+            <tbody id="usersTableBody">
+                <tr>
+                    <td colspan="5" class="us-table-loading">
+                        <div class="us-spinner"></div>
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>
 </div>
 
+@await Html.PartialAsync("_AddUserModal", (AddUserViewModel)ViewBag.AddUserModel)
+@await Html.PartialAsync("_EditUserModal", (EditUserViewModel)ViewBag.EditUserModel)
+@await Html.PartialAsync("_ManageRolesModal", (RoleFormViewModel)ViewBag.RoleFormModel)
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Auto-reopen the relevant modal after a failed POST
+        const openModal = '@(ViewBag.OpenModal ?? "")';
+        const modalIds = { AddUser: 'addUserModal', EditUser: 'editUserModal', ManageRoles: 'manageRolesModal' };
+        if (modalIds[openModal]) {
+            new bootstrap.Modal(document.getElementById(modalIds[openModal])).show();
+        }
+
+        // Add User — generate a random initial password
+        document.getElementById('addUserModal').addEventListener('show.bs.modal', function () {
+            const field = document.getElementById('auGeneratedPassword');
+            if (!field.value) {
+                field.value = generatePassword();
+            }
+        });
+
+        // Edit User — populate fields from the clicked row's data-* attributes
+        document.getElementById('editUserModal').addEventListener('show.bs.modal', function (event) {
+            const btn = event.relatedTarget;
+            if (!btn) return;
+
+            document.getElementById('euUserId').value = btn.dataset.userId;
+            document.getElementById('euFirstName').value = btn.dataset.firstName;
+            document.getElementById('euMiddleName').value = btn.dataset.middleName ?? '';
+            document.getElementById('euLastName').value = btn.dataset.lastName;
+            document.getElementById('euEmail').value = btn.dataset.email;
+            document.getElementById('euRoleId').value = btn.dataset.roleId;
+            document.getElementById('euAccountStatus').value = btn.dataset.accountStatus;
+        });
+
+        // Manage Roles — switch the right pane based on the selected role
+        const WEB_PERMISSION_KEYS = ['Dashboard', 'FleetMap', 'Vehicles', 'Dispatch', 'Analytics', 'Reports', 'Users'];
+        const MOBILE_PERMISSION_KEYS = ['FullAccess'];
+
+        function applyRolePermissions(webPerms, mobilePerms) {
+            WEB_PERMISSION_KEYS.forEach(k => document.getElementById('perm_web_' + k).checked = !!webPerms[k]);
+            MOBILE_PERMISSION_KEYS.forEach(k => document.getElementById('perm_mobile_' + k).checked = !!mobilePerms[k]);
+        }
+
+        // Load the user table rows in the background so the page itself renders instantly
+        loadUserRows();
+
+        document.querySelectorAll('.us-role-item').forEach(function (item) {
+            item.addEventListener('click', function () {
+                document.querySelectorAll('.us-role-item').forEach(i => i.classList.remove('us-role-item--active'));
+                item.classList.add('us-role-item--active');
+
+                const form = document.getElementById('roleForm');
+                const roleId = item.dataset.roleId;
+
+                if (roleId) {
+                    document.getElementById('roleFormRoleId').value = roleId;
+                    form.action = '@Url.Action("UpdateRole", "Users")';
+                    document.getElementById('roleFormName').value = item.dataset.roleName;
+                    document.getElementById('roleFormAccessLevel').value = item.dataset.accessLevel;
+                    applyRolePermissions(JSON.parse(item.dataset.webPerms || '{}'), JSON.parse(item.dataset.mobilePerms || '{}'));
+                } else {
+                    document.getElementById('roleFormRoleId').value = '';
+                    form.action = '@Url.Action("CreateRole", "Users")';
+                    document.getElementById('roleFormName').value = '';
+                    document.getElementById('roleFormAccessLevel').value = '';
+                    applyRolePermissions({}, {});
+                }
+            });
+        });
+    });
+
+    function loadUserRows() {
+        const tbody = document.getElementById('usersTableBody');
+        fetch('@Url.Action("UserRows", "Users")' + window.location.search)
+            .then(function (response) { return response.text(); })
+            .then(function (html) { tbody.innerHTML = html; })
+            .catch(function () {
+                tbody.innerHTML = '<tr><td colspan="5" class="us-empty">Failed to load users.</td></tr>';
+            });
+    }
+
+    function generatePassword() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@@#$%';
+        let result = '';
+        for (let i = 0; i < 9; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+    }
+</script>
+
 <style>
     :root {
         --us-teal: #4AADA8;
         --us-teal-light: #E8F6F5;
+        --us-navy: #2F3B82;
         --us-text: #2D3748;
         --us-muted: #9AA5B4;
         --us-border: #E8ECF0;
@@ -97,6 +186,42 @@
         --us-white: #FFFFFF;
         --us-radius: 14px;
         --us-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+
+    /* ── Table loading spinner ──────────────────────────────── */
+    .us-table-loading {
+        text-align: center;
+        padding: 32px 14px;
+    }
+
+    .us-spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid var(--us-border);
+        border-top-color: var(--us-teal);
+        border-radius: 50%;
+        animation: us-spin 0.8s linear infinite;
+        margin: 0 auto;
+    }
+
+    @@keyframes us-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* ── Top role-filter bar ─────────────────────────────────── */
+    .us-role-filter {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .us-role-filter-label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--us-text);
+        font-family: 'Segoe UI', sans-serif;
     }
 
     /* ── Page title ─────────────────────────────────────────── */
@@ -117,6 +242,25 @@
         box-shadow: var(--us-shadow);
     }
 
+    /* ── Card header ────────────────────────────────────────── */
+    .us-card-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--us-text);
+        font-family: 'Segoe UI', sans-serif;
+        padding-bottom: 14px;
+        margin-bottom: 14px;
+        border-bottom: 1px solid var(--us-border);
+    }
+
+    .us-card-header svg {
+        color: var(--us-teal);
+        flex-shrink: 0;
+    }
+
     /* ── Toolbar ────────────────────────────────────────────── */
     .us-toolbar {
         display: flex;
@@ -127,11 +271,9 @@
         flex-wrap: wrap;
     }
 
-    .us-filters {
+    .us-search-form {
         display: flex;
         align-items: center;
-        gap: 12px;
-        flex-wrap: wrap;
     }
 
     .us-select-wrap {
@@ -216,6 +358,10 @@
         color: var(--us-text);
     }
 
+    .us-btn--dashed {
+        border-style: dashed;
+    }
+
     .us-btn--primary {
         background: var(--us-teal);
         border-color: var(--us-teal);
@@ -273,6 +419,37 @@
         padding: 24px 14px;
     }
 
+    /* ── Role badges ────────────────────────────────────────── */
+    .us-role-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        font-family: 'Segoe UI', sans-serif;
+        white-space: nowrap;
+    }
+
+    .us-role-badge--admin {
+        background: #E3F2FD;
+        color: #2B6CB0;
+    }
+
+    .us-role-badge--dispatch {
+        background: #FEF9E7;
+        color: #B7950B;
+    }
+
+    .us-role-badge--driver {
+        background: #F3E8FD;
+        color: #805AD5;
+    }
+
+    .us-role-badge--default {
+        background: var(--us-bg);
+        color: var(--us-text);
+    }
+
     /* ── Status badges ──────────────────────────────────────── */
     .us-status {
         display: inline-block;
@@ -296,9 +473,9 @@
 
     /* ── Edit button ────────────────────────────────────────── */
     .us-btn-edit {
-        padding: 6px 18px;
+        padding: 6px 20px;
         border: 1.5px solid var(--us-border);
-        border-radius: 8px;
+        border-radius: 20px;
         background: var(--us-white);
         font-size: 0.8rem;
         font-family: 'Segoe UI', sans-serif;
@@ -308,9 +485,307 @@
         transition: border-color 180ms, background 180ms;
     }
 
+    .us-btn-edit:hover {
+        border-color: var(--us-teal);
+        color: var(--us-teal);
+    }
+
     .us-btn-edit:disabled {
         opacity: 0.55;
         cursor: not-allowed;
+    }
+
+    /* ── Alerts ─────────────────────────────────────────────── */
+    .us-alert {
+        padding: 12px 18px;
+        border-radius: var(--us-radius);
+        font-size: 0.875rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 500;
+        margin-bottom: 16px;
+    }
+
+    .us-alert--success {
+        background: var(--us-teal-light);
+        color: var(--us-teal);
+        border: 1px solid var(--us-teal);
+    }
+
+    .us-alert--error {
+        background: #FDECEC;
+        color: #E53E3E;
+        border: 1px solid #F5B5B5;
+    }
+
+    /* ── Modals ─────────────────────────────────────────────── */
+    .us-modal .modal-content {
+        border-radius: var(--us-radius);
+        border: 1px solid var(--us-border);
+    }
+
+    .us-modal .modal-header {
+        position: relative;
+        justify-content: center;
+        border-bottom: 1px solid var(--us-border);
+        padding: 18px 24px;
+    }
+
+    .us-modal .modal-header .btn-close {
+        position: absolute;
+        right: 1.25rem;
+        top: 50%;
+        transform: translateY(-50%);
+        margin: 0;
+    }
+
+    .us-modal-title {
+        color: var(--us-navy);
+        font-weight: 700;
+        font-size: 1.3rem;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .us-modal-sm {
+        max-width: 560px;
+    }
+
+    .us-modal-body {
+        padding: 0;
+    }
+
+    /* ── Section headers & form rows ───────────────────────── */
+    .us-section-header {
+        background: var(--us-bg);
+        color: var(--us-muted);
+        font-weight: 700;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        padding: 10px 24px;
+        margin: 0;
+    }
+
+    .us-section-body {
+        padding: 18px 24px;
+    }
+
+    .us-form-row {
+        display: grid;
+        grid-template-columns: 145px 1fr;
+        align-items: center;
+        gap: 8px 14px;
+        margin-bottom: 14px;
+    }
+
+    .us-form-row:last-child {
+        margin-bottom: 0;
+    }
+
+    .us-form-row label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--us-text);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .us-field-hint {
+        grid-column: 2;
+        font-size: 0.75rem;
+        color: var(--us-muted);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .us-field-error {
+        grid-column: 2;
+        font-size: 0.78rem;
+        color: #E53E3E;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .us-field-error:empty {
+        display: none;
+    }
+
+    .us-form-input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1.5px solid var(--us-border);
+        border-radius: 10px;
+        font-size: 0.875rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--us-text);
+        background: var(--us-bg);
+        outline: none;
+        transition: border-color 180ms;
+    }
+
+    .us-form-input:focus {
+        border-color: var(--us-teal);
+    }
+
+    .us-form-input--mono {
+        font-family: 'Consolas', monospace;
+        background: var(--us-teal-light);
+        color: var(--us-text);
+        font-weight: 600;
+    }
+
+    .us-form-input--plain {
+        border: none;
+        border-bottom: 1.5px solid transparent;
+        background: transparent;
+        padding: 4px 0;
+        border-radius: 0;
+        font-weight: 600;
+    }
+
+    .us-form-input--plain:focus {
+        border-bottom-color: var(--us-teal);
+    }
+
+    /* ── Manage Roles modal ─────────────────────────────────── */
+    .us-roles-body {
+        display: flex;
+        padding: 0;
+    }
+
+    .us-roles-sidebar {
+        flex: 0 0 200px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        border-right: 1px solid var(--us-border);
+        padding: 20px;
+    }
+
+    .us-roles-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 380px;
+        overflow-y: auto;
+    }
+
+    .us-role-item {
+        text-align: left;
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1.5px solid transparent;
+        background: var(--us-bg);
+        color: var(--us-text);
+        font-size: 0.875rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 180ms, color 180ms, border-color 180ms;
+    }
+
+    .us-role-item:hover {
+        background: var(--us-teal-light);
+    }
+
+    .us-role-item--active {
+        background: var(--us-teal);
+        color: #fff;
+        font-weight: 600;
+    }
+
+    .us-role-item--add {
+        border: 1.5px dashed var(--us-border);
+        background: transparent;
+        color: var(--us-muted);
+        text-align: center;
+    }
+
+    .us-roles-form {
+        flex: 1;
+        min-width: 0;
+        padding: 20px 24px;
+        max-height: 480px;
+        overflow-y: auto;
+    }
+
+    .us-roles-form .us-section-header {
+        margin: 16px -24px 14px;
+    }
+
+    .us-perm-section {
+        margin-top: 6px;
+    }
+
+    .us-perm-heading {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--us-text);
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 8px;
+    }
+
+    .us-perm-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--us-border);
+        font-size: 0.875rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--us-text);
+    }
+
+    .us-perm-row:last-child {
+        border-bottom: none;
+    }
+
+    /* ── Toggle switch ──────────────────────────────────────── */
+    .us-switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 22px;
+        flex-shrink: 0;
+    }
+
+    .us-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .us-switch-slider {
+        position: absolute;
+        inset: 0;
+        background-color: #CBD5E0;
+        border-radius: 22px;
+        cursor: pointer;
+        transition: background-color 180ms;
+    }
+
+    .us-switch-slider::before {
+        content: "";
+        position: absolute;
+        height: 16px;
+        width: 16px;
+        left: 3px;
+        bottom: 3px;
+        background-color: #fff;
+        border-radius: 50%;
+        transition: transform 180ms;
+    }
+
+    .us-switch input:checked + .us-switch-slider {
+        background-color: var(--us-teal);
+    }
+
+    .us-switch input:checked + .us-switch-slider::before {
+        transform: translateX(18px);
+    }
+
+    .us-roles-form-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid var(--us-border);
     }
 
     /* ── Responsive ─────────────────────────────────────────── */
@@ -320,17 +795,57 @@
             align-items: stretch;
         }
 
-        .us-filters {
-            flex-direction: column;
-            align-items: stretch;
-        }
-
         .us-search-input {
             width: 100%;
         }
 
         .us-actions {
-            justify-content: flex-end;
+            justify-content: flex-start;
+        }
+
+        .us-roles-body {
+            flex-direction: column;
+        }
+
+        .us-roles-sidebar {
+            flex: none;
+            border-right: none;
+            border-bottom: 1px solid var(--us-border);
+        }
+
+        .us-roles-list {
+            max-height: 160px;
+        }
+
+        .us-form-row {
+            grid-template-columns: 1fr;
+        }
+
+        .us-field-hint,
+        .us-field-error {
+            grid-column: 1;
         }
     }
 </style>
+
+@section TopbarContent {
+    <form method="get" class="us-role-filter">
+        <input type="hidden" name="search" value="@searchTerm" />
+        <label class="us-role-filter-label">Roles:</label>
+        <div class="us-select-wrap">
+            <select name="role" class="us-select" onchange="this.form.submit()">
+                <option value="">All Roles</option>
+                @foreach (var r in roles)
+                {
+                    <option value="@r.Value" selected="@(r.Value == selectedRole)">@r.Text</option>
+                }
+            </select>
+            <span class="us-select-arrow">
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
+            </span>
+        </div>
+    </form>
+}
