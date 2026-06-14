@@ -1,7 +1,306 @@
-﻿@*
-    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-*@
 @{
+    ViewData["Title"] = "Fleet Map";
 }
 
-<h3>Fleet Map</h3>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+@section TopbarContent {
+    <div class="fm-topbar">
+        <div class="fm-search-wrap">
+            <span class="fm-search-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
+                     stroke="#9AA5B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+            </span>
+            <input type="text" id="fmSearch" class="fm-search-input" placeholder="Search" />
+        </div>
+
+        <div class="fm-filters">
+            <div class="fm-filter">
+                <span class="fm-filter-label">Route:</span>
+                <div class="fm-select-wrap">
+                    <select id="fmRouteFilter" class="fm-select">
+                        <option value="">All Routes</option>
+                    </select>
+                    <span class="fm-select-arrow">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+
+            <div class="fm-filter">
+                <span class="fm-filter-label">Status:</span>
+                <div class="fm-select-wrap">
+                    <select id="fmStatusFilter" class="fm-select">
+                        <option value="">All</option>
+                    </select>
+                    <span class="fm-select-arrow">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="fm-page">
+    <div id="fleetMap" class="fm-map"></div>
+
+    <div class="fm-legend">
+        <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#2563EB"></span>ROUTE 01</div>
+        <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#F97316"></span>ROUTE 02</div>
+        <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#14B8A6"></span>ROUTE 03</div>
+    </div>
+</div>
+
+<style>
+    :root {
+        --fm-teal: #4AADA8;
+        --fm-border: #E8ECF0;
+        --fm-bg: #F8F9FA;
+        --fm-white: #FFFFFF;
+        --fm-text: #2D3748;
+        --fm-muted: #9AA5B4;
+        --fm-radius: 14px;
+    }
+
+    /* ── Topbar ─────────────────────────────────────────────── */
+    .fm-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex: 1;
+        gap: 24px;
+    }
+
+    .fm-search-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .fm-search-icon {
+        position: absolute;
+        left: 12px;
+        display: flex;
+        pointer-events: none;
+    }
+
+    .fm-search-input {
+        width: 320px;
+        padding: 9px 14px 9px 36px;
+        border: 1.5px solid var(--fm-border);
+        border-radius: 10px;
+        font-size: 0.9rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--fm-text);
+        background: var(--fm-bg);
+        outline: none;
+    }
+
+    .fm-search-input:focus {
+        border-color: var(--fm-teal);
+    }
+
+    .fm-filters {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+    }
+
+    .fm-filter {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .fm-filter-label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--fm-text);
+        font-family: 'Segoe UI', sans-serif;
+        white-space: nowrap;
+    }
+
+    .fm-select-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .fm-select {
+        appearance: none;
+        min-width: 140px;
+        padding: 8px 32px 8px 14px;
+        border: 1.5px solid var(--fm-border);
+        border-radius: 10px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--fm-text);
+        background: var(--fm-bg);
+        cursor: pointer;
+        outline: none;
+    }
+
+    .fm-select:focus {
+        border-color: var(--fm-teal);
+    }
+
+    .fm-select-arrow {
+        position: absolute;
+        right: 10px;
+        pointer-events: none;
+        color: var(--fm-text);
+        display: flex;
+    }
+
+    /* ── Map page (fixed to viewport, below the 80px topbar / right of the sidebar) ── */
+    .fm-page {
+        position: fixed;
+        top: 80px;
+        left: var(--fw-sidebar-collapsed, 72px);
+        right: 0;
+        bottom: 0;
+    }
+
+    .fm-map {
+        width: 100%;
+        height: 100%;
+    }
+
+    /* ── Legend ─────────────────────────────────────────────── */
+    .fm-legend {
+        position: absolute;
+        left: 20px;
+        bottom: 20px;
+        z-index: 1000;
+        background: var(--fm-white);
+        border-radius: var(--fm-radius);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+        padding: 14px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .fm-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        color: var(--fm-text);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .fm-legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    /* ── Bus markers — placeholder data, Block 11 replaces with live /FleetMap/Positions ── */
+    .fm-bus-marker {
+        background: transparent !important;
+        border: none !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .fm-bus-marker span {
+        display: inline-block;
+        padding: 5px 12px;
+        border-radius: 14px;
+        color: #fff;
+        font-size: 0.75rem;
+        font-weight: 700;
+        font-family: 'Segoe UI', sans-serif;
+        letter-spacing: 0.03em;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+        white-space: nowrap;
+    }
+
+    /* ── Hover tooltip — placeholder data, Block 12 wires live values ── */
+    .fm-tooltip-wrap.leaflet-tooltip {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+    }
+
+    .fm-tooltip-wrap.leaflet-tooltip::before {
+        display: none;
+    }
+
+    .fm-tooltip {
+        background: var(--fm-white);
+        border-radius: 10px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+        padding: 10px 14px;
+        font-family: 'Segoe UI', sans-serif;
+        min-width: 160px;
+    }
+
+    .fm-tooltip__header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 4px;
+    }
+
+    .fm-tooltip__bus {
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--fm-text);
+    }
+
+    .fm-tooltip__route {
+        font-size: 0.75rem;
+        color: var(--fm-muted);
+    }
+
+    .fm-tooltip__status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.75rem;
+        color: #16A34A;
+        margin-bottom: 8px;
+    }
+
+    .fm-tooltip__dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #16A34A;
+    }
+
+    .fm-tooltip__passengers {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        border: 1px solid var(--fm-border);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 0.8rem;
+        color: var(--fm-text);
+    }
+</style>
+
+@section Scripts {
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="~/js/fleetmap.js" asp-append-version="true"></script>
+}
