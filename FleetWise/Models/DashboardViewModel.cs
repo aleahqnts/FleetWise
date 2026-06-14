@@ -33,5 +33,14 @@ namespace FleetWise.Models
         // ── Route dropdown ────────────────────────────────────────
         /// <summary>Populated from the Routes table; each item is Value=RouteId, Text=RouteName.</summary>
         public List<SelectListItem> Routes { get; set; } = new();
+
+        // ── Active filter state ───────────────────────────────────
+        /// <summary>Currently selected RouteId (null = All Routes).</summary>
+        public int? SelectedRouteId { get; set; }
+
+        /// <summary>Display name of the active route filter ("All Routes" when none selected).</summary>
+        public string SelectedRouteName => SelectedRouteId.HasValue
+            ? Routes.FirstOrDefault(r => r.Value == SelectedRouteId.ToString())?.Text ?? "All Routes"
+            : "All Routes";
     }
 }
