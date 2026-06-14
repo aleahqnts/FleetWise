@@ -9,6 +9,7 @@
 
 @using Microsoft.AspNetCore.Html
 @using Microsoft.AspNetCore.Mvc.Rendering
+@using System.Security.Claims
 
 @*
     ── Icon helper ─────────────────────────────────────────────────────────────
@@ -130,9 +131,19 @@
     <div class="fw-sidebar__profile">
         <img src="~/images/user-avatar.png" alt="User avatar" class="fw-sidebar__avatar" />
         <div class="fw-sidebar__profile-info">
-            <span class="fw-sidebar__profile-name">Juan Dela Cruz</span>
-            <span class="fw-sidebar__profile-role">Administrator</span>
+            <span class="fw-sidebar__profile-name">@User.Identity?.Name</span>
+            <span class="fw-sidebar__profile-role">@User.FindFirst(ClaimTypes.Role)?.Value</span>
         </div>
+        <form asp-controller="Home" asp-action="Logout" method="post" class="fw-sidebar__logout">
+            <button type="submit" class="fw-sidebar__logout-btn" title="Logout">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+            </button>
+        </form>
     </div>
 
 </aside>
@@ -336,6 +347,37 @@
         font-size: 0.75rem;
         color: var(--fw-text-muted);
         font-family: 'Segoe UI', sans-serif;
+    }
+
+    /* ─── Logout button ─────────────────────────────────────── */
+    .fw-sidebar__logout {
+        margin-left: auto;
+        opacity: 0;
+        transform: translateX(-6px);
+        transition: opacity var(--fw-transition), transform var(--fw-transition);
+    }
+
+    .fw-sidebar:hover .fw-sidebar__logout {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    .fw-sidebar__logout-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        padding: 6px;
+        border-radius: 8px;
+        color: var(--fw-text-muted);
+        cursor: pointer;
+        transition: background var(--fw-transition), color var(--fw-transition);
+    }
+
+    .fw-sidebar__logout-btn:hover {
+        background: var(--fw-teal-light);
+        color: var(--fw-teal);
     }
 
     /* ─── Push page content away from the collapsed sidebar ── */
