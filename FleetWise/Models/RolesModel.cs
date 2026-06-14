@@ -17,8 +17,8 @@ public class Role : BaseModel
     public string AccessLevel { get; set; }
 
     [Column("web_permissions")]
-    public string WebPermissions { get; set; }
+    public Dictionary<string, bool> WebPermissions { get; set; }
 
     [Column("mobile_permissions")]
-    public string MobilePermissions { get; set; }
+    public Dictionary<string, bool> MobilePermissions { get; set; }
 }
