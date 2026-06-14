@@ -1,3 +1,5 @@
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 ﻿using FleetWise.Models;
 using Microsoft.AspNetCore.Mvc;
 using QuestPDF.Fluent;
@@ -7,6 +9,7 @@ using static Postgrest.Constants;
 
 namespace FleetWise.Controllers
 {
+    [Authorize]
     public class ReportsController : Controller
     {
         private readonly Supabase.Client _supabase;
