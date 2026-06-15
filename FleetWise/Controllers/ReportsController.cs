@@ -1,5 +1,6 @@
-﻿using FleetWise.Models;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FleetWise.Models;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -7,6 +8,7 @@ using static Postgrest.Constants;
 
 namespace FleetWise.Controllers
 {
+    [Authorize]
     public class ReportsController : Controller
     {
         private readonly Supabase.Client _supabase;
@@ -248,7 +250,7 @@ namespace FleetWise.Controllers
             if (string.IsNullOrEmpty(tripId))
                 return BadRequest("Trip ID is required.");
 
-            Trip tripResponse;
+            Trip? tripResponse;
             try
             {
                 tripResponse = await _supabase
@@ -260,6 +262,9 @@ namespace FleetWise.Controllers
             {
                 return NotFound("Trip not found.");
             }
+
+            if (tripResponse is null)
+                return NotFound("Trip not found.");
 
             UserModel? driverResponse = null;
             try
