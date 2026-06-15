@@ -1,0 +1,64 @@
+@model EditUserViewModel
+
+<div class="modal fade us-modal" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog us-modal-sm">
+        <div class="modal-content">
+            <form asp-action="Edit" asp-controller="Users" method="post">
+                <div class="modal-header">
+                    <h5 class="modal-title us-modal-title" id="editUserModalLabel">Edit User</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body us-modal-body">
+                    <input type="hidden" asp-for="UserId" id="euUserId" />
+                    <div class="us-section-header">Profile</div>
+                    <div class="us-section-body">
+                        <div class="us-form-row">
+                            <label asp-for="FirstName">First Name:</label>
+                            <input asp-for="FirstName" id="euFirstName" class="us-form-input" />
+                            <span asp-validation-for="FirstName" class="us-field-error"></span>
+                        </div>
+                        <div class="us-form-row">
+                            <label asp-for="MiddleName">Middle Name:</label>
+                            <input asp-for="MiddleName" id="euMiddleName" class="us-form-input" />
+                            <span asp-validation-for="MiddleName" class="us-field-error"></span>
+                        </div>
+                        <div class="us-form-row">
+                            <label asp-for="LastName">Last Name:</label>
+                            <input asp-for="LastName" id="euLastName" class="us-form-input" />
+                            <span asp-validation-for="LastName" class="us-field-error"></span>
+                        </div>
+                        <div class="us-form-row">
+                            <label asp-for="Email">Email Address:</label>
+                            <input asp-for="Email" id="euEmail" class="us-form-input" />
+                            <span asp-validation-for="Email" class="us-field-error"></span>
+                        </div>
+                    </div>
+                    <div class="us-section-header">Role Assignment</div>
+                    <div class="us-section-body">
+                        <div class="us-form-row">
+                            <label asp-for="RoleId">Role:</label>
+                            <select asp-for="RoleId" id="euRoleId" class="us-form-input" asp-items="(List<SelectListItem>)ViewBag.Roles"></select>
+                            <span class="us-field-hint">Permissions will be based on selected role.</span>
+                            <span asp-validation-for="RoleId" class="us-field-error"></span>
+                        </div>
+                    </div>
+                    <div class="us-section-header">Account Status</div>
+                    <div class="us-section-body">
+                        <div class="us-form-row">
+                            <label asp-for="AccountStatus">Status:</label>
+                            <select asp-for="AccountStatus" id="euAccountStatus" class="us-form-input">
+                                <option value="Activated">Activated</option>
+                                <option value="Deactivated">Deactivated</option>
+                            </select>
+                            <span asp-validation-for="AccountStatus" class="us-field-error"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="us-btn us-btn--outline" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="us-btn us-btn--primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

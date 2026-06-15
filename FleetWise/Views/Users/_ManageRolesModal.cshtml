@@ -1,0 +1,100 @@
+@model RoleFormViewModel
+
+@{
+    var webPermissions = new (string Key, string Label)[]
+    {
+        ("Dashboard", "Dashboard"),
+        ("FleetMap", "Fleet Map"),
+        ("Vehicles", "Vehicles"),
+        ("Dispatch", "Dispatch"),
+        ("Analytics", "Analytics"),
+        ("Reports", "Reports"),
+        ("Users", "Users"),
+    };
+    var mobilePermissions = new (string Key, string Label)[]
+    {
+        ("FullAccess", "Full Access"),
+    };
+}
+
+<div class="modal fade us-modal" id="manageRolesModal" tabindex="-1" aria-labelledby="manageRolesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title us-modal-title" id="manageRolesModalLabel">Manage Roles</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body us-roles-body">
+                <div class="us-roles-sidebar">
+                    <div class="us-roles-list">
+                        @foreach (var r in (List<Role>)ViewBag.RolesFull)
+                        {
+                            var isActive = Model.RoleId == r.RoleId;
+                            <button type="button" class="us-role-item @(isActive ? "us-role-item--active" : "")" data-role-id="@r.RoleId" data-role-name="@r.RoleName"
+                                    data-access-level="@r.AccessLevel"
+                                    data-web-perms='@System.Text.Json.JsonSerializer.Serialize(r.WebPermissions)'
+                                    data-mobile-perms='@System.Text.Json.JsonSerializer.Serialize(r.MobilePermissions)'>
+                                @r.RoleName
+                            </button>
+                        }
+                    </div>
+                    <button type="button" class="us-role-item us-role-item--add @(Model.RoleId == null ? "us-role-item--active" : "")" data-role-id="">+ Add Role</button>
+                </div>
+                <div class="us-roles-form">
+                    <form id="roleForm" asp-action="UpdateRole" asp-controller="Users" method="post">
+                        <input type="hidden" name="RoleId" id="roleFormRoleId" asp-for="RoleId" />
+                        <div class="us-form-row">
+                            <label asp-for="RoleName">Role:</label>
+                            <input asp-for="RoleName" id="roleFormName" class="us-form-input us-form-input--plain" />
+                            <span asp-validation-for="RoleName" class="us-field-error"></span>
+                        </div>
+                        <div class="us-form-row">
+                            <label asp-for="AccessLevel">Access Level:</label>
+                            <input asp-for="AccessLevel" id="roleFormAccessLevel" class="us-form-input us-form-input--plain" />
+                            <span asp-validation-for="AccessLevel" class="us-field-error"></span>
+                        </div>
+
+                        <div class="us-section-header">Permissions</div>
+
+                        <div class="us-perm-section">
+                            <h6 class="us-perm-heading">Web Dashboard</h6>
+                            @foreach (var perm in webPermissions)
+                            {
+                                <div class="us-perm-row">
+                                    <span>@perm.Label</span>
+                                    <input type="hidden" name="WebPermissions[@perm.Key]" value="false" />
+                                    <label class="us-switch">
+                                        <input type="checkbox" name="WebPermissions[@perm.Key]" value="true" id="perm_web_@perm.Key"
+                                               checked="@(Model.WebPermissions.GetValueOrDefault(perm.Key))" />
+                                        <span class="us-switch-slider"></span>
+                                    </label>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="us-perm-section">
+                            <h6 class="us-perm-heading">Mobile Application</h6>
+                            @foreach (var perm in mobilePermissions)
+                            {
+                                <div class="us-perm-row">
+                                    <span>@perm.Label</span>
+                                    <input type="hidden" name="MobilePermissions[@perm.Key]" value="false" />
+                                    <label class="us-switch">
+                                        <input type="checkbox" name="MobilePermissions[@perm.Key]" value="true" id="perm_mobile_@perm.Key"
+                                               checked="@(Model.MobilePermissions.GetValueOrDefault(perm.Key))" />
+                                        <span class="us-switch-slider"></span>
+                                    </label>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="us-roles-form-footer">
+                            <button type="button" class="us-btn us-btn--outline" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="us-btn us-btn--primary">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
