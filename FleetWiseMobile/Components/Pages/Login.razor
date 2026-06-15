@@ -1,0 +1,85 @@
+@page "/"
+@layout LoginLayout
+@inject AuthService Auth
+@inject SessionService Session
+@inject NavigationManager Nav
+
+<div class="login-bg">
+    <img class="logo-img" src="images/fleetwise-logo.png" alt="RouteSync" />
+    <p class="app-name"><span class="n1">Route</span><span class="n2">Sync</span></p>
+
+    <div class="card">
+        <h1>Sign In</h1>
+
+        <div class="field">
+            <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg></span>
+            <input type="email" placeholder="Email" autocomplete="username"
+                   @bind="email" @bind:event="oninput" />
+        </div>
+
+        <div class="field">
+            <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg></span>
+            <input type="password" placeholder="Password" autocomplete="current-password"
+                   @bind="password" @bind:event="oninput" @onkeydown="OnKey" />
+        </div>
+
+        <div class="forgot"><a @onclick="Forgot">Forgot Password?</a></div>
+
+        @if (!string.IsNullOrEmpty(message))
+        {
+            <div class="message">@message</div>
+        }
+
+        <button class="btn-signin" @onclick="SignIn" disabled="@busy">
+            @(busy ? "Signing in..." : "Sign In")
+        </button>
+    </div>
+</div>
+
+@code {
+    private string email = "";
+    private string password = "";
+    private string? message;
+    private bool busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await Session.RestoreAsync())
+            Nav.NavigateTo("/home");
+    }
+
+    private async Task SignIn()
+    {
+        message = null;
+        busy = true;
+        try
+        {
+            var user = await Auth.ValidateAsync(email.Trim(), password);
+            if (user is null)
+            {
+                message = "Invalid email or password.";
+                return;
+            }
+
+            await Session.SetAsync(user);
+            Nav.NavigateTo("/home");
+        }
+        catch (Exception ex)
+        {
+            message = "Login failed. Check your connection and try again.";
+            System.Diagnostics.Debug.WriteLine($"[Login] {ex}");
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SignIn();
+    }
+
+    private void Forgot()
+        => message = "Password reset isn't available yet — please contact your operator.";
+}
