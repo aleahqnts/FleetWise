@@ -1,0 +1,77 @@
+@page "/trip-report/{TripId}"
+@inject SessionService Session
+@inject DriverDataService Data
+@inject NavigationManager Nav
+
+@if (loading)
+{
+    <div class="rep"><p class="muted">Loading...</p></div>
+}
+else if (trip is null)
+{
+    <div class="rep">
+        <div class="rep-header">
+            <button class="back" @onclick="@(() => Nav.NavigateTo("/trips"))">&#8592;</button>
+            <h1>Trip</h1><span class="spacer"></span>
+        </div>
+        <p class="muted">Trip not found.</p>
+    </div>
+}
+else
+{
+    <div class="rep">
+        <div class="rep-header">
+            <button class="back" @onclick="@(() => Nav.NavigateTo("/trips"))">&#8592;</button>
+            <h1>@trip.TripId</h1>
+            <span class="spacer"></span>
+        </div>
+
+        <h2 class="dtr">Daily Trip Report</h2>
+
+        <div class="rep-card">
+            <p class="date">Date: @trip.Date.ToString("MMMM d, yyyy")</p>
+
+            <p class="sec">Assignment Details</p>
+            <p class="row"><span class="k">Trip ID:</span> @trip.TripId</p>
+            <p class="row"><span class="k">Route:</span> @(route?.RouteName ?? $"Route {trip.RouteId}")</p>
+            <p class="row"><span class="k">Shift Type:</span> @trip.ShiftType Shift</p>
+            <p class="row"><span class="k">Shift Time:</span> @ShiftRange</p>
+            <p class="row"><span class="k">Bus ID:</span> @(vehicle?.VehicleId ?? trip.VehicleId)</p>
+            <p class="row"><span class="k">Plate Number:</span> @(vehicle?.PlateNumber ?? "—")</p>
+            <p class="row"><span class="k">Driver:</span> @Session.DisplayName</p>
+
+            <p class="sec">Trip Details</p>
+            <p class="row"><span class="k">Start Time:</span> @TimeOrDash(trip.ActualStartTime)</p>
+            <p class="row"><span class="k">End Time:</span> @TimeOrDash(trip.ActualEndTime)</p>
+            <p class="row"><span class="k">Total Passengers:</span> @trip.TotalBoarded</p>
+            <p class="row"><span class="k">Estimated Revenue:</span> &#8369;@trip.EstimatedRevenue.ToString("N2")</p>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string TripId { get; set; } = "";
+
+    private bool loading = true;
+    private Trip? trip;
+    private BusRoute? route;
+    private Vehicle? vehicle;
+
+    private string ShiftRange => trip is null ? "" :
+        $"{DateTime.Today.Add(trip.ShiftStartTime):h:mm tt} to {DateTime.Today.Add(trip.ShiftEndTime):h:mm tt}";
+
+    private static string TimeOrDash(DateTime? dt) => dt?.ToString("h:mm tt") ?? "—";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
+
+        trip = await Data.GetTripAsync(TripId);
+        if (trip is not null)
+        {
+            route = await Data.GetRouteAsync(trip.RouteId);
+            vehicle = await Data.GetVehicleAsync(trip.VehicleId);
+        }
+        loading = false;
+    }
+}

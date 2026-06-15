@@ -1,0 +1,26 @@
+@page "/profile"
+@inject SessionService Session
+@inject NavigationManager Nav
+
+<div class="stub">
+    <h1>Profile</h1>
+    @if (Session.IsLoggedIn)
+    {
+        <p class="pname">@Session.DisplayName</p>
+        <p class="pemail">@Session.CurrentUser!.EmailAddress</p>
+        <button class="logout" @onclick="Logout">Log out</button>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        if (!Session.IsLoggedIn) Nav.NavigateTo("/");
+    }
+
+    private void Logout()
+    {
+        Session.Logout();
+        Nav.NavigateTo("/");
+    }
+}

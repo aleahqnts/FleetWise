@@ -1,0 +1,15 @@
+@page "/notifications"
+@inject SessionService Session
+@inject NavigationManager Nav
+
+<div class="stub">
+    <h1>Notifications</h1>
+    <p>Notifications — deferred (capstone scope).</p>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        if (!Session.IsLoggedIn) Nav.NavigateTo("/");
+    }
+}
