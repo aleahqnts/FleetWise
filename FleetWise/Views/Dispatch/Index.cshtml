@@ -102,77 +102,90 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var shift in route.Shifts)
+                    @if (!route.Shifts.Any())
                     {
-                        var shiftTrips = shift.Trips;
-                        for (int i = 0; i < shiftTrips.Count; i++)
+                        <tr class="dp-trip-row dp-empty-row" data-trip-status="">
+                            <td colspan="5" class="dp-empty-cell">No trips scheduled for today.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var shift in route.Shifts)
                         {
-                            var trip = shiftTrips[i];
+                            var shiftTrips = shift.Trips;
+                            var shiftId = $"{route.RouteId}-{shift.ShiftType}".Replace(" ", "-");
 
-                            // Vehicle status icon
-                            var (vDotClass, vTooltip) = trip.VehicleStatus switch
+                            @for (int i = 0; i < shiftTrips.Count; i++)
                             {
-                                "On Trip" => ("dp-dot--green", "On trip"),
-                                "Ready to Deploy" => ("dp-dot--blue", "Ready to deploy"),
-                                "Flagged" => ("dp-dot--red", "Flagged"),
-                                "Pending" => ("dp-dot--yellow", "Pending checklist"),
-                                _ => ("dp-dot--gray", trip.VehicleStatus)
-                            };
+                                var trip = shiftTrips[i];
 
-                            // Driver status icon
-                            var (dDotClass, dTooltip) = trip.DriverStatus switch
-                            {
-                                "On Trip" => ("dp-dot--green", "On trip"),
-                                "Available" => ("dp-dot--blue", "Available"),
-                                "Unavailable" => ("dp-dot--red", "Unavailable"),
-                                _ => ("dp-dot--gray", trip.DriverStatus)
-                            };
-
-                            // Trip status badge
-                            var (badgeClass, badgeLabel) = trip.TripStatus switch
-                            {
-                                "Active" => ("dp-badge--active", "Active"),
-                                "Not Yet Started" => ("dp-badge--not-started", "Not Yet Started"),
-                                "Pending" => ("dp-badge--pending", "Pending"),
-                                "Assignment Issue" => ("dp-badge--issue", "Assignment Issue"),
-                                "Completed" => ("dp-badge--completed", "Completed"),
-                                _ => ("dp-badge--completed", trip.TripStatus)
-                            };
-
-                            <tr class="dp-trip-row" data-trip-status="@trip.TripStatus">
-                                @if (i == 0)
+                                // Vehicle status icon
+                                var (vDotClass, vTooltip) = trip.VehicleStatus switch
                                 {
-                                    <td class="dp-shift-cell" rowspan="@shiftTrips.Count">
-                                        @shift.ShiftType<br />
-                                        <span class="dp-shift-time">(@shift.ShiftStartTime – @shift.ShiftEndTime)</span>
+                                    "On Trip" => ("dp-dot--green", "On trip"),
+                                    "Ready to Deploy" => ("dp-dot--blue", "Ready to deploy"),
+                                    "Flagged" => ("dp-dot--red", "Flagged"),
+                                    "Pending" => ("dp-dot--yellow", "Pending checklist"),
+                                    _ => ("dp-dot--gray", trip.VehicleStatus)
+                                };
+
+                                // Driver status icon
+                                var (dDotClass, dTooltip) = trip.DriverStatus switch
+                                {
+                                    "On Trip" => ("dp-dot--green", "On trip"),
+                                    "Available" => ("dp-dot--blue", "Available"),
+                                    "Unavailable" => ("dp-dot--red", "Unavailable"),
+                                    _ => ("dp-dot--gray", trip.DriverStatus)
+                                };
+
+                                // Trip status badge
+                                var (badgeClass, badgeLabel) = trip.TripStatus switch
+                                {
+                                    "Active" => ("dp-badge--active", "Active"),
+                                    "Not Yet Started" => ("dp-badge--not-started", "Not Yet Started"),
+                                    "Pending" => ("dp-badge--pending", "Pending"),
+                                    "Assignment Issue" => ("dp-badge--issue", "Assignment Issue"),
+                                    "Completed" => ("dp-badge--completed", "Completed"),
+                                    _ => ("dp-badge--completed", trip.TripStatus)
+                                };
+
+                                <tr class="dp-trip-row"
+                                    data-trip-status="@trip.TripStatus"
+                                    data-shift-id="@shiftId">
+                                    @if (i == 0)
+                                    {
+                                        <td class="dp-shift-cell" rowspan="@shiftTrips.Count">
+                                            @shift.ShiftType<br />
+                                            <span class="dp-shift-time">(@shift.ShiftStartTime – @shift.ShiftEndTime)</span>
+                                        </td>
+                                    }
+                                    <td>
+                                        <div class="dp-status-wrap">
+                                            <span class="dp-status-dot @vDotClass"></span>
+                                            <span class="dp-tooltip">@vTooltip</span>
+                                            <strong>@trip.VehicleId</strong>
+                                            <span class="rp-plate">| @trip.PlateNumber</span>
+                                        </div>
                                     </td>
-                                }
-                                <td>
-                                    <div class="dp-status-wrap">
-                                        <span class="dp-status-dot @vDotClass"></span>
-                                        <span class="dp-tooltip">@vTooltip</span>
-                                        <strong>@trip.VehicleId</strong>
-                                        <span class="rp-plate">| @trip.PlateNumber</span>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="dp-status-wrap">
-                                        <span class="dp-status-dot @dDotClass"></span>
-                                        <span class="dp-tooltip">@dTooltip</span>
-                                        @trip.DriverName
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="dp-badge @badgeClass">@badgeLabel</span>
-                                </td>
-                                <td>
-                                    <div class="dp-actions-cell">
-                                        <button class="rp-btn-view">View</button>
-                                        <button class="dp-btn-reassign">Reassign</button>
-                                        <button class="dp-btn-msg" title="Message"><i class="ti ti-message"></i></button>
-                                    </div>
-                                </td>
-                            </tr>
+                                    <td>
+                                        <div class="dp-status-wrap">
+                                            <span class="dp-status-dot @dDotClass"></span>
+                                            <span class="dp-tooltip">@dTooltip</span>
+                                            @trip.DriverName
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="dp-badge @badgeClass">@badgeLabel</span>
+                                    </td>
+                                    <td>
+                                        <div class="dp-actions-cell">
+                                            <button class="rp-btn-view">View</button>
+                                            <button class="dp-btn-reassign">Reassign</button>
+                                            <button class="dp-btn-msg" title="Message"><i class="ti ti-message"></i></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
                         }
                     }
                 </tbody>
@@ -591,6 +604,14 @@
         color: var(--rp-muted);
     }
 
+    .dp-empty-cell {
+        text-align: center;
+        padding: 28px 22px;
+        color: var(--rp-muted);
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
     /* ── Status icons / dots ────────────────────────────────── */
     .dp-status-wrap {
         position: relative;
@@ -827,10 +848,6 @@
 }
 
 <script>
-    function finalizeShiftGroup(shiftCell, visibleCount) {
-        shiftCell.setAttribute('rowspan', visibleCount > 0 ? visibleCount : 1);
-    }
-
     function applyFilters() {
         const q = document.getElementById('searchInput').value.toLowerCase();
         const routeId = document.getElementById('routeFilter').value;
@@ -838,72 +855,85 @@
 
         document.querySelectorAll('.dp-route-card').forEach(card => {
             const cardRouteId = card.dataset.routeId;
-            const routeMatches = (routeId === '0' || routeId === '' || cardRouteId === routeId);
+            const routeMatches = routeId === '0' || routeId === '' || cardRouteId === routeId;
 
-            let anyVisibleInCard = false;
-
-            // Group rows by their shift block (consecutive rows sharing a shift cell)
-            const rows = Array.from(card.querySelectorAll('.dp-trip-row'));
-            let currentShiftCell = null;
-            let visibleCountForShift = 0;
-
-            rows.forEach(row => {
-                const shiftCell = row.querySelector('.dp-shift-cell');
-                if (shiftCell) {
-                    // finalize previous shift group's rowspan
-                    if (currentShiftCell) {
-                        finalizeShiftGroup(currentShiftCell, visibleCountForShift);
-                    }
-                    currentShiftCell = shiftCell;
-                    visibleCountForShift = 0;
-                }
-
-                const rowStatus = row.dataset.tripStatus || '';
-                const statusMatches = (status === '' || rowStatus === status);
-                const textMatches = row.textContent.toLowerCase().includes(q);
-
-                const visible = routeMatches && statusMatches && textMatches;
-                row.dataset.visible = visible ? '1' : '0';
-
-                if (visible) {
-                    visibleCountForShift++;
-                    anyVisibleInCard = true;
-                }
-            });
-
-            // finalize last shift group
-            if (currentShiftCell) {
-                finalizeShiftGroup(currentShiftCell, visibleCountForShift);
+            // Routes with no trips today
+            const emptyRow = card.querySelector('.dp-empty-row');
+            if (emptyRow) {
+                const showEmpty = routeMatches && status === '' && q === '';
+                card.style.display = showEmpty ? '' : 'none';
+                emptyRow.style.display = showEmpty ? '' : 'none';
+                return;
             }
 
-            // second pass: apply display based on visibility and whether row holds the shift cell
+            const rows = Array.from(card.querySelectorAll('.dp-trip-row'));
+            let anyVisibleInCard = false;
+
+            // Group rows by shift id, preserving order
+            const shiftGroups = {};
+            const shiftOrder = [];
             rows.forEach(row => {
-                const isVisible = row.dataset.visible === '1';
-                const hasShiftCell = !!row.querySelector('.dp-shift-cell');
-                if (isVisible) {
-                    row.style.display = '';
-                } else if (hasShiftCell && row.querySelector('.dp-shift-cell').getAttribute('rowspan') !== '0') {
-                    // keep the row visible to host the shift cell, but hide its data cells
-                    row.style.display = '';
-                    Array.from(row.children).forEach(td => {
-                        if (!td.classList.contains('dp-shift-cell')) td.style.display = 'none';
-                    });
-                } else {
-                    row.style.display = 'none';
+                const sid = row.dataset.shiftId;
+                if (!shiftGroups[sid]) {
+                    shiftGroups[sid] = [];
+                    shiftOrder.push(sid);
                 }
-                // reset hidden data cells for visible rows
-                if (isVisible) {
-                    Array.from(row.children).forEach(td => { td.style.display = ''; });
+                shiftGroups[sid].push(row);
+            });
+
+            shiftOrder.forEach(sid => {
+                const groupRows = shiftGroups[sid];
+
+                // Step 1: Always restore shift cell to the first row of the group
+                // so we start from a clean, predictable state each time filters run.
+                let shiftCell = null;
+                groupRows.forEach(row => {
+                    const cell = row.querySelector('.dp-shift-cell');
+                    if (cell) shiftCell = cell;
+                });
+                if (shiftCell && !groupRows[0].querySelector('.dp-shift-cell')) {
+                    groupRows[0].insertBefore(shiftCell, groupRows[0].firstChild);
                 }
+
+                // Step 2: Determine visibility for each row
+                const visibility = groupRows.map(row => {
+                    const rowStatus = row.dataset.tripStatus || '';
+                    const statusMatches = status === '' || rowStatus === status;
+                    const textMatches = q === '' || row.textContent.toLowerCase().includes(q);
+                    return routeMatches && statusMatches && textMatches;
+                });
+
+                const visibleCount = visibility.filter(Boolean).length;
+
+                if (visibleCount === 0) {
+                    // Hide all rows in this shift, including the one holding the shift cell
+                    groupRows.forEach(row => { row.style.display = 'none'; });
+                    return;
+                }
+
+                anyVisibleInCard = true;
+
+                // Step 3: Move shift cell to first visible row if it isn't already there
+                const firstVisibleIndex = visibility.indexOf(true);
+                const firstVisibleRow = groupRows[firstVisibleIndex];
+                if (shiftCell && !firstVisibleRow.querySelector('.dp-shift-cell')) {
+                    firstVisibleRow.insertBefore(shiftCell, firstVisibleRow.firstChild);
+                }
+
+                // Step 4: Update rowspan to match visible count
+                if (shiftCell) shiftCell.setAttribute('rowspan', visibleCount);
+
+                // Step 5: Show/hide each row
+                groupRows.forEach((row, idx) => {
+                    row.style.display = visibility[idx] ? '' : 'none';
+                });
             });
 
             card.style.display = (routeMatches && anyVisibleInCard) ? '' : 'none';
         });
     }
 
-    function filterRows() {
-        applyFilters();
-    }
+    function filterRows() { applyFilters(); }
 
     document.getElementById('routeFilter').addEventListener('change', applyFilters);
     document.getElementById('statusFilter').addEventListener('change', applyFilters);
