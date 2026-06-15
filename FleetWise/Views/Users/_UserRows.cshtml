@@ -1,0 +1,38 @@
+@model List<UserListItemViewModel>
+
+@functions {
+    string RoleBadgeClass(string roleName)
+    {
+        var name = roleName.ToLowerInvariant();
+        if (name.Contains("admin")) return "us-role-badge--admin";
+        if (name.Contains("dispatch")) return "us-role-badge--dispatch";
+        if (name.Contains("driver")) return "us-role-badge--driver";
+        return "us-role-badge--default";
+    }
+}
+
+@if (Model.Count == 0)
+{
+    <tr>
+        <td colspan="5" class="us-empty">No users found.</td>
+    </tr>
+}
+else
+{
+    @foreach (var user in Model)
+    {
+        var statusClass = user.AccountStatus == "Activated" ? "us-status--active" : "us-status--inactive";
+        <tr>
+            <td>@user.FullName</td>
+            <td>@user.Email</td>
+            <td><span class="us-role-badge @RoleBadgeClass(user.RoleName)">@user.RoleName</span></td>
+            <td><span class="us-status @statusClass">@user.AccountStatus</span></td>
+            <td>
+                <button type="button" class="us-btn-edit" data-bs-toggle="modal" data-bs-target="#editUserModal"
+                        data-user-id="@user.UserId" data-first-name="@user.FirstName" data-middle-name="@user.MiddleName"
+                        data-last-name="@user.LastName" data-email="@user.Email" data-role-id="@user.RoleId"
+                        data-account-status="@user.AccountStatus">Edit</button>
+            </td>
+        </tr>
+    }
+}
