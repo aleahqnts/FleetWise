@@ -1,4 +1,5 @@
 ﻿#nullable disable
+using System.Collections.Generic;
 using Postgrest.Attributes;
 using Postgrest.Models;
 
@@ -23,19 +24,19 @@ public class BusChecklist : BaseModel
     public DateTime SubmittedAt { get; set; }
 
     [Column("exterior_inspection")]
-    public string ExteriorInspection { get; set; }
+    public Dictionary<string, string> ExteriorInspection { get; set; }
 
     [Column("engine_compartment")]
-    public string EngineCompartment { get; set; }
+    public Dictionary<string, string> EngineCompartment { get; set; }
 
     [Column("interior_inspection")]
-    public string InteriorInspection { get; set; }
+    public Dictionary<string, string> InteriorInspection { get; set; }
 
     [Column("brake_safety")]
-    public string BrakeSafety { get; set; }
+    public Dictionary<string, string> BrakeSafety { get; set; }
 
     [Column("passenger_systems")]
-    public string PassengerSystems { get; set; }
+    public Dictionary<string, string> PassengerSystems { get; set; }
 
     [Column("checklist_status")]
     public string ChecklistStatus { get; set; }

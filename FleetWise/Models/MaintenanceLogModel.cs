@@ -1,4 +1,6 @@
 ﻿#nullable disable
+using System.Collections.Generic;
+using Newtonsoft.Json;
 using Postgrest.Attributes;
 using Postgrest.Models;
 
@@ -20,7 +22,7 @@ public class MaintenanceLog : BaseModel
     public string TripId { get; set; }
 
     [Column("issue_details")]
-    public string IssueDetails { get; set; }
+    public MaintenanceIssueDetails IssueDetails { get; set; }
 
     [Column("maintenance_status")]
     public string MaintenanceStatus { get; set; }
@@ -33,4 +35,13 @@ public class MaintenanceLog : BaseModel
 
     [Column("remarks")]
     public string Remarks { get; set; }
+}
+
+// Shape of the `issue_details` jsonb column: { "issues": ["Tires", "Air Conditioning", ...] }
+// Newtonsoft ignores any other/unexpected keys in the jsonb by default, so this stays
+// resilient even if more fields get added to issue_details later.
+public class MaintenanceIssueDetails
+{
+    [JsonProperty("issues")]
+    public List<string> Issues { get; set; } = new();
 }
