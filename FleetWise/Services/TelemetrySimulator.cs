@@ -80,7 +80,8 @@ public class TelemetrySimulator : BackgroundService
         // Capacities for clamping passenger drift — one small read, fixed vehicle set.
         var vehiclesResponse = await _supabase.From<Vehicle>().Get();
         var capacityByVehicle = vehiclesResponse.Models
-            .ToDictionary(v => v.VehicleId, v => v.Capacity);
+            .GroupBy(v => v.VehicleId)
+            .ToDictionary(g => g.Key, g => g.First().Capacity);
 
         foreach (var trip in activeTrips)
         {

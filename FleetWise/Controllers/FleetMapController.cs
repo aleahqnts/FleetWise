@@ -131,7 +131,14 @@ namespace FleetWise.Controllers
 
             var activeTripIds = activeTrips.Select(t => t.TripId).ToHashSet();
 
-            var telemetryResponse = await _supabase.From<TelemetryData>().Get();
+            // Newest-first: Supabase caps a plain .Get() at 1000 rows and returns the
+            // OLDEST ones, so on a table with lots of history the "latest per trip"
+            // below would be permanently stale. Ordering by timestamp descending makes
+            // .Get() return the most recent rows, which is all we need here.
+            var telemetryResponse = await _supabase
+                .From<TelemetryData>()
+                .Order("timestamp", Postgrest.Constants.Ordering.Descending)
+                .Get();
             var vehiclesResponse = await _supabase.From<Vehicle>().Get();
             var routesResponse = await _supabase.From<BusRoute>().Get();
             var usersResponse = await _supabase.From<UserModel>().Get();
