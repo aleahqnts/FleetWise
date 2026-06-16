@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using FleetWise.Models;
 using FleetWise.Models.ViewModels;
@@ -180,6 +181,7 @@ namespace FleetWise.Controllers
                     PlateNumber = vehicle?.PlateNumber ?? "—",
                     RouteId = trip.RouteId,
                     RouteName = route?.RouteName ?? "—",
+                    Shift = FormatShift(trip),
                     DriverName = FormatDriverName(driver),
                     Status = DisplayStatus(vehicle?.VehicleStatus),
                     Lat = (double)telemetry.Latitude,
@@ -199,6 +201,15 @@ namespace FleetWise.Controllers
                     string.Equals(p.Status, status, StringComparison.OrdinalIgnoreCase)).ToList();
 
             return Json(positions);
+        }
+
+        // "6AM – 12PM" from the trip's shift start/end times (Figure 19 header).
+        private static string FormatShift(Trip trip)
+        {
+            static string Fmt(TimeSpan t) =>
+                DateTime.Today.Add(t).ToString("htt", CultureInfo.InvariantCulture);
+
+            return $"{Fmt(trip.ShiftStartTime)} – {Fmt(trip.ShiftEndTime)}";
         }
 
         private static string FormatDriverName(UserModel? driver)
