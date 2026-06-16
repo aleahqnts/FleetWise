@@ -23,6 +23,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<FareCalculator>();
 
 builder.Services.AddControllersWithViews();
 
