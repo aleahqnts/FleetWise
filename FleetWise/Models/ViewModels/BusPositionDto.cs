@@ -33,6 +33,10 @@ public class BusPositionDto
     [JsonPropertyName("status")]
     public string Status { get; set; }
 
+    // Set only for parked buses — the terminal they're shown at (e.g. "Arca South Terminal").
+    [JsonPropertyName("terminalName")]
+    public string TerminalName { get; set; }
+
     [JsonPropertyName("lat")]
     public double Lat { get; set; }
 

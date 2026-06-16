@@ -38,9 +38,10 @@
                 <div class="fm-select-wrap">
                     <select id="fmStatusFilter" class="fm-select">
                         <option value="">All</option>
-                        <option value="Active">Active</option>
-                        <option value="Idle">Idle</option>
-                        <option value="Offline">Offline</option>
+                        <option value="Active">Active (On Trip)</option>
+                        <option value="Ready to Deploy">Ready to Deploy</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Flagged">Flagged</option>
                     </select>
                     <span class="fm-select-arrow">
                         <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none"
@@ -304,6 +305,26 @@
         height: 8px;
         border-radius: 50%;
         background: #DC2626;
+    }
+
+    /* ── Terminal label (above the parked-bus grid) ── */
+    .fm-terminal-label {
+        background: transparent !important;
+        border: none !important;
+    }
+
+    .fm-terminal-pill {
+        display: inline-block;
+        white-space: nowrap;
+        background: #2D3748;
+        color: #fff;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        padding: 5px 12px;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+        font-family: 'Segoe UI', sans-serif;
     }
 
     /* ── Bus markers ── */

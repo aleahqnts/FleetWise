@@ -30,6 +30,19 @@
     var routePolylines = {};     // routeId -> [polylines]
     var stopLayer = L.layerGroup().addTo(map);
     var busLayer = L.layerGroup().addTo(map);
+    var terminalLayer = L.layerGroup().addTo(map); // terminal name labels, rebuilt each poll
+
+    // Parked buses are grouped per terminal and spread into a centred grid (anchored on
+    // the terminal point the server sends) so the pills never overlap.
+    var TERMINAL_PER_ROW = 4;
+    var TERMINAL_DLAT = 0.0006;  // row spacing (south)
+    var TERMINAL_DLNG = 0.0011;  // column spacing (pills are wide)
+
+    function terminalSlot(lat, lng, i) {
+        var row = Math.floor(i / TERMINAL_PER_ROW);
+        var col = i % TERMINAL_PER_ROW;
+        return [lat - row * TERMINAL_DLAT, lng + (col - (TERMINAL_PER_ROW - 1) / 2) * TERMINAL_DLNG];
+    }
 
     // vehicleId -> live Leaflet marker; markers are moved in place between polls,
     // never recreated, so open tooltips don't flicker (Step 11.2).
@@ -59,9 +72,10 @@
     }
 
     function statusColor(status) {
-        if (status === 'Idle') return '#F59E0B';
-        if (status === 'Offline') return '#9CA3AF';
-        return '#34C759'; // Active (default for live buses)
+        if (status === 'Active') return '#34C759'; // green — moving / on trip
+        if (status === 'Flagged') return '#DC2626'; // red
+        if (status === 'Offline') return '#9CA3AF'; // grey
+        return '#F59E0B'; // amber — Ready to Deploy / Pending / Idle / other parked
     }
 
     // Server timestamps are UTC but serialized without a 'Z', so append one before parsing.
@@ -132,6 +146,16 @@
         if (connBadge) connBadge.classList.toggle('fm-conn-badge--visible', lost);
     }
 
+    // Add a terminal name label above its parked-bus grid.
+    function addTerminalLabel(lat, lng, name, count) {
+        var html = '<div class="fm-terminal-pill">🅿 ' + (name || 'Terminal') + ' · ' + count + '</div>';
+        L.marker([lat + 0.0006, lng], {
+            icon: L.divIcon({ className: 'fm-terminal-label', html: html, iconSize: [200, 26], iconAnchor: [100, 13] }),
+            interactive: false,
+            zIndexOffset: -500
+        }).addTo(terminalLayer);
+    }
+
     // Does a bus match the current search term? (vehicle id, plate, driver, or route)
     function matchesSearch(bus) {
         if (!searchTerm) return true;
@@ -167,19 +191,39 @@
             .then(function (buses) {
                 setConnectionLost(false);
 
+                // Parked (non-Active) buses: group by terminal, then lay each terminal's
+                // buses out in a stable grid (sorted by id so slots don't reshuffle).
+                var parkedGroups = {};
+                buses.forEach(function (b) {
+                    if (b.status === 'Active') return;
+                    var key = b.terminalName || (b.lat + ',' + b.lng);
+                    if (!parkedGroups[key]) parkedGroups[key] = { name: b.terminalName, lat: b.lat, lng: b.lng, list: [] };
+                    parkedGroups[key].list.push(b);
+                });
+
+                var parkedPos = {};
+                terminalLayer.clearLayers();
+                Object.keys(parkedGroups).forEach(function (key) {
+                    var g = parkedGroups[key];
+                    g.list.sort(function (a, b) { return a.vehicleId < b.vehicleId ? -1 : 1; });
+                    g.list.forEach(function (b, i) { parkedPos[b.vehicleId] = terminalSlot(g.lat, g.lng, i); });
+                    addTerminalLabel(g.lat, g.lng, g.name, g.list.length);
+                });
+
                 var seen = {};
                 buses.forEach(function (bus) {
                     seen[bus.vehicleId] = true;
                     var color = colorForRoute(bus.routeName);
+                    var pos = parkedPos[bus.vehicleId] || [bus.lat, bus.lng];
                     var marker = busMarkers[bus.vehicleId];
 
                     if (marker) {
                         // Move in place + refresh the (live) tooltip numbers.
-                        marker.setLatLng([bus.lat, bus.lng]);
+                        marker.setLatLng(pos);
                         marker.setIcon(busIcon(bus.vehicleId, color));
                         marker.setTooltipContent(tooltipHtml(bus));
                     } else {
-                        marker = L.marker([bus.lat, bus.lng], { icon: busIcon(bus.vehicleId, color) })
+                        marker = L.marker(pos, { icon: busIcon(bus.vehicleId, color) })
                             .bindTooltip(tooltipHtml(bus), { direction: 'top', offset: [0, -10], className: 'fm-tooltip-wrap' })
                             .addTo(busLayer);
                         marker.on('click', function () { openPanel(this._bus.vehicleId); });
