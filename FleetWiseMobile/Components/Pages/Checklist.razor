@@ -1,0 +1,231 @@
+@page "/checklist/{TripId}"
+@layout LoginLayout
+@inject SessionService Session
+@inject DriverDataService Data
+@inject NavigationManager Nav
+
+@if (loading)
+{
+    <div class="cl-loading">Loading...</div>
+}
+else if (submitted)
+{
+    <div class="cl-confirm">
+        <div class="confirm-check">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#3aaf5d" stroke-width="2.5"><circle cx="12" cy="12" r="10" /><path d="M7 12.5l3 3 6-7" /></svg>
+        </div>
+        <h2>Bus Checklist Submitted!</h2>
+        <div class="confirm-card">
+            <p class="confirm-sub">Completed 5 out of 5 sections</p>
+            @for (int i = 0; i < sections.Count; i++)
+            {
+                <div class="confirm-row">
+                    <span>@(i + 1). @sections[i].Title</span>
+                    <span class="ok">&#10003;</span>
+                </div>
+            }
+        </div>
+        <button class="btn-teal" @onclick="@(() => Nav.NavigateTo("/home"))">Back to Home</button>
+    </div>
+}
+else
+{
+    <div class="cl">
+        <div class="cl-header">
+            <button class="back" @onclick="Back">&#8592;</button>
+            <div class="cl-title">
+                <h1>Bus Checklist</h1>
+                <p class="cl-bus">@busLabel</p>
+            </div>
+            <span class="spacer"></span>
+        </div>
+
+        <div class="steps">
+            @for (int i = 0; i < sections.Count; i++)
+            {
+                var done = i <= currentSection;
+                <div class="step @(done ? "active" : "")">@(i + 1)</div>
+                @if (i < sections.Count - 1)
+                {
+                    <div class="bar @(i < currentSection ? "active" : "")"></div>
+                }
+            }
+        </div>
+
+        <h2 class="section-title">@CurrentSection.Title</h2>
+
+        <div class="items">
+            @for (int i = 0; i < CurrentSection.Items.Count; i++)
+            {
+                var idx = i;
+                var item = CurrentSection.Items[idx];
+                <div class="item">
+                    <span class="num">@(idx + 1).</span>
+                    <span class="label">@item.Label</span>
+                    <div class="marks">
+                        <button class="mark check @(item.Status == "Pass" ? "on" : "")" @onclick="@(() => SetStatus(idx, "Pass"))">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4 4 10-11" /></svg>
+                        </button>
+                        <button class="mark minus @(item.Status == "Fail" ? "on" : "")" @onclick="@(() => SetStatus(idx, "Fail"))">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 12h12" /></svg>
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(message))
+        {
+            <p class="cl-msg">@message</p>
+        }
+
+        <button class="btn-teal" @onclick="Next" disabled="@busy">
+            @(IsLast ? "Submit Bus Checklist" : "Next")
+        </button>
+    </div>
+}
+
+@code {
+    [Parameter] public string TripId { get; set; } = "";
+
+    private bool loading = true;
+    private bool busy;
+    private bool submitted;
+    private string? message;
+    private int currentSection;
+    private string busLabel = "";
+    private Trip? trip;
+
+    private Section CurrentSection => sections[currentSection];
+    private bool IsLast => currentSection == sections.Count - 1;
+
+    private readonly List<Section> sections = new()
+    {
+        new("Exterior Inspection", "exterior_inspection", new[]
+        {
+            "Windshield","Side Mirrors","Headlights","Brake Lights","Signal Lights","Wipers","Tires","No Visible Body Damage"
+        }),
+        new("Engine Compartment", "engine_compartment", new[]
+        {
+            "Engine oil level","Coolant level","Brake fluid level","Battery condition","No fluid leaks under bus","No unusual smoke or overheating"
+        }),
+        new("Interior Inspection", "interior_inspection", new[]
+        {
+            "Driver seat & seatbelt","Steering wheel","Dashboard warning lights","Speedometer","Fuel level","Horn","Passenger seats & handrails","Interior cleanliness"
+        }),
+        new("Brake & Safety Systems", "brake_safety", new[]
+        {
+            "Service brakes","Parking brake","Emergency brake","Fire extinguisher","First aid kit","Early warning device / reflectors","Emergency alarm"
+        }),
+        new("Passenger & Fare Systems", "passenger_systems", new[]
+        {
+            "Passenger doors","Beep/card scanner","QR payment scanner","Route display","CCTV system"
+        }),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
+
+        trip = await Data.GetTripAsync(TripId);
+        if (trip is not null)
+        {
+            var v = await Data.GetVehicleAsync(trip.VehicleId);
+            busLabel = v is not null ? $"{v.VehicleId} ({v.PlateNumber})" : trip.VehicleId;
+        }
+        loading = false;
+    }
+
+    private void SetStatus(int idx, string status)
+    {
+        CurrentSection.Items[idx].Status = status;
+        message = null;
+    }
+
+    private void Back()
+    {
+        if (currentSection > 0) currentSection--;
+        else Nav.NavigateTo("/home");
+    }
+
+    private async Task Next()
+    {
+        if (CurrentSection.Items.Any(i => i.Status is null))
+        {
+            message = "Please mark every item before continuing.";
+            return;
+        }
+
+        if (!IsLast)
+        {
+            currentSection++;
+            message = null;
+            return;
+        }
+
+        await Submit();
+    }
+
+    private async Task Submit()
+    {
+        busy = true;
+        try
+        {
+            var allPass = sections.All(s => s.Items.All(i => i.Status == "Pass"));
+            var status = allPass ? "Passed" : "Failed";
+
+            var checklist = new BusChecklist
+            {
+                TripId = TripId,
+                VehicleId = trip!.VehicleId,
+                DriverId = Session.CurrentUser!.UserId,
+                SubmittedAt = PhTime.Now,
+                ExteriorInspection = ToDict(0),
+                EngineCompartment = ToDict(1),
+                InteriorInspection = ToDict(2),
+                BrakeSafety = ToDict(3),
+                PassengerSystems = ToDict(4),
+                ChecklistStatus = status,
+                Notes = null
+            };
+
+            await Data.SubmitChecklistAsync(checklist);
+            await Data.UpdateVehicleStatusAsync(trip!.VehicleId, allPass ? "Ready to Deploy" : "Flagged");
+
+            submitted = true;
+        }
+        catch (Exception ex)
+        {
+            message = "Submit failed. Check your connection and try again.";
+            System.Diagnostics.Debug.WriteLine($"[Checklist] {ex}");
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private Dictionary<string, string> ToDict(int sectionIndex)
+        => sections[sectionIndex].Items.ToDictionary(i => i.Label, i => i.Status ?? "Fail");
+
+    public class Section
+    {
+        public string Title { get; }
+        public string Key { get; }
+        public List<CItem> Items { get; }
+
+        public Section(string title, string key, string[] items)
+        {
+            Title = title;
+            Key = key;
+            Items = items.Select(l => new CItem(l)).ToList();
+        }
+    }
+
+    public class CItem
+    {
+        public string Label { get; }
+        public string? Status { get; set; }
+        public CItem(string label) => Label = label;
+    }
+}

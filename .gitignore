@@ -361,3 +361,17 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# tooling
+/d
+skills-lock.json
+.agents/
+
+# MAUI build artifacts
+[Bb]in/
+[Oo]bj/
+.vs/
+# FleetWise tooling (skills installer + stray)
+/d
+skills-lock.json
+.agents/
