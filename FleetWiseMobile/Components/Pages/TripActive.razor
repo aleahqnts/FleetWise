@@ -1,0 +1,227 @@
+@page "/trip-active/{TripId}"
+@layout LoginLayout
+@implements IDisposable
+@inject SessionService Session
+@inject DriverDataService Data
+@inject NavigationManager Nav
+
+@if (loading)
+{
+    <div class="ta-loading">Loading...</div>
+}
+else if (trip is null)
+{
+    <div class="ta"><p class="ta-empty">Trip not found.</p></div>
+}
+else
+{
+    <div class="ta">
+        <div class="ta-head">
+            <h1>Active Trip</h1>
+            <p class="status"><span class="dot"></span> In Progress</p>
+        </div>
+        <p class="date">@DateTime.Today.ToString("dddd, MMMM d, yyyy")</p>
+
+        <div class="bus-card">
+            <span class="bus-ico"><svg viewBox="0 0 49 52" fill="none"><path d="M12.25 45.5C11.67 45.5 11.19 45.29 10.8 44.88C10.4 44.46 10.21 43.95 10.21 43.33V38.89C9.6 38.17 9.1 37.37 8.73 36.48C8.35 35.6 8.17 34.63 8.17 33.58V13C8.17 10 9.48 7.81 12.1 6.42C14.72 5.03 18.85 4.33 24.5 4.33C30.35 4.33 34.54 5 37.06 6.34C39.57 7.67 40.83 9.89 40.83 13V33.58C40.83 34.63 40.65 35.6 40.27 36.48C39.9 37.37 39.4 38.17 38.79 38.89V43.33C38.79 43.95 38.6 44.46 38.2 44.88C37.81 45.29 37.33 45.5 36.75 45.5H34.71C34.13 45.5 33.64 45.29 33.25 44.88C32.86 44.46 32.67 43.95 32.67 43.33V41.17H16.33V43.33C16.33 43.95 16.14 44.46 15.75 44.88C15.36 45.29 14.87 45.5 14.29 45.5H12.25ZM12.25 21.67H36.75V15.17H12.25V21.67ZM17.35 34.67C18.2 34.67 18.93 34.35 19.52 33.72C20.12 33.09 20.42 32.32 20.42 31.42C20.42 30.51 20.12 29.75 19.52 29.11C18.93 28.48 18.2 28.17 17.35 28.17C16.5 28.17 15.78 28.48 15.18 29.11C14.59 29.75 14.29 30.51 14.29 31.42C14.29 32.32 14.59 33.09 15.18 33.72C15.78 34.35 16.5 34.67 17.35 34.67ZM31.65 34.67C32.5 34.67 33.22 34.35 33.82 33.72C34.41 33.09 34.71 32.32 34.71 31.42C34.71 30.51 34.41 29.75 33.82 29.11C33.22 28.48 32.5 28.17 31.65 28.17C30.8 28.17 30.07 28.48 29.48 29.11C28.88 29.75 28.58 30.51 28.58 31.42C28.58 32.32 28.88 33.09 29.48 33.72C30.07 34.35 30.8 34.67 31.65 34.67ZM16.33 36.83H32.67C33.79 36.83 34.75 36.41 35.55 35.56C36.35 34.71 36.75 33.69 36.75 32.5V26H12.25V32.5C12.25 33.69 12.65 34.71 13.45 35.56C14.25 36.41 15.21 36.83 16.33 36.83Z" fill="#4BA2A3" /></svg></span>
+            <div>
+                <p class="bus-name">@(vehicle?.VehicleId ?? trip.VehicleId) <span class="plate">(@(vehicle?.PlateNumber ?? "—"))</span></p>
+                <p class="route">@(route?.RouteName ?? $"Route {trip.RouteId}")</p>
+            </div>
+        </div>
+
+        <div class="counter-card">
+            <p class="counter-label">Passenger Counter</p>
+            <div class="counter">
+                <button class="cbtn minus" @onclick="Dec">&#8722;</button>
+                <span class="count">@total</span>
+                <button class="cbtn plus" @onclick="Inc">&#43;</button>
+            </div>
+        </div>
+
+        <div class="stat-row">
+            <div class="stat-card">
+                <p class="stat-label">Total Passengers</p>
+                <p class="stat-value">@total</p>
+            </div>
+            <div class="stat-card">
+                <p class="stat-label">Estimated Revenue</p>
+                <p class="stat-value">&#8369;@Revenue.ToString("N2")</p>
+            </div>
+        </div>
+
+        <div class="progress-card">
+            <p class="prog-label">Trip Progress</p>
+            <p class="prog-remaining">@Remaining</p>
+            <div class="bar"><div class="fill" style="width:@(ProgressPct)%"></div></div>
+            <div class="prog-times">
+                <span>@DateTime.Today.Add(trip.ShiftStartTime).ToString("h:mm tt")</span>
+                <span>@DateTime.Today.Add(trip.ShiftEndTime).ToString("h:mm tt")</span>
+            </div>
+        </div>
+
+        <button class="btn-end" @onclick="@(() => showConfirm = true)">End Trip</button>
+    </div>
+
+    @if (showConfirm)
+    {
+        <div class="overlay">
+            <div class="confirm">
+                <div class="flag">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#2e9e8f" stroke-width="2"><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></svg>
+                </div>
+                <h2>Are you sure you want to end this trip?</h2>
+                <p class="c-sub">This will complete your trip for today.</p>
+
+                <div class="c-card">
+                    <div class="c-bus-row">
+                        <span class="c-bus-ico"><svg viewBox="0 0 49 52" fill="none"><path d="M12.25 45.5C11.67 45.5 11.19 45.29 10.8 44.88C10.4 44.46 10.21 43.95 10.21 43.33V38.89C9.6 38.17 9.1 37.37 8.73 36.48C8.35 35.6 8.17 34.63 8.17 33.58V13C8.17 10 9.48 7.81 12.1 6.42C14.72 5.03 18.85 4.33 24.5 4.33C30.35 4.33 34.54 5 37.06 6.34C39.57 7.67 40.83 9.89 40.83 13V33.58C40.83 34.63 40.65 35.6 40.27 36.48C39.9 37.37 39.4 38.17 38.79 38.89V43.33C38.79 43.95 38.6 44.46 38.2 44.88C37.81 45.29 37.33 45.5 36.75 45.5H34.71C34.13 45.5 33.64 45.29 33.25 44.88C32.86 44.46 32.67 43.95 32.67 43.33V41.17H16.33V43.33C16.33 43.95 16.14 44.46 15.75 44.88C15.36 45.29 14.87 45.5 14.29 45.5H12.25ZM12.25 21.67H36.75V15.17H12.25V21.67ZM17.35 34.67C18.2 34.67 18.93 34.35 19.52 33.72C20.12 33.09 20.42 32.32 20.42 31.42C20.42 30.51 20.12 29.75 19.52 29.11C18.93 28.48 18.2 28.17 17.35 28.17C16.5 28.17 15.78 28.48 15.18 29.11C14.59 29.75 14.29 30.51 14.29 31.42C14.29 32.32 14.59 33.09 15.18 33.72C15.78 34.35 16.5 34.67 17.35 34.67ZM31.65 34.67C32.5 34.67 33.22 34.35 33.82 33.72C34.41 33.09 34.71 32.32 34.71 31.42C34.71 30.51 34.41 29.75 33.82 29.11C33.22 28.48 32.5 28.17 31.65 28.17C30.8 28.17 30.07 28.48 29.48 29.11C28.88 29.75 28.58 30.51 28.58 31.42C28.58 32.32 28.88 33.09 29.48 33.72C30.07 34.35 30.8 34.67 31.65 34.67ZM16.33 36.83H32.67C33.79 36.83 34.75 36.41 35.55 35.56C36.35 34.71 36.75 33.69 36.75 32.5V26H12.25V32.5C12.25 33.69 12.65 34.71 13.45 35.56C14.25 36.41 15.21 36.83 16.33 36.83Z" fill="#4BA2A3" /></svg></span>
+                        <div>
+                            <p class="c-bus-name">@(vehicle?.VehicleId ?? trip.VehicleId) <span class="plate">(@(vehicle?.PlateNumber ?? "—"))</span></p>
+                            <p class="c-route">@(route?.RouteName ?? $"Route {trip.RouteId}")</p>
+                        </div>
+                    </div>
+
+                    <div class="c-grid2">
+                        <div><p class="c-k">Start Time</p><p class="c-v">@StartLabel</p></div>
+                        <div><p class="c-k">End Time</p><p class="c-v">@PhTime.Now.ToString("h:mm tt")</p></div>
+                    </div>
+                    <div class="c-div"></div>
+                    <div class="c-grid2">
+                        <div><p class="c-k">Total Passengers</p><p class="c-v">@total</p></div>
+                        <div><p class="c-k">Estimated Revenue</p><p class="c-v">&#8369;@Revenue.ToString("N2")</p></div>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(msg))
+                {
+                    <p class="err">@msg</p>
+                }
+
+                <div class="c-actions">
+                    <button class="btn-cancel" @onclick="@(() => showConfirm = false)" disabled="@ending">Cancel</button>
+                    <button class="btn-endred" @onclick="EndTrip" disabled="@ending">End Trip</button>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public string TripId { get; set; } = "";
+
+    private bool loading = true;
+    private bool showConfirm;
+    private bool ending;
+    private string? msg;
+    private int total;
+    private decimal fare;
+    private Trip? trip;
+    private BusRoute? route;
+    private Vehicle? vehicle;
+
+    private System.Threading.Timer? timer;
+    private int tick;
+    private DateTime now = PhTime.Now;
+
+    private string CountKey => $"trip_count_{TripId}";
+    private decimal Revenue => total * fare;
+
+    private string StartLabel => trip?.ActualStartTime is not null
+        ? trip.ActualStartTime.Value.ToString("h:mm tt")
+        : (trip is null ? "" : DateTime.Today.Add(trip.ShiftStartTime).ToString("h:mm tt"));
+
+    private int ProgressPct
+    {
+        get
+        {
+            if (trip is null) return 0;
+            var start = DateTime.Today.Add(trip.ShiftStartTime);
+            var end = DateTime.Today.Add(trip.ShiftEndTime);
+            if (now <= start) return 0;
+            if (now >= end) return 100;
+            var pct = (now - start).TotalSeconds / (end - start).TotalSeconds * 100;
+            return (int)Math.Clamp(pct, 0, 100);
+        }
+    }
+
+    private string Remaining
+    {
+        get
+        {
+            if (trip is null) return "";
+            var end = DateTime.Today.Add(trip.ShiftEndTime);
+            var left = end - now;
+            if (left <= TimeSpan.Zero) return "Shift ended";
+            return $"{(int)left.TotalHours}h {left.Minutes}m remaining";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
+
+        trip = await Data.GetTripAsync(TripId);
+        if (trip is not null)
+        {
+            route = await Data.GetRouteAsync(trip.RouteId);
+            vehicle = await Data.GetVehicleAsync(trip.VehicleId);
+            fare = await Data.GetFareAsync();
+
+            // Crash-safety: prefer the locally-saved running count if present.
+            var saved = await SecureStorage.Default.GetAsync(CountKey);
+            total = int.TryParse(saved, out var s) ? s : trip.TotalBoarded;
+        }
+        loading = false;
+
+        // 1s tick for progress; flush to DB every 15s.
+        timer = new System.Threading.Timer(_ => OnTick(), null, 1000, 1000);
+    }
+
+    private void OnTick()
+    {
+        now = PhTime.Now;
+        tick++;
+        if (tick % 15 == 0) _ = Flush();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Inc()
+    {
+        total++;
+        await SecureStorage.Default.SetAsync(CountKey, total.ToString());
+    }
+
+    private async Task Dec()
+    {
+        if (total > 0) total--;
+        await SecureStorage.Default.SetAsync(CountKey, total.ToString());
+    }
+
+    private async Task Flush()
+    {
+        try { await Data.UpdateTripProgressAsync(TripId, total, Revenue); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[TripActive.Flush] {ex}"); }
+    }
+
+    private async Task EndTrip()
+    {
+        ending = true;
+        msg = null;
+        try
+        {
+            await Data.EndTripAsync(TripId, total, Revenue);
+            SecureStorage.Default.Remove(CountKey);
+            timer?.Dispose();
+            Nav.NavigateTo("/home");
+        }
+        catch (Exception ex)
+        {
+            msg = "Couldn't end trip. Check your connection.";
+            System.Diagnostics.Debug.WriteLine($"[TripActive.End] {ex}");
+            ending = false;
+        }
+    }
+
+    public void Dispose() => timer?.Dispose();
+}

@@ -1,0 +1,97 @@
+@page "/checklist-log/{TripId}"
+@layout LoginLayout
+@inject SessionService Session
+@inject DriverDataService Data
+@inject NavigationManager Nav
+
+@if (loading)
+{
+    <div class="log-loading">Loading...</div>
+}
+else if (checklist is null)
+{
+    <div class="log">
+        <div class="log-header">
+            <button class="back" @onclick="@(() => Nav.NavigateTo("/home"))">&#8592;</button>
+            <div class="log-title"><h1>Checklist Log</h1></div>
+            <span class="spacer"></span>
+        </div>
+        <p class="empty">No checklist submitted for this trip yet.</p>
+    </div>
+}
+else
+{
+    <div class="log">
+        <div class="log-header">
+            <button class="back" @onclick="@(() => Nav.NavigateTo("/home"))">&#8592;</button>
+            <div class="log-title">
+                <h1>Checklist Log</h1>
+                <p class="log-bus">@busLabel</p>
+            </div>
+            <span class="spacer"></span>
+        </div>
+
+        <div class="summary">
+            <div>
+                <p class="sum-status @(checklist.ChecklistStatus == "Passed" ? "ok" : "bad")">@checklist.ChecklistStatus</p>
+                <p class="sum-time">Submitted @checklist.SubmittedAt.ToString("MMM d, yyyy h:mm tt")</p>
+            </div>
+        </div>
+
+        @foreach (var sec in Sections)
+        {
+            <h2 class="sec-title">@sec.Title</h2>
+            <div class="sec-items">
+                @{ var n = 0; }
+                @foreach (var kv in sec.Items)
+                {
+                    n++;
+                    <div class="log-item">
+                        <span class="num">@n.</span>
+                        <span class="label">@kv.Key</span>
+                        @if (kv.Value == "Pass")
+                        {
+                            <span class="badge pass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4 4 10-11" /></svg></span>
+                        }
+                        else
+                        {
+                            <span class="badge fail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 12h12" /></svg></span>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string TripId { get; set; } = "";
+
+    private bool loading = true;
+    private BusChecklist? checklist;
+    private string busLabel = "";
+
+    private IEnumerable<(string Title, Dictionary<string, string> Items)> Sections =>
+        new (string, Dictionary<string, string>)[]
+        {
+            ("Exterior Inspection", checklist!.ExteriorInspection ?? new()),
+            ("Engine Compartment", checklist.EngineCompartment ?? new()),
+            ("Interior Inspection", checklist.InteriorInspection ?? new()),
+            ("Brake & Safety Systems", checklist.BrakeSafety ?? new()),
+            ("Passenger & Fare Systems", checklist.PassengerSystems ?? new()),
+        };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
+
+        checklist = await Data.GetChecklistAsync(TripId);
+        var trip = await Data.GetTripAsync(TripId);
+        if (trip is not null)
+        {
+            var v = await Data.GetVehicleAsync(trip.VehicleId);
+            busLabel = v is not null ? $"{v.VehicleId} ({v.PlateNumber})" : trip.VehicleId;
+        }
+        loading = false;
+    }
+}
