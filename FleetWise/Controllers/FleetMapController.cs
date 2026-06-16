@@ -15,6 +15,18 @@ namespace FleetWise.Controllers
         private readonly Supabase.Client _supabase;
         private readonly FareCalculator _fareCalculator;
 
+        // Per-route terminals where non-running buses are shown parked (the JS spreads
+        // each terminal's buses into a neat grid so the pills don't overlap). Routes
+        // without an entry fall back to the first terminal.
+        private static readonly Dictionary<int, (double Lat, double Lng, string Name)> Terminals = new()
+        {
+            [1] = (14.5466, 121.0285, "EDSA–Ayala Terminal"),
+            [2] = (14.5095, 121.0465, "Arca South Terminal"),
+        };
+
+        private static (double Lat, double Lng, string Name) TerminalFor(int? routeId) =>
+            routeId is int r && Terminals.TryGetValue(r, out var t) ? t : Terminals[1];
+
         public FleetMapController(Supabase.Client supabase, FareCalculator fareCalculator)
         {
             _supabase = supabase;
@@ -158,13 +170,27 @@ namespace FleetWise.Controllers
                 .ToDictionary(u => u.UserId, u => u);
 
             var positions = new List<BusPositionDto>();
+            var movingVehicleIds = new HashSet<string>();
 
+            // 1) Moving buses — one marker per vehicle, placed by its newest telemetry.
+            // A vehicle may (in messy data) be on several Active trips at once; we keep
+            // only the latest reading so its pill doesn't jump between trip positions.
+            var movingByVehicle = new Dictionary<string, BusPositionDto>();
             foreach (var trip in activeTrips)
             {
+                if (trip.VehicleId is null)
+                    continue;
                 if (!latestByTrip.TryGetValue(trip.TripId, out var telemetry))
                     continue; // no telemetry yet (simulator hasn't ticked for this trip)
 
-                vehiclesById.TryGetValue(trip.VehicleId ?? string.Empty, out var vehicle);
+                vehiclesById.TryGetValue(trip.VehicleId, out var vehicle);
+                if (DisplayStatus(vehicle?.VehicleStatus) != "Active")
+                    continue; // only "On Trip" buses run on the map; the rest park (below)
+
+                if (movingByVehicle.TryGetValue(trip.VehicleId, out var existing) &&
+                    existing.Timestamp >= telemetry.Timestamp)
+                    continue; // an earlier trip already gave a newer position for this bus
+
                 routesById.TryGetValue(trip.RouteId, out var route);
                 usersById.TryGetValue(trip.DriverId, out var driver);
 
@@ -174,7 +200,7 @@ namespace FleetWise.Controllers
                     ? (int)Math.Round(passengers * 100.0 / capacity)
                     : 0;
 
-                positions.Add(new BusPositionDto
+                movingByVehicle[trip.VehicleId] = new BusPositionDto
                 {
                     TripId = trip.TripId,
                     VehicleId = trip.VehicleId,
@@ -183,7 +209,7 @@ namespace FleetWise.Controllers
                     RouteName = route?.RouteName ?? "—",
                     Shift = FormatShift(trip),
                     DriverName = FormatDriverName(driver),
-                    Status = DisplayStatus(vehicle?.VehicleStatus),
+                    Status = "Active",
                     Lat = (double)telemetry.Latitude,
                     Lng = (double)telemetry.Longitude,
                     Heading = telemetry.Heading ?? 0,
@@ -193,6 +219,48 @@ namespace FleetWise.Controllers
                     OccupancyPct = occupancyPct,
                     EstimatedRevenue = _fareCalculator.Estimate(passengers),
                     Timestamp = telemetry.Timestamp
+                };
+            }
+
+            positions.AddRange(movingByVehicle.Values);
+            foreach (var id in movingByVehicle.Keys)
+                movingVehicleIds.Add(id);
+
+            // 2) Parked buses — every non-"On Trip" vehicle (Ready to Deploy / Pending /
+            // Flagged / Idle / Offline …), shown stationary at the terminal.
+            foreach (var vehicle in vehiclesResponse.Models)
+            {
+                var vehicleStatus = DisplayStatus(vehicle.VehicleStatus);
+                if (vehicleStatus == "Active")
+                    continue; // on-trip buses are shown moving, not parked
+                if (movingVehicleIds.Contains(vehicle.VehicleId))
+                    continue;
+                if (routeId.HasValue && vehicle.RouteId != routeId.Value)
+                    continue;
+
+                routesById.TryGetValue(vehicle.RouteId ?? -1, out var route);
+                var terminal = TerminalFor(vehicle.RouteId);
+
+                positions.Add(new BusPositionDto
+                {
+                    TripId = null,
+                    VehicleId = vehicle.VehicleId,
+                    PlateNumber = vehicle.PlateNumber ?? "—",
+                    RouteId = vehicle.RouteId ?? 0,
+                    RouteName = route?.RouteName ?? "—",
+                    Shift = "—",
+                    DriverName = "Unassigned",
+                    Status = vehicleStatus,
+                    TerminalName = terminal.Name,
+                    Lat = terminal.Lat,
+                    Lng = terminal.Lng,
+                    Heading = 0,
+                    Speed = 0,
+                    Passengers = 0,
+                    Capacity = vehicle.Capacity,
+                    OccupancyPct = 0,
+                    EstimatedRevenue = 0,
+                    Timestamp = DateTime.UtcNow
                 });
             }
 
