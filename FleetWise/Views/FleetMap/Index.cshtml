@@ -38,6 +38,9 @@
                 <div class="fm-select-wrap">
                     <select id="fmStatusFilter" class="fm-select">
                         <option value="">All</option>
+                        <option value="On Trip">On Trip</option>
+                        <option value="Idle">Idle</option>
+                        <option value="Offline">Offline</option>
                     </select>
                     <span class="fm-select-arrow">
                         <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none"
@@ -55,9 +58,8 @@
     <div id="fleetMap" class="fm-map"></div>
 
     <div class="fm-legend">
-        <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#2563EB"></span>ROUTE 01</div>
-        <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#F97316"></span>ROUTE 02</div>
-        <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#14B8A6"></span>ROUTE 03</div>
+        <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#2563EB"></span>ROUTE 01 – North</div>
+        <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#F97316"></span>ROUTE 02 – South</div>
     </div>
 </div>
 
@@ -209,7 +211,7 @@
         flex-shrink: 0;
     }
 
-    /* ── Bus markers — placeholder data, Block 11 replaces with live /FleetMap/Positions ── */
+    /* ── Bus markers ── */
     .fm-bus-marker {
         background: transparent !important;
         border: none !important;
@@ -231,7 +233,7 @@
         white-space: nowrap;
     }
 
-    /* ── Hover tooltip — placeholder data, Block 12 wires live values ── */
+    /* ── Hover tooltip ── */
     .fm-tooltip-wrap.leaflet-tooltip {
         background: transparent;
         border: none;
@@ -298,9 +300,48 @@
         font-size: 0.8rem;
         color: var(--fm-text);
     }
+
+    /* ── Stop markers — distinct from bus markers ── */
+    .fm-stop-marker {
+        background: transparent !important;
+        border: none !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .fm-stop-dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #6366F1;
+        border: 3px solid #fff;
+        box-shadow: 0 3px 8px rgba(0, 0, 0, .3);
+    }
+
+    /* ── Stop tooltip ── */
+    .fm-stop-tooltip.leaflet-tooltip {
+        background: var(--fm-white);
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+        padding: 6px 10px;
+        border: none;
+        font-size: 0.8rem;
+        color: var(--fm-text);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .fm-stop-tooltip.leaflet-tooltip::before {
+        display: none;
+    }
 </style>
 
 @section Scripts {
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        window.fleetMapBounds = @Html.Raw(ViewBag.MapBounds is double[] b
+            ? $"[{b[0]},{b[1]},{b[2]},{b[3]}]"
+            : "null");
+    </script>
     <script src="~/js/fleetmap.js" asp-append-version="true"></script>
 }
