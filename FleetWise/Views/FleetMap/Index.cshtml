@@ -78,7 +78,7 @@
 
         <div class="fm-panel__pad">
             <div class="fm-panel__status">
-                <span class="fm-panel__status-dot"></span>
+                <span class="fm-panel__status-dot" id="fmPanelStatusDot"></span>
                 <span id="fmPanelStatus">—</span>
             </div>
         </div>
@@ -119,10 +119,7 @@
         </div>
     </aside>
 
-    <div class="fm-legend">
-        <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#2563EB"></span>ROUTE 01 – North</div>
-        <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#F97316"></span>ROUTE 02 – South</div>
-    </div>
+    <div class="fm-legend" id="fmLegend"></div>
 </div>
 
 <style>
@@ -262,8 +259,13 @@
         font-size: 0.8rem;
         font-weight: 700;
         letter-spacing: 0.03em;
+        text-transform: uppercase;
         color: var(--fm-text);
         font-family: 'Segoe UI', sans-serif;
+    }
+
+    .fm-legend:empty {
+        display: none;
     }
 
     .fm-legend-dot {
