@@ -1,7 +1,685 @@
-﻿@*
-    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-*@
 @{
+    ViewData["Title"] = "Vehicles";
+    Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<h3>Vehicles</h3>
+<!-- PAGE TITLE -->
+<h2 class="vh-title">Vehicles</h2>
+
+@if (TempData["Success"] is string successMsg)
+{
+    <div class="vh-alert vh-alert--success" role="alert">@successMsg</div>
+}
+@if (TempData["Error"] is string errorMsg)
+{
+    <div class="vh-alert vh-alert--error" role="alert">@errorMsg</div>
+}
+
+<!-- SUMMARY CARDS -->
+<div class="vh-cards">
+    <div class="vh-card">
+        <div class="vh-card-icon vh-card-icon--green">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 6v6" /><path d="M15 6v6" /><path d="M2 12h19.6" />
+                <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3" />
+                <circle cx="7" cy="18" r="2" /><path d="M9 18h5" /><circle cx="16" cy="18" r="2" />
+            </svg>
+        </div>
+        <div class="vh-card-text">
+            <span class="vh-card-label">Total Vehicles</span>
+            <span class="vh-card-value">32</span>
+        </div>
+    </div>
+
+    <div class="vh-card">
+        <div class="vh-card-icon vh-card-icon--red">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" /><line x1="8" y1="12" x2="16" y2="12" />
+            </svg>
+        </div>
+        <div class="vh-card-text">
+            <span class="vh-card-label">Flagged Vehicles</span>
+            <span class="vh-card-value">10</span>
+        </div>
+    </div>
+
+    <div class="vh-card">
+        <div class="vh-card-icon vh-card-icon--amber">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+        </div>
+        <div class="vh-card-text">
+            <span class="vh-card-label">Scheduled Maintenance</span>
+            <span class="vh-card-value">2</span>
+        </div>
+    </div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="vh-toolbar">
+    <button type="button" class="vh-btn vh-btn--primary" data-bs-toggle="modal" data-bs-target="#addVehicleModal">+ Add Vehicle</button>
+
+    <form method="get" class="vh-search-form">
+        <div class="vh-search-wrap">
+            <span class="vh-search-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
+                     stroke="#9AA5B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+            </span>
+            <input type="text" name="search" class="vh-search-input" placeholder="Search" />
+        </div>
+    </form>
+</div>
+
+<!-- VEHICLE INFORMATION TABLE CARD -->
+<div class="vh-card-table">
+    <div class="vh-card-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <line x1="10" y1="9" x2="8" y2="9" />
+        </svg>
+        <span>Vehicle Information</span>
+    </div>
+
+    <div class="vh-table-wrap">
+        <table class="vh-table">
+            <thead>
+                <tr>
+                    <th>Vehicle ID</th>
+                    <th>Vehicle Type</th>
+                    <th>Route</th>
+                    <th>Status</th>
+                    <th>Maintenance</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    // Static placeholder rows — mirrors the registry mockup. Wired to live data in Block 14.
+                    var sample = new[]
+                    {
+                        new { Id = "BUS-01", Plate = "123ABC", Type = "Bus", Route = "Route 01", Status = "Ready to Deploy", Maint = "No Issues" },
+                        new { Id = "BUS-02", Plate = "234GVA", Type = "Bus", Route = "Route 01", Status = "Flagged",         Maint = "Needs Attention" },
+                        new { Id = "BUS-03", Plate = "738BGS", Type = "Bus", Route = "Route 01", Status = "Pending",         Maint = "Under Repair" },
+                        new { Id = "BUS-04", Plate = "456TYT", Type = "Bus", Route = "Route 02", Status = "Flagged",         Maint = "No Issues" },
+                        new { Id = "BUS-05", Plate = "947JTD", Type = "Bus", Route = "Route 02", Status = "Ready to Deploy", Maint = "No Issues" },
+                        new { Id = "BUS-06", Plate = "652HSF", Type = "Bus", Route = "Route 02", Status = "On Trip",         Maint = "No Issues" },
+                        new { Id = "BUS-07", Plate = "164POI", Type = "Bus", Route = "Route 03", Status = "Pending",         Maint = "No Issues" },
+                        new { Id = "BUS-08", Plate = "357MHT", Type = "Bus", Route = "Route 03", Status = "Ready to Deploy", Maint = "Needs Attention" },
+                        new { Id = "BUS-09", Plate = "258BGR", Type = "Bus", Route = "Route 03", Status = "Pending",         Maint = "No Issues" },
+                    };
+
+                    Func<string, string> statusClass = s => s switch
+                    {
+                        "Ready to Deploy" => "vh-badge--ready",
+                        "On Trip" => "vh-badge--ontrip",
+                        "Pending" => "vh-badge--pending",
+                        "Flagged" => "vh-badge--flagged",
+                        _ => "vh-badge--default"
+                    };
+
+                    Func<string, string> maintClass = m => m switch
+                    {
+                        "No Issues" => "vh-badge--ok",
+                        "Needs Attention" => "vh-badge--attention",
+                        "Under Repair" => "vh-badge--repair",
+                        _ => "vh-badge--default"
+                    };
+                }
+                @foreach (var v in sample)
+                {
+                    <tr>
+                        <td>
+                            <div class="vh-id">@v.Id</div>
+                            <div class="vh-plate">@v.Plate</div>
+                        </td>
+                        <td>@v.Type</td>
+                        <td>@v.Route</td>
+                        <td><span class="vh-badge @statusClass(v.Status)">@v.Status</span></td>
+                        <td><span class="vh-badge @maintClass(v.Maint)">@v.Maint</span></td>
+                        <td>
+                            <div class="vh-actions-cell">
+                                <button type="button" class="vh-btn-action" data-bs-toggle="modal" data-bs-target="#viewVehicleModal">View</button>
+                                <button type="button" class="vh-btn-action" data-bs-toggle="modal" data-bs-target="#editVehicleModal">Edit</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@await Html.PartialAsync("_AddVehicleModal")
+@await Html.PartialAsync("_ViewVehicleModal")
+@await Html.PartialAsync("_EditVehicleModal")
+
+@section TopbarContent {
+    <form method="get" class="vh-filters">
+        <div class="vh-filter">
+            <label class="vh-filter-label">Route:</label>
+            <div class="vh-select-wrap">
+                <select name="route" class="vh-select">
+                    <option value="">All Routes</option>
+                    <option>Route 01</option>
+                    <option>Route 02</option>
+                    <option>Route 03</option>
+                </select>
+                <span class="vh-select-arrow">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                </span>
+            </div>
+        </div>
+        <div class="vh-filter">
+            <label class="vh-filter-label">Type:</label>
+            <div class="vh-select-wrap">
+                <select name="type" class="vh-select">
+                    <option value="">All</option>
+                    <option>Bus</option>
+                    <option>Van</option>
+                </select>
+                <span class="vh-select-arrow">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                </span>
+            </div>
+        </div>
+        <div class="vh-filter">
+            <label class="vh-filter-label">Status:</label>
+            <div class="vh-select-wrap">
+                <select name="status" class="vh-select">
+                    <option value="">All</option>
+                    <option>Ready to Deploy</option>
+                    <option>On Trip</option>
+                    <option>Pending</option>
+                    <option>Flagged</option>
+                </select>
+                <span class="vh-select-arrow">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                </span>
+            </div>
+        </div>
+        <div class="vh-filter">
+            <label class="vh-filter-label">Issues:</label>
+            <div class="vh-select-wrap">
+                <select name="condition" class="vh-select">
+                    <option value="">All</option>
+                    <option>No Issues</option>
+                    <option>Needs Attention</option>
+                    <option>Under Repair</option>
+                </select>
+                <span class="vh-select-arrow">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                </span>
+            </div>
+        </div>
+    </form>
+}
+
+<style>
+    :root {
+        --vh-teal: #4AADA8;
+        --vh-teal-light: #E8F6F5;
+        --vh-navy: #2F3B82;
+        --vh-text: #2D3748;
+        --vh-muted: #9AA5B4;
+        --vh-border: #E8ECF0;
+        --vh-bg: #F8F9FA;
+        --vh-white: #FFFFFF;
+        --vh-radius: 14px;
+        --vh-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+
+    /* ── Page title ─────────────────────────────────────────── */
+    .vh-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 20px;
+    }
+
+    /* ── Summary cards ──────────────────────────────────────── */
+    .vh-cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+        margin-bottom: 22px;
+    }
+
+    .vh-card {
+        background: var(--vh-white);
+        border: 1px solid var(--vh-border);
+        border-radius: var(--vh-radius);
+        box-shadow: var(--vh-shadow);
+        padding: 20px 22px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .vh-card-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .vh-card-icon--green { background: #E8F8EE; color: #27AE60; }
+    .vh-card-icon--red   { background: #FDECEC; color: #E53E3E; }
+    .vh-card-icon--amber { background: #FEF6E0; color: #D69E2E; }
+
+    .vh-card-text {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .vh-card-label {
+        font-size: 0.85rem;
+        color: var(--vh-muted);
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 500;
+    }
+
+    .vh-card-value {
+        font-size: 1.7rem;
+        font-weight: 700;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        line-height: 1.1;
+    }
+
+    /* ── Toolbar ────────────────────────────────────────────── */
+    .vh-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+    }
+
+    .vh-btn {
+        padding: 9px 20px;
+        border-radius: 10px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        border: 1.5px solid var(--vh-border);
+        transition: all 180ms;
+        white-space: nowrap;
+    }
+
+    .vh-btn--primary {
+        background: var(--vh-teal);
+        border-color: var(--vh-teal);
+        color: #fff;
+    }
+
+    .vh-btn--outline {
+        background: var(--vh-white);
+        color: var(--vh-text);
+    }
+
+    .vh-search-wrap { position: relative; }
+
+    .vh-search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+    }
+
+    .vh-search-input {
+        width: 260px;
+        padding: 8px 14px 8px 36px;
+        border: 1.5px solid var(--vh-border);
+        border-radius: 10px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--vh-text);
+        background: var(--vh-white);
+        outline: none;
+        transition: border-color 180ms;
+    }
+
+    .vh-search-input:focus { border-color: var(--vh-teal); }
+
+    /* ── Table card ─────────────────────────────────────────── */
+    .vh-card-table {
+        background: var(--vh-white);
+        border: 1px solid var(--vh-border);
+        border-radius: var(--vh-radius);
+        padding: 20px 22px;
+        box-shadow: var(--vh-shadow);
+    }
+
+    .vh-card-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        padding-bottom: 14px;
+        margin-bottom: 14px;
+        border-bottom: 1px solid var(--vh-border);
+    }
+
+    .vh-card-header svg { color: var(--vh-teal); flex-shrink: 0; }
+
+    .vh-table-wrap { overflow-x: auto; }
+
+    .vh-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 0.875rem;
+    }
+
+    .vh-table thead tr { border-bottom: 1.5px solid var(--vh-border); }
+
+    .vh-table th {
+        padding: 10px 14px;
+        text-align: left;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--vh-muted);
+        white-space: nowrap;
+    }
+
+    .vh-table td {
+        padding: 13px 14px;
+        color: var(--vh-text);
+        border-bottom: 1px solid var(--vh-border);
+        vertical-align: middle;
+    }
+
+    .vh-table tbody tr:last-child td { border-bottom: none; }
+    .vh-table tbody tr:hover { background: #FAFBFC; }
+
+    .vh-id { font-weight: 600; color: var(--vh-text); }
+    .vh-plate { font-size: 0.78rem; color: var(--vh-muted); }
+
+    /* ── Badges ─────────────────────────────────────────────── */
+    .vh-badge {
+        display: inline-block;
+        padding: 5px 14px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        font-family: 'Segoe UI', sans-serif;
+        white-space: nowrap;
+    }
+
+    .vh-badge--ready     { background: #E8F6F5; color: #2C9C96; }
+    .vh-badge--ontrip    { background: #E3F2FD; color: #2B6CB0; }
+    .vh-badge--pending   { background: #FEF9E7; color: #B7950B; }
+    .vh-badge--flagged   { background: #FDECEC; color: #E53E3E; }
+    .vh-badge--ok        { background: #E8F8EE; color: #27AE60; }
+    .vh-badge--attention { background: #FDECEC; color: #E53E3E; }
+    .vh-badge--repair    { background: #FEF9E7; color: #B7950B; }
+    .vh-badge--default   { background: var(--vh-bg); color: var(--vh-text); }
+
+    /* ── Action buttons ─────────────────────────────────────── */
+    .vh-actions-cell { display: flex; gap: 8px; }
+
+    .vh-btn-action {
+        padding: 6px 18px;
+        border: 1.5px solid var(--vh-border);
+        border-radius: 20px;
+        background: var(--vh-white);
+        font-size: 0.8rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--vh-text);
+        cursor: pointer;
+        font-weight: 500;
+        transition: border-color 180ms, color 180ms;
+    }
+
+    .vh-btn-action:hover { border-color: var(--vh-teal); color: var(--vh-teal); }
+
+    /* ── Alerts ─────────────────────────────────────────────── */
+    .vh-alert {
+        padding: 12px 18px;
+        border-radius: var(--vh-radius);
+        font-size: 0.875rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 500;
+        margin-bottom: 16px;
+    }
+
+    .vh-alert--success {
+        background: var(--vh-teal-light);
+        color: var(--vh-teal);
+        border: 1px solid var(--vh-teal);
+    }
+
+    .vh-alert--error {
+        background: #FDECEC;
+        color: #E53E3E;
+        border: 1px solid #F5B5B5;
+    }
+
+    /* ── Topbar filters ─────────────────────────────────────── */
+    .vh-filters {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        flex-wrap: wrap;
+    }
+
+    .vh-filter { display: flex; align-items: center; gap: 8px; }
+
+    .vh-filter-label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .vh-select-wrap { position: relative; display: flex; align-items: center; }
+
+    .vh-select {
+        appearance: none;
+        padding: 7px 32px 7px 14px;
+        border: 1.5px solid var(--vh-border);
+        border-radius: 10px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--vh-text);
+        background: var(--vh-bg);
+        cursor: pointer;
+        outline: none;
+        font-weight: 500;
+    }
+
+    .vh-select-arrow {
+        position: absolute;
+        right: 10px;
+        pointer-events: none;
+        color: var(--vh-text);
+        display: flex;
+    }
+
+    /* ── Modals (shared by Add/View/Edit Vehicle) ───────────── */
+    .vh-modal .modal-content {
+        border-radius: var(--vh-radius);
+        border: 1px solid var(--vh-border);
+    }
+
+    .vh-modal .modal-header {
+        position: relative;
+        justify-content: center;
+        border-bottom: 1px solid var(--vh-border);
+        padding: 18px 24px;
+    }
+
+    .vh-modal .modal-header .btn-close {
+        position: absolute;
+        right: 1.25rem;
+        top: 50%;
+        transform: translateY(-50%);
+        margin: 0;
+    }
+
+    .vh-modal-title {
+        color: var(--vh-navy);
+        font-weight: 700;
+        font-size: 1.3rem;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .vh-modal-sm { max-width: 540px; }
+
+    .vh-modal-body { padding: 0; }
+
+    .vh-section-header {
+        background: var(--vh-bg);
+        color: var(--vh-muted);
+        font-weight: 700;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        padding: 10px 24px;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .vh-section-body { padding: 18px 24px; }
+
+    .vh-form-row {
+        display: grid;
+        grid-template-columns: 130px 1fr;
+        align-items: center;
+        gap: 8px 14px;
+        margin-bottom: 14px;
+    }
+
+    .vh-form-row:last-child { margin-bottom: 0; }
+
+    .vh-form-row label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .vh-form-input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1.5px solid var(--vh-border);
+        border-radius: 10px;
+        font-size: 0.875rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--vh-text);
+        background: var(--vh-bg);
+        outline: none;
+        transition: border-color 180ms;
+    }
+
+    .vh-form-input:focus { border-color: var(--vh-teal); }
+
+    .vh-form-input:disabled {
+        background: #EDF0F3;
+        color: var(--vh-muted);
+        cursor: not-allowed;
+    }
+
+    /* ── Detail rows (View modal) ───────────────────────────── */
+    .vh-detail-row {
+        font-size: 0.9rem;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 8px;
+    }
+
+    .vh-detail-row:last-child { margin-bottom: 0; }
+
+    .vh-detail-row strong { font-weight: 600; }
+
+    .vh-remarks {
+        background: #FEF9E7;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 0.85rem;
+        color: #6B5D1B;
+        font-family: 'Segoe UI', sans-serif;
+        margin-top: 6px;
+    }
+
+    .vh-timeline {
+        list-style: none;
+        padding: 0;
+        margin: 10px 0 0;
+    }
+
+    .vh-timeline li {
+        position: relative;
+        padding-left: 18px;
+        font-size: 0.85rem;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 7px;
+    }
+
+    .vh-timeline li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 6px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--vh-muted);
+    }
+
+    /* ── Modal footer / badge inside section header ─────────── */
+    .vh-section-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+
+    .vh-section-badge::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    /* ── Responsive ─────────────────────────────────────────── */
+    @@media (max-width: 900px) {
+        .vh-cards { grid-template-columns: 1fr; }
+    }
+
+    @@media (max-width: 768px) {
+        .vh-toolbar { flex-direction: column; align-items: stretch; }
+        .vh-search-input { width: 100%; }
+        .vh-filters { gap: 12px; }
+        .vh-form-row { grid-template-columns: 1fr; }
+    }
+</style>

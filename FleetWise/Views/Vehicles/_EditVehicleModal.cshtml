@@ -1,0 +1,87 @@
+@*
+    Edit Vehicle modal — static BUS-02 example (Block 17 loads real data + wires the POST).
+*@
+<div class="modal fade vh-modal" id="editVehicleModal" tabindex="-1" aria-labelledby="editVehicleModalLabel" aria-hidden="true">
+    <div class="modal-dialog vh-modal-sm">
+        <div class="modal-content">
+            <form method="post" action="#">
+                <div class="modal-header">
+                    <h5 class="modal-title vh-modal-title" id="editVehicleModalLabel">Edit Vehicle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body vh-modal-body">
+
+                    <!-- Vehicle Profile -->
+                    <div class="vh-section-header">Vehicle Profile</div>
+                    <div class="vh-section-body">
+                        <div class="vh-form-row">
+                            <label>Vehicle ID:</label>
+                            <input type="text" name="VehicleId" class="vh-form-input" value="BUS-02" disabled />
+                        </div>
+                        <div class="vh-form-row">
+                            <label>Plate Number:</label>
+                            <input type="text" name="PlateNumber" class="vh-form-input" value="234GVA" />
+                        </div>
+                        <div class="vh-form-row">
+                            <label>Vehicle Type:</label>
+                            <div class="vh-select-wrap" style="width:100%;">
+                                <select name="VehicleType" class="vh-form-input" style="appearance:none;">
+                                    <option>Bus</option>
+                                    <option>Van</option>
+                                </select>
+                                <span class="vh-select-arrow">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="vh-form-row">
+                            <label>Route:</label>
+                            <div class="vh-select-wrap" style="width:100%;">
+                                <select name="RouteId" class="vh-form-input" style="appearance:none;">
+                                    <option>Route 01</option>
+                                    <option>Route 02</option>
+                                    <option>Route 03</option>
+                                </select>
+                                <span class="vh-select-arrow">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Maintenance Log Details -->
+                    <div class="vh-section-header">
+                        <span>Maintenance Log Details</span>
+                        <span class="vh-section-badge vh-badge--attention">Needs Attention</span>
+                    </div>
+                    <div class="vh-section-body">
+                        <div class="vh-detail-row"><strong>Date Reported:</strong> 05/27/26 6:30 AM</div>
+                        <div class="vh-detail-row"><strong>Issue Summary:</strong> Tire Issue, Air conditioning Issue</div>
+                        <div class="vh-form-row" style="margin-top:14px;">
+                            <label>Change Status:</label>
+                            <div class="vh-select-wrap" style="width:100%;">
+                                <select name="MaintenanceStatus" class="vh-form-input" style="appearance:none;">
+                                    <option>Needs Attention</option>
+                                    <option>Under Repair</option>
+                                    <option>Resolved</option>
+                                </select>
+                                <span class="vh-select-arrow">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="vh-form-row">
+                            <label>Verified by:</label>
+                            <input type="text" name="VerifiedBy" class="vh-form-input" placeholder="Mechanic Name" />
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="vh-btn vh-btn--outline" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="vh-btn vh-btn--primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
