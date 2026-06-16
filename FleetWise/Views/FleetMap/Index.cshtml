@@ -57,6 +57,10 @@
 <div class="fm-page">
     <div id="fleetMap" class="fm-map"></div>
 
+    <div id="fmConnBadge" class="fm-conn-badge">
+        <span class="fm-conn-badge__dot"></span>Connection lost — retrying…
+    </div>
+
     <div class="fm-legend">
         <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#2563EB"></span>ROUTE 01 – North</div>
         <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#F97316"></span>ROUTE 02 – South</div>
@@ -209,6 +213,37 @@
         height: 12px;
         border-radius: 50%;
         flex-shrink: 0;
+    }
+
+    /* ── Connection-lost badge (hidden until a poll fails) ── */
+    .fm-conn-badge {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        z-index: 1000;
+        display: none;
+        align-items: center;
+        gap: 8px;
+        background: #FEF2F2;
+        color: #B91C1C;
+        border: 1.5px solid #FECACA;
+        border-radius: 10px;
+        padding: 8px 14px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        font-family: 'Segoe UI', sans-serif;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+    }
+
+    .fm-conn-badge--visible {
+        display: flex;
+    }
+
+    .fm-conn-badge__dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #DC2626;
     }
 
     /* ── Bus markers ── */
