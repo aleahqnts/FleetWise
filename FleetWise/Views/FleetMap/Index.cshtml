@@ -61,6 +61,64 @@
         <span class="fm-conn-badge__dot"></span>Connection lost — retrying…
     </div>
 
+    <aside id="fmPanel" class="fm-panel" aria-hidden="true">
+        <button id="fmPanelClose" class="fm-panel__close" aria-label="Close">&times;</button>
+
+        <div class="fm-panel__pad">
+            <div class="fm-panel__title" id="fmPanelBus">—</div>
+            <div class="fm-panel__meta">
+                <span class="fm-panel__meta-label">Route</span>
+                <span class="fm-panel__route-no" id="fmPanelRoute">—</span>
+                <span class="fm-panel__meta-label">Shift</span>
+                <span class="fm-panel__shift" id="fmPanelShift">—</span>
+            </div>
+        </div>
+
+        <div class="fm-panel__divider"></div>
+
+        <div class="fm-panel__pad">
+            <div class="fm-panel__status">
+                <span class="fm-panel__status-dot"></span>
+                <span id="fmPanelStatus">—</span>
+            </div>
+        </div>
+
+        <div class="fm-panel__divider"></div>
+
+        <div class="fm-panel__driver">
+            <span class="fm-panel__avatar">
+                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="#3F4756">
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M12 14c-4.4 0-8 2.7-8 6v0h16v0c0-3.3-3.6-6-8-6z" />
+                </svg>
+            </span>
+            <span class="fm-panel__driver-info">
+                <span class="fm-panel__driver-name" id="fmPanelDriver">—</span>
+                <span class="fm-panel__driver-sub">Current Driver</span>
+            </span>
+        </div>
+
+        <div class="fm-panel__divider"></div>
+
+        <div class="fm-panel__pax">
+            <div class="fm-panel__pax-label">Total Passengers</div>
+            <div class="fm-panel__pax-num" id="fmPanelPax">—</div>
+        </div>
+
+        <div class="fm-panel__divider"></div>
+
+        <div class="fm-panel__rev-head">Estimated Revenue</div>
+        <div class="fm-panel__pad">
+            <div class="fm-panel__rev-val" id="fmPanelRevenue">—</div>
+        </div>
+
+        <div class="fm-panel__divider"></div>
+
+        <div class="fm-panel__pad">
+            <div class="fm-panel__updated" id="fmPanelUpdated">—</div>
+        </div>
+    </aside>
+
     <div class="fm-legend">
         <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#2563EB"></span>ROUTE 01 – North</div>
         <div class="fm-legend-item"><span class="fm-legend-dot" style="background:#F97316"></span>ROUTE 02 – South</div>
@@ -308,6 +366,14 @@
         color: var(--fm-muted);
     }
 
+    .fm-tooltip__plate {
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--fm-muted);
+        margin-bottom: 6px;
+    }
+
     .fm-tooltip__status {
         display: flex;
         align-items: center;
@@ -334,6 +400,182 @@
         padding: 6px 10px;
         font-size: 0.8rem;
         color: var(--fm-text);
+    }
+
+    /* ── Click side panel (Figure 19) ── */
+    .fm-panel {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        bottom: 16px;
+        width: 300px;
+        z-index: 1100;
+        background: var(--fm-white);
+        border-radius: var(--fm-radius);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, .18);
+        padding: 22px 0;
+        font-family: 'Segoe UI', sans-serif;
+        transform: translateX(calc(100% + 24px));
+        transition: transform .25s ease;
+        overflow-y: auto;
+    }
+
+    .fm-panel--open {
+        transform: translateX(0);
+    }
+
+    .fm-panel__pad {
+        padding: 0 22px;
+    }
+
+    .fm-panel__divider {
+        border-top: 1px solid var(--fm-border);
+        margin: 16px 0;
+    }
+
+    .fm-panel__close {
+        position: absolute;
+        top: 16px;
+        right: 18px;
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        line-height: 1;
+        color: var(--fm-muted);
+        cursor: pointer;
+    }
+
+    .fm-panel__close:hover {
+        color: var(--fm-text);
+    }
+
+    .fm-panel__title {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #1A202C;
+        letter-spacing: 0.01em;
+        margin-bottom: 10px;
+    }
+
+    .fm-panel__meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.92rem;
+    }
+
+    .fm-panel__meta-label {
+        color: var(--fm-muted);
+    }
+
+    .fm-panel__route-no {
+        font-weight: 800;
+        color: #2563EB;
+        margin-right: 6px;
+    }
+
+    .fm-panel__shift {
+        font-weight: 700;
+        color: #E8A33D;
+        background: #FCF3DF;
+        border-radius: 6px;
+        padding: 2px 8px;
+    }
+
+    .fm-panel__status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #6B7280;
+    }
+
+    .fm-panel__status-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #34C759;
+        flex-shrink: 0;
+    }
+
+    .fm-panel__driver {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: #F1F3F5;
+        padding: 14px 22px;
+    }
+
+    .fm-panel__avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: #BFE0F2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+
+    .fm-panel__driver-info {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .fm-panel__driver-name {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #1A202C;
+    }
+
+    .fm-panel__driver-sub {
+        font-size: 0.82rem;
+        color: var(--fm-muted);
+    }
+
+    .fm-panel__pax {
+        display: flex;
+        align-items: center;
+        padding: 6px 22px;
+    }
+
+    .fm-panel__pax-label {
+        flex: 1;
+        text-align: center;
+        font-size: 1.05rem;
+        color: #4A5568;
+        line-height: 1.25;
+    }
+
+    .fm-panel__pax-num {
+        flex: 1;
+        text-align: center;
+        font-size: 1.9rem;
+        font-weight: 800;
+        color: #1A202C;
+        border-left: 1px solid var(--fm-border);
+    }
+
+    .fm-panel__rev-head {
+        background: #F1F3F5;
+        padding: 10px 22px;
+        font-size: 1rem;
+        color: #2D3748;
+    }
+
+    .fm-panel__rev-val {
+        margin-top: 14px;
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #1A202C;
+    }
+
+    .fm-panel__updated {
+        font-size: 0.85rem;
+        font-style: italic;
+        color: var(--fm-muted);
     }
 
     /* ── Stop markers — distinct from bus markers ── */

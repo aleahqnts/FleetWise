@@ -38,6 +38,54 @@
     var statusSelect = document.getElementById('fmStatusFilter');
     var connBadge = document.getElementById('fmConnBadge');
 
+    // Side panel (Figure 19) — tracks which bus is open so each poll refreshes it live.
+    var panel = document.getElementById('fmPanel');
+    var panelClose = document.getElementById('fmPanelClose');
+    var selectedVehicleId = null;
+
+    var pesoFmt = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Server timestamps are UTC but serialized without a 'Z', so append one before parsing.
+    function relativeTime(ts) {
+        var then = new Date(ts + 'Z').getTime();
+        if (isNaN(then)) return '';
+        var secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+        if (secs < 10) return 'just now';
+        if (secs < 60) return secs + ' seconds ago';
+        var mins = Math.round(secs / 60);
+        if (mins === 1) return '1 minute ago';
+        if (mins < 60) return mins + ' minutes ago';
+        var hrs = Math.round(mins / 60);
+        return hrs === 1 ? '1 hour ago' : hrs + ' hours ago';
+    }
+
+    function fillPanel(bus) {
+        document.getElementById('fmPanelBus').textContent = bus.vehicleId;
+        document.getElementById('fmPanelRoute').textContent = String(bus.routeId).padStart(2, '0');
+        document.getElementById('fmPanelShift').textContent = bus.shift;
+        document.getElementById('fmPanelStatus').textContent = bus.status;
+        document.getElementById('fmPanelDriver').textContent = bus.driverName;
+        document.getElementById('fmPanelPax').textContent = bus.passengers;
+        document.getElementById('fmPanelRevenue').textContent = 'P ' + pesoFmt.format(bus.estimatedRevenue);
+        document.getElementById('fmPanelUpdated').textContent = 'Last updated: ' + relativeTime(bus.timestamp);
+    }
+
+    function openPanel(vehicleId) {
+        selectedVehicleId = vehicleId;
+        var marker = busMarkers[vehicleId];
+        if (marker && marker._bus) fillPanel(marker._bus);
+        panel.classList.add('fm-panel--open');
+        panel.setAttribute('aria-hidden', 'false');
+    }
+
+    function closePanel() {
+        selectedVehicleId = null;
+        panel.classList.remove('fm-panel--open');
+        panel.setAttribute('aria-hidden', 'true');
+    }
+
+    panelClose.addEventListener('click', closePanel);
+
     function busIcon(label, color) {
         return L.divIcon({
             className: 'fm-bus-marker',
@@ -53,6 +101,7 @@
                     '<span class="fm-tooltip__bus">' + bus.vehicleId + '</span>' +
                     '<span class="fm-tooltip__route">' + bus.routeName + '</span>' +
                 '</div>' +
+                '<div class="fm-tooltip__plate">' + bus.plateNumber + '</div>' +
                 '<div class="fm-tooltip__status"><span class="fm-tooltip__dot"></span>' + bus.status + '</div>' +
                 '<div class="fm-tooltip__passengers"><span>Total Passengers</span><strong>' + bus.passengers + '</strong></div>' +
             '</div>';
@@ -94,8 +143,10 @@
                         marker = L.marker([bus.lat, bus.lng], { icon: busIcon(bus.vehicleId, color) })
                             .bindTooltip(tooltipHtml(bus), { direction: 'top', offset: [0, -10], className: 'fm-tooltip-wrap' })
                             .addTo(busLayer);
+                        marker.on('click', function () { openPanel(this._bus.vehicleId); });
                         busMarkers[bus.vehicleId] = marker;
                     }
+                    marker._bus = bus; // keep latest data for tooltip/panel refresh
                 });
 
                 // Drop buses that fell out of the response (trip ended or filtered out).
@@ -105,6 +156,11 @@
                         delete busMarkers[id];
                     }
                 });
+
+                // Live-update the open side panel with the selected bus's newest data.
+                if (selectedVehicleId && busMarkers[selectedVehicleId]) {
+                    fillPanel(busMarkers[selectedVehicleId]._bus);
+                }
             })
             .catch(function (err) {
                 console.error('Failed to load positions:', err);

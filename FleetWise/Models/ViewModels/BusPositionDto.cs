@@ -24,6 +24,9 @@ public class BusPositionDto
     [JsonPropertyName("routeName")]
     public string RouteName { get; set; }
 
+    [JsonPropertyName("shift")]
+    public string Shift { get; set; }
+
     [JsonPropertyName("driverName")]
     public string DriverName { get; set; }
 
