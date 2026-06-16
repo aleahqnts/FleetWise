@@ -1,3 +1,4 @@
+@model VehiclesIndexViewModel
 @{
     ViewData["Title"] = "Vehicles";
     Layout = "~/Views/Shared/_Layout.cshtml";
@@ -28,7 +29,7 @@
         </div>
         <div class="vh-card-text">
             <span class="vh-card-label">Total Vehicles</span>
-            <span class="vh-card-value">32</span>
+            <span class="vh-card-value">@Model.TotalVehicles</span>
         </div>
     </div>
 
@@ -41,7 +42,7 @@
         </div>
         <div class="vh-card-text">
             <span class="vh-card-label">Flagged Vehicles</span>
-            <span class="vh-card-value">10</span>
+            <span class="vh-card-value">@Model.FlaggedVehicles</span>
         </div>
     </div>
 
@@ -54,7 +55,7 @@
         </div>
         <div class="vh-card-text">
             <span class="vh-card-label">Scheduled Maintenance</span>
-            <span class="vh-card-value">2</span>
+            <span class="vh-card-value">@Model.ScheduledMaintenance</span>
         </div>
     </div>
 </div>
@@ -64,6 +65,10 @@
     <button type="button" class="vh-btn vh-btn--primary" data-bs-toggle="modal" data-bs-target="#addVehicleModal">+ Add Vehicle</button>
 
     <form method="get" class="vh-search-form">
+        <input type="hidden" name="route" value="@Model.SelectedRoute" />
+        <input type="hidden" name="type" value="@Model.SelectedType" />
+        <input type="hidden" name="status" value="@Model.SelectedStatus" />
+        <input type="hidden" name="condition" value="@Model.SelectedCondition" />
         <div class="vh-search-wrap">
             <span class="vh-search-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
@@ -72,7 +77,7 @@
                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
             </span>
-            <input type="text" name="search" class="vh-search-input" placeholder="Search" />
+            <input type="text" name="search" value="@Model.SearchTerm" class="vh-search-input" placeholder="Search by ID or plate" />
         </div>
     </form>
 </div>
@@ -103,58 +108,12 @@
                     <th>Actions</th>
                 </tr>
             </thead>
-            <tbody>
-                @{
-                    // Static placeholder rows — mirrors the registry mockup. Wired to live data in Block 14.
-                    var sample = new[]
-                    {
-                        new { Id = "BUS-01", Plate = "123ABC", Type = "Bus", Route = "Route 01", Status = "Ready to Deploy", Maint = "No Issues" },
-                        new { Id = "BUS-02", Plate = "234GVA", Type = "Bus", Route = "Route 01", Status = "Flagged",         Maint = "Needs Attention" },
-                        new { Id = "BUS-03", Plate = "738BGS", Type = "Bus", Route = "Route 01", Status = "Pending",         Maint = "Under Repair" },
-                        new { Id = "BUS-04", Plate = "456TYT", Type = "Bus", Route = "Route 02", Status = "Flagged",         Maint = "No Issues" },
-                        new { Id = "BUS-05", Plate = "947JTD", Type = "Bus", Route = "Route 02", Status = "Ready to Deploy", Maint = "No Issues" },
-                        new { Id = "BUS-06", Plate = "652HSF", Type = "Bus", Route = "Route 02", Status = "On Trip",         Maint = "No Issues" },
-                        new { Id = "BUS-07", Plate = "164POI", Type = "Bus", Route = "Route 03", Status = "Pending",         Maint = "No Issues" },
-                        new { Id = "BUS-08", Plate = "357MHT", Type = "Bus", Route = "Route 03", Status = "Ready to Deploy", Maint = "Needs Attention" },
-                        new { Id = "BUS-09", Plate = "258BGR", Type = "Bus", Route = "Route 03", Status = "Pending",         Maint = "No Issues" },
-                    };
-
-                    Func<string, string> statusClass = s => s switch
-                    {
-                        "Ready to Deploy" => "vh-badge--ready",
-                        "On Trip" => "vh-badge--ontrip",
-                        "Pending" => "vh-badge--pending",
-                        "Flagged" => "vh-badge--flagged",
-                        _ => "vh-badge--default"
-                    };
-
-                    Func<string, string> maintClass = m => m switch
-                    {
-                        "No Issues" => "vh-badge--ok",
-                        "Needs Attention" => "vh-badge--attention",
-                        "Under Repair" => "vh-badge--repair",
-                        _ => "vh-badge--default"
-                    };
-                }
-                @foreach (var v in sample)
-                {
-                    <tr>
-                        <td>
-                            <div class="vh-id">@v.Id</div>
-                            <div class="vh-plate">@v.Plate</div>
-                        </td>
-                        <td>@v.Type</td>
-                        <td>@v.Route</td>
-                        <td><span class="vh-badge @statusClass(v.Status)">@v.Status</span></td>
-                        <td><span class="vh-badge @maintClass(v.Maint)">@v.Maint</span></td>
-                        <td>
-                            <div class="vh-actions-cell">
-                                <button type="button" class="vh-btn-action" data-bs-toggle="modal" data-bs-target="#viewVehicleModal">View</button>
-                                <button type="button" class="vh-btn-action" data-bs-toggle="modal" data-bs-target="#editVehicleModal">Edit</button>
-                            </div>
-                        </td>
-                    </tr>
-                }
+            <tbody id="vehiclesTableBody">
+                <tr>
+                    <td colspan="6" class="vh-table-loading">
+                        <div class="vh-spinner"></div>
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>
@@ -164,16 +123,34 @@
 @await Html.PartialAsync("_ViewVehicleModal")
 @await Html.PartialAsync("_EditVehicleModal")
 
+<script>
+    // Load the vehicle table rows in the background so the page itself renders instantly
+    // (still server-rendered HTML over fetch, not a SPA — §2.6).
+    document.addEventListener('DOMContentLoaded', loadVehicleRows);
+
+    function loadVehicleRows() {
+        const tbody = document.getElementById('vehiclesTableBody');
+        fetch('@Url.Action("VehicleRows", "Vehicles")' + window.location.search)
+            .then(function (response) { return response.text(); })
+            .then(function (html) { tbody.innerHTML = html; })
+            .catch(function () {
+                tbody.innerHTML = '<tr><td colspan="6" class="vh-empty">Failed to load vehicles.</td></tr>';
+            });
+    }
+</script>
+
 @section TopbarContent {
     <form method="get" class="vh-filters">
+        <input type="hidden" name="search" value="@Model.SearchTerm" />
         <div class="vh-filter">
             <label class="vh-filter-label">Route:</label>
             <div class="vh-select-wrap">
-                <select name="route" class="vh-select">
+                <select name="route" class="vh-select" onchange="this.form.submit()">
                     <option value="">All Routes</option>
-                    <option>Route 01</option>
-                    <option>Route 02</option>
-                    <option>Route 03</option>
+                    @foreach (var r in Model.RouteOptions)
+                    {
+                        <option value="@r.Value" selected="@(r.Value == Model.SelectedRoute)">@r.Text</option>
+                    }
                 </select>
                 <span class="vh-select-arrow">
                     <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
@@ -183,10 +160,12 @@
         <div class="vh-filter">
             <label class="vh-filter-label">Type:</label>
             <div class="vh-select-wrap">
-                <select name="type" class="vh-select">
+                <select name="type" class="vh-select" onchange="this.form.submit()">
                     <option value="">All</option>
-                    <option>Bus</option>
-                    <option>Van</option>
+                    @foreach (var t in Model.TypeOptions)
+                    {
+                        <option value="@t" selected="@(t == Model.SelectedType)">@t</option>
+                    }
                 </select>
                 <span class="vh-select-arrow">
                     <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
@@ -196,12 +175,12 @@
         <div class="vh-filter">
             <label class="vh-filter-label">Status:</label>
             <div class="vh-select-wrap">
-                <select name="status" class="vh-select">
+                <select name="status" class="vh-select" onchange="this.form.submit()">
                     <option value="">All</option>
-                    <option>Ready to Deploy</option>
-                    <option>On Trip</option>
-                    <option>Pending</option>
-                    <option>Flagged</option>
+                    @foreach (var s in Model.StatusOptions)
+                    {
+                        <option value="@s" selected="@(s == Model.SelectedStatus)">@s</option>
+                    }
                 </select>
                 <span class="vh-select-arrow">
                     <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
@@ -211,11 +190,12 @@
         <div class="vh-filter">
             <label class="vh-filter-label">Issues:</label>
             <div class="vh-select-wrap">
-                <select name="condition" class="vh-select">
+                <select name="condition" class="vh-select" onchange="this.form.submit()">
                     <option value="">All</option>
-                    <option>No Issues</option>
-                    <option>Needs Attention</option>
-                    <option>Under Repair</option>
+                    @foreach (var c in Model.ConditionOptions)
+                    {
+                        <option value="@c" selected="@(c == Model.SelectedCondition)">@c</option>
+                    }
                 </select>
                 <span class="vh-select-arrow">
                     <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
@@ -455,6 +435,36 @@
     }
 
     .vh-btn-action:hover { border-color: var(--vh-teal); color: var(--vh-teal); }
+
+    /* ── Table loading spinner / empty state ────────────────── */
+    .vh-table-loading {
+        text-align: center;
+        padding: 32px 14px;
+    }
+
+    .vh-empty {
+        text-align: center;
+        padding: 28px 14px;
+        color: var(--vh-muted);
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 0.875rem;
+    }
+
+    .vh-spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid var(--vh-border);
+        border-top-color: var(--vh-teal);
+        border-radius: 50%;
+        animation: vh-spin 0.8s linear infinite;
+        margin: 0 auto;
+    }
+
+    @@keyframes vh-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
 
     /* ── Alerts ─────────────────────────────────────────────── */
     .vh-alert {
