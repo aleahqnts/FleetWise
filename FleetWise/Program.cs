@@ -39,6 +39,13 @@ builder.Services.AddSingleton(provider => {
     return client;
 });
 
+// Simulated live telemetry producer — Development only, so it can never run in
+// production. Cut-over to real telemetry (IoT / mobile app) = delete this one line (§2.3).
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddHostedService<TelemetrySimulator>();
+}
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
