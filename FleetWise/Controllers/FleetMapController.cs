@@ -222,11 +222,12 @@ namespace FleetWise.Controllers
         }
 
         // Normalize the stored vehicle_status to the labels the Status filter shows
-        // (Block 7: "On Trip" / "Idle" / "Offline").
+        // ("Active" / "Idle" / "Offline"). Buses on the map are on live trips, so the
+        // running state reads "Active" (matches Figures 18–19).
         private static string DisplayStatus(string? vehicleStatus) => vehicleStatus switch
         {
-            null or "" => "On Trip",
-            "OnTrip" or "On Trip" or "Active" => "On Trip",
+            null or "" => "Active",
+            "OnTrip" or "On Trip" or "Active" => "Active",
             "Idle" => "Idle",
             "Offline" => "Offline",
             _ => vehicleStatus
