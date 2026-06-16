@@ -2,6 +2,7 @@
     // BGC, Taguig — default center used until route bounds are available
     var DEFAULT_CENTER = [14.5508, 121.0509];
     var DEFAULT_ZOOM = 16;
+    var POLL_INTERVAL_MS = 5000;
 
     var map = L.map('fleetMap');
 
@@ -27,6 +28,15 @@
 
     var routePolylines = {};
     var stopLayer = L.layerGroup().addTo(map);
+    var busLayer = L.layerGroup().addTo(map);
+
+    // vehicleId -> live Leaflet marker; markers are moved in place between polls,
+    // never recreated, so open tooltips don't flicker (Step 11.2).
+    var busMarkers = {};
+
+    var routeSelect = document.getElementById('fmRouteFilter');
+    var statusSelect = document.getElementById('fmStatusFilter');
+    var connBadge = document.getElementById('fmConnBadge');
 
     function busIcon(label, color) {
         return L.divIcon({
@@ -40,36 +50,70 @@
     function tooltipHtml(bus) {
         return '<div class="fm-tooltip">' +
                 '<div class="fm-tooltip__header">' +
-                    '<span class="fm-tooltip__bus">' + bus.label + '</span>' +
-                    '<span class="fm-tooltip__route">' + bus.route + '</span>' +
+                    '<span class="fm-tooltip__bus">' + bus.vehicleId + '</span>' +
+                    '<span class="fm-tooltip__route">' + bus.routeName + '</span>' +
                 '</div>' +
                 '<div class="fm-tooltip__status"><span class="fm-tooltip__dot"></span>' + bus.status + '</div>' +
                 '<div class="fm-tooltip__passengers"><span>Total Passengers</span><strong>' + bus.passengers + '</strong></div>' +
             '</div>';
     }
 
-    // Static placeholder buses rendered on the map
-    var placeholderBuses = [
-        { label: 'BUS 01', route: 'Route 01', lat: 14.5508, lng: 121.0509, status: 'Active', passengers: 11 },
-        { label: 'BUS 02', route: 'Route 02', lat: 14.5538, lng: 121.0485, status: 'Active', passengers: 18 },
-        { label: 'BUS 03', route: 'Route 03', lat: 14.5478, lng: 121.0548, status: 'Active', passengers: 9 },
-        { label: 'BUS 04', route: 'Route 01', lat: 14.5483, lng: 121.0468, status: 'Active', passengers: 14 },
-        { label: 'BUS 05', route: 'Route 03', lat: 14.5524, lng: 121.0540, status: 'Active', passengers: 22 }
-    ];
+    function setConnectionLost(lost) {
+        if (connBadge) connBadge.classList.toggle('fm-conn-badge--visible', lost);
+    }
 
-    placeholderBuses.forEach(function (bus) {
-        L.marker([bus.lat, bus.lng], { icon: busIcon(bus.label, ROUTE_COLORS[bus.route]) })
-            .addTo(map)
-            .bindTooltip(tooltipHtml(bus), { direction: 'top', offset: [0, -10], className: 'fm-tooltip-wrap' });
-    });
+    // Poll the live Positions endpoint, honouring the current Route/Status filters.
+    function fetchPositions() {
+        var routeId = parseInt(routeSelect.value) || null;
+        var status = statusSelect.value || null;
+
+        var params = [];
+        if (routeId) params.push('routeId=' + routeId);
+        if (status) params.push('status=' + encodeURIComponent(status));
+        var url = '/FleetMap/Positions' + (params.length ? '?' + params.join('&') : '');
+
+        fetch(url)
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (buses) {
+                setConnectionLost(false);
+
+                var seen = {};
+                buses.forEach(function (bus) {
+                    seen[bus.vehicleId] = true;
+                    var color = ROUTE_COLORS[bus.routeName] || '#666';
+                    var marker = busMarkers[bus.vehicleId];
+
+                    if (marker) {
+                        // Move in place + refresh the (live) tooltip numbers.
+                        marker.setLatLng([bus.lat, bus.lng]);
+                        marker.setTooltipContent(tooltipHtml(bus));
+                    } else {
+                        marker = L.marker([bus.lat, bus.lng], { icon: busIcon(bus.vehicleId, color) })
+                            .bindTooltip(tooltipHtml(bus), { direction: 'top', offset: [0, -10], className: 'fm-tooltip-wrap' })
+                            .addTo(busLayer);
+                        busMarkers[bus.vehicleId] = marker;
+                    }
+                });
+
+                // Drop buses that fell out of the response (trip ended or filtered out).
+                Object.keys(busMarkers).forEach(function (id) {
+                    if (!seen[id]) {
+                        busLayer.removeLayer(busMarkers[id]);
+                        delete busMarkers[id];
+                    }
+                });
+            })
+            .catch(function (err) {
+                console.error('Failed to load positions:', err);
+                setConnectionLost(true); // keep markers as-is and keep polling
+            });
+    }
 
     // Fetch and render route polylines
     function loadRoutes() {
-        var routeColors = {
-            'Route 01 – North Express': '#2563EB',
-            'Route 02 – South Line': '#F97316'
-        };
-
         fetch('/FleetMap/Routes')
             .then(r => r.json())
             .then(routes => {
@@ -78,7 +122,7 @@
                         try {
                             var waypoints = JSON.parse(route.waypointsJson);
                             var latLngs = waypoints.map(w => [w.lat, w.lng]);
-                            var color = routeColors[route.routeName] || '#666';
+                            var color = ROUTE_COLORS[route.routeName] || '#666';
 
                             var polyline = L.polyline(latLngs, {
                                 color: color,
@@ -140,9 +184,6 @@
         });
     }
 
-    var routeSelect = document.getElementById('fmRouteFilter');
-    var statusSelect = document.getElementById('fmStatusFilter');
-
     // Load and populate route dropdown
     fetch('/FleetMap/Routes')
         .then(r => r.json())
@@ -155,11 +196,12 @@
             });
         });
 
-    // Shared filter handler — reads both dropdowns and re-renders the route lines and stops
+    // Shared filter handler — narrows polylines, stops, and live buses together
     function refetch() {
         var routeId = parseInt(routeSelect.value) || null;
         applyRouteFilter(routeId);
         loadStops(routeId);
+        fetchPositions();
     }
 
     routeSelect.addEventListener('change', refetch);
@@ -167,4 +209,8 @@
 
     loadRoutes();
     loadStops(null);
+
+    // Start live polling
+    fetchPositions();
+    setInterval(fetchPositions, POLL_INTERVAL_MS);
 })();
