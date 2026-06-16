@@ -2,6 +2,7 @@
 using System.Text.Json.Serialization;
 using FleetWise.Models;
 using FleetWise.Models.ViewModels;
+using FleetWise.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,8 +12,13 @@ namespace FleetWise.Controllers
     public class FleetMapController : Controller
     {
         private readonly Supabase.Client _supabase;
+        private readonly FareCalculator _fareCalculator;
 
-        public FleetMapController(Supabase.Client supabase) => _supabase = supabase;
+        public FleetMapController(Supabase.Client supabase, FareCalculator fareCalculator)
+        {
+            _supabase = supabase;
+            _fareCalculator = fareCalculator;
+        }
 
         public async Task<IActionResult> Index()
         {
@@ -105,6 +111,108 @@ namespace FleetWise.Controllers
 
             return Json(routeData);
         }
+
+        // Live bus positions: latest telemetry row per Active trip, joined in C# to
+        // vehicle/route/driver, with occupancy % and revenue computed server-side so
+        // every consumer (markers, tooltip, side panel) shows identical numbers (§2.7).
+        public async Task<IActionResult> Positions(int? routeId, string? status)
+        {
+            var tripsResponse = await _supabase
+                .From<Trip>()
+                .Filter("trip_status", Postgrest.Constants.Operator.Equals, "Active")
+                .Get();
+
+            var activeTrips = tripsResponse.Models;
+            if (routeId.HasValue)
+                activeTrips = activeTrips.Where(t => t.RouteId == routeId.Value).ToList();
+
+            if (activeTrips.Count == 0)
+                return Json(Array.Empty<BusPositionDto>());
+
+            var activeTripIds = activeTrips.Select(t => t.TripId).ToHashSet();
+
+            var telemetryResponse = await _supabase.From<TelemetryData>().Get();
+            var vehiclesResponse = await _supabase.From<Vehicle>().Get();
+            var routesResponse = await _supabase.From<BusRoute>().Get();
+            var usersResponse = await _supabase.From<UserModel>().Get();
+
+            // Latest telemetry row per active trip.
+            var latestByTrip = telemetryResponse.Models
+                .Where(t => activeTripIds.Contains(t.TripId))
+                .GroupBy(t => t.TripId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.Timestamp).First());
+
+            var vehiclesById = vehiclesResponse.Models
+                .ToDictionary(v => v.VehicleId, v => v);
+            var routesById = routesResponse.Models
+                .ToDictionary(r => r.RouteId, r => r);
+            var usersById = usersResponse.Models
+                .ToDictionary(u => u.UserId, u => u);
+
+            var positions = new List<BusPositionDto>();
+
+            foreach (var trip in activeTrips)
+            {
+                if (!latestByTrip.TryGetValue(trip.TripId, out var telemetry))
+                    continue; // no telemetry yet (simulator hasn't ticked for this trip)
+
+                vehiclesById.TryGetValue(trip.VehicleId ?? string.Empty, out var vehicle);
+                routesById.TryGetValue(trip.RouteId, out var route);
+                usersById.TryGetValue(trip.DriverId, out var driver);
+
+                var capacity = vehicle?.Capacity ?? 0;
+                var passengers = telemetry.CurrentPassengers;
+                var occupancyPct = capacity > 0
+                    ? (int)Math.Round(passengers * 100.0 / capacity)
+                    : 0;
+
+                positions.Add(new BusPositionDto
+                {
+                    TripId = trip.TripId,
+                    VehicleId = trip.VehicleId,
+                    PlateNumber = vehicle?.PlateNumber ?? "—",
+                    RouteId = trip.RouteId,
+                    RouteName = route?.RouteName ?? "—",
+                    DriverName = FormatDriverName(driver),
+                    Status = DisplayStatus(vehicle?.VehicleStatus),
+                    Lat = (double)telemetry.Latitude,
+                    Lng = (double)telemetry.Longitude,
+                    Heading = telemetry.Heading ?? 0,
+                    Speed = (double)(telemetry.Speed ?? 0),
+                    Passengers = passengers,
+                    Capacity = capacity,
+                    OccupancyPct = occupancyPct,
+                    EstimatedRevenue = _fareCalculator.Estimate(passengers),
+                    Timestamp = telemetry.Timestamp
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(status))
+                positions = positions.Where(p =>
+                    string.Equals(p.Status, status, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            return Json(positions);
+        }
+
+        private static string FormatDriverName(UserModel? driver)
+        {
+            if (driver is null)
+                return "Unassigned";
+
+            var name = $"{driver.FirstName} {driver.LastName}".Trim();
+            return string.IsNullOrEmpty(name) ? "Unassigned" : name;
+        }
+
+        // Normalize the stored vehicle_status to the labels the Status filter shows
+        // (Block 7: "On Trip" / "Idle" / "Offline").
+        private static string DisplayStatus(string? vehicleStatus) => vehicleStatus switch
+        {
+            null or "" => "On Trip",
+            "OnTrip" or "On Trip" or "Active" => "On Trip",
+            "Idle" => "Idle",
+            "Offline" => "Offline",
+            _ => vehicleStatus
+        };
 
         private class WaypointDto
         {
