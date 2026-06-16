@@ -24,4 +24,10 @@ public class BusRoute : BaseModel
 
     [Column("updated_at")]
     public DateTime? UpdatedAt { get; set; }
+
+    [Column("waypoints_json")]
+    public string WaypointsJson { get; set; }
+
+    [Column("stops_json")]
+    public string StopsJson { get; set; }
 }
