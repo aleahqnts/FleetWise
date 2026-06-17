@@ -1,0 +1,49 @@
+@model AddVehicleViewModel
+@*
+    Add Vehicle modal — Vehicle Profile only. Posts to VehiclesController.Create
+    (PRG + TempData); re-opens with errors preserved on a failed POST.
+*@
+<div class="modal fade vh-modal" id="addVehicleModal" tabindex="-1" aria-labelledby="addVehicleModalLabel" aria-hidden="true">
+    <div class="modal-dialog vh-modal-sm">
+        <div class="modal-content">
+            <form asp-action="Create" asp-controller="Vehicles" method="post">
+                <div class="modal-header">
+                    <h5 class="modal-title vh-modal-title" id="addVehicleModalLabel">Add Vehicle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body vh-modal-body">
+                    <div class="vh-section-header">Vehicle Profile</div>
+                    <div class="vh-section-body">
+                        <div class="vh-form-row">
+                            <label asp-for="VehicleId">Vehicle ID:</label>
+                            <input asp-for="VehicleId" class="vh-form-input" placeholder="BUS-04" />
+                            <span asp-validation-for="VehicleId" class="vh-field-error"></span>
+                        </div>
+                        <div class="vh-form-row">
+                            <label asp-for="PlateNumber">Plate Number:</label>
+                            <input asp-for="PlateNumber" class="vh-form-input" placeholder="9302BA" />
+                            <span asp-validation-for="PlateNumber" class="vh-field-error"></span>
+                        </div>
+                        <div class="vh-form-row">
+                            <label asp-for="RouteId">Route:</label>
+                            <div class="vh-select-wrap" style="width:100%;">
+                                <select asp-for="RouteId" class="vh-form-input" style="appearance:none;"
+                                        asp-items="(List<SelectListItem>)ViewBag.RouteOptions">
+                                    <option value="">Select route…</option>
+                                </select>
+                                <span class="vh-select-arrow">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                                </span>
+                            </div>
+                            <span asp-validation-for="RouteId" class="vh-field-error"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="vh-btn vh-btn--outline" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="vh-btn vh-btn--primary">Add Vehicle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

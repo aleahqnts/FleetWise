@@ -1,0 +1,83 @@
+@model VehicleDetailsViewModel
+@*
+    View Vehicle Details — fetched into #viewVehicleContent per vehicle.
+    Renders the modal header + body; the shell lives in _ViewVehicleModal.cshtml.
+*@
+@functions {
+    string InspectionClass(string badge) => badge switch
+    {
+        "Flagged" => "vh-badge--flagged",
+        "Passed" => "vh-badge--ok",
+        "Pending" => "vh-badge--pending",
+        _ => "vh-badge--default"
+    };
+
+    string MaintClass(string status) => status switch
+    {
+        "No Issues" => "vh-badge--ok",
+        "Needs Attention" => "vh-badge--attention",
+        "Under Repair" => "vh-badge--repair",
+        _ => "vh-badge--default"
+    };
+}
+
+<div class="modal-header">
+    <h5 class="modal-title vh-modal-title">@Model.VehicleId</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+<div class="modal-body vh-modal-body">
+
+    <!-- Vehicle Profile -->
+    <div class="vh-section-header">Vehicle Profile</div>
+    <div class="vh-section-body">
+        <div class="vh-detail-row"><strong>Plate Number:</strong> @Model.PlateNumber</div>
+        <div class="vh-detail-row"><strong>Route:</strong> @Model.RouteName</div>
+    </div>
+
+    <!-- Inspection Log -->
+    <div class="vh-section-header">
+        <span>Inspection Log</span>
+        @if (Model.HasInspection)
+        {
+            <span class="vh-section-badge @InspectionClass(Model.InspectionBadge)">@Model.InspectionBadge</span>
+        }
+    </div>
+    <div class="vh-section-body">
+        @if (Model.HasInspection)
+        {
+            <div class="vh-detail-row"><strong>Reported By:</strong> @Model.ReportedBy</div>
+            <div class="vh-detail-row"><strong>Time of Report:</strong> @Model.TimeOfReport</div>
+            <div class="vh-detail-row"><strong>Issue:</strong> @Model.Issue</div>
+            <div class="vh-detail-row"><strong>Remarks:</strong></div>
+            <div class="vh-remarks">@(string.IsNullOrWhiteSpace(Model.Remarks) ? "No remarks." : Model.Remarks)</div>
+        }
+        else
+        {
+            <div class="vh-detail-row vh-detail-empty">No inspection logged for this vehicle.</div>
+        }
+    </div>
+
+    <!-- Maintenance Log -->
+    <div class="vh-section-header">
+        <span>Maintenance Log</span>
+        <span class="vh-section-badge @MaintClass(Model.CurrentStatus)">@Model.CurrentStatus</span>
+    </div>
+    <div class="vh-section-body">
+        <div class="vh-detail-row"><strong>Current Status:</strong> @Model.CurrentStatus</div>
+        @if (Model.HasMaintenance)
+        {
+            <div class="vh-detail-row"><strong>Issue Summary:</strong> @Model.IssueSummary</div>
+            <ul class="vh-timeline">
+                @foreach (var entry in Model.MaintenanceEntries)
+                {
+                    <li>@entry</li>
+                }
+            </ul>
+        }
+        else
+        {
+            <div class="vh-detail-row vh-detail-empty">No maintenance history.</div>
+        }
+    </div>
+
+</div>

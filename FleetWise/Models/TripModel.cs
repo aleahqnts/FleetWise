@@ -36,4 +36,9 @@ public class Trip : BaseModel
 
     [Column("estimated_revenue")]
     public decimal EstimatedRevenue { get; set; }
+
+    // Cumulative passengers that boarded this trip (only ever grows). Drives the revenue
+    // estimate so it never drops when passengers alight.
+    [Column("total_boarded")]
+    public int TotalBoarded { get; set; }
 }
