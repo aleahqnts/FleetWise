@@ -1,4 +1,5 @@
 ﻿#nullable disable
+using System.Collections.Generic;
 using Postgrest.Attributes;
 using Postgrest.Models;
 

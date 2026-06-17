@@ -1,7 +1,953 @@
-﻿@*
-    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-*@
+﻿@model FleetWise.ViewModels.DispatchViewModel
 @{
+    ViewData["Title"] = "Dispatch";
+    Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<h3>Dispatch</h3>
+<!-- PAGE TITLE -->
+<h2 class="rp-title">Dispatch</h2>
+
+<!-- STAT CARDS -->
+<div class="dp-stat-grid">
+
+    <div class="rp-stat-card">
+        <div class="rp-stat-header">
+            <span class="rp-stat-icon rp-stat-icon--green">
+                <i class="ti ti-bus"></i>
+            </span>
+            <span class="rp-stat-label">Active Trips</span>
+        </div>
+        <div class="rp-stat-value">@Model.ActiveTrips</div>
+        <div class="rp-stat-sub">Today</div>
+    </div>
+
+    <div class="rp-stat-card">
+        <div class="rp-stat-header">
+            <span class="rp-stat-icon rp-stat-icon--amber">
+                <i class="ti ti-clock-pause"></i>
+            </span>
+            <span class="rp-stat-label">Trips Not Started</span>
+        </div>
+        <div class="rp-stat-value">@Model.TripsNotStarted</div>
+        <div class="rp-stat-sub">Awaiting departure</div>
+    </div>
+
+    <div class="rp-stat-card">
+        <div class="rp-stat-header">
+            <span class="rp-stat-icon rp-stat-icon--red">
+                <i class="ti ti-alert-circle"></i>
+            </span>
+            <span class="rp-stat-label">Unassigned Trips</span>
+        </div>
+        <div class="rp-stat-value">@Model.UnassignedTrips</div>
+        <div class="rp-stat-sub">Needs attention</div>
+    </div>
+
+    <div class="rp-stat-card dp-side-card">
+        <div class="dp-side-row">
+            <div>
+                <div class="rp-stat-label">Flagged Vehicles</div>
+                <div class="rp-stat-value dp-side-value--red">@Model.FlaggedVehicles</div>
+            </div>
+            <div>
+                <div class="rp-stat-label">Unavailable Drivers</div>
+                <div class="rp-stat-value dp-side-value--red">@Model.UnavailableDrivers</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- TOOLBAR -->
+<div class="dp-toolbar">
+    <a href="#" class="dp-btn-primary"><i class="ti ti-plus"></i> Add Trip</a>
+    <button class="dp-btn-secondary"><i class="ti ti-speakerphone"></i> Broadcast Message</button>
+    <div class="dp-search-wrap">
+        <i class="ti ti-search dp-search-icon"></i>
+        <input type="text" id="searchInput" class="dp-search-input" placeholder="Search…" oninput="filterRows()" />
+    </div>
+</div>
+
+<!-- ROUTE BLOCKS -->
+@foreach (var route in Model.Routes)
+{
+    <div class="rp-card rp-card--table dp-route-card" data-route-id="@route.RouteId">
+        <div class="dp-route-header">
+            <span class="dp-route-name">@route.RouteName</span>
+            <div class="dp-route-header-right">
+                @if (route.NeedsAssignment)
+                {
+                    <span class="dp-needs-badge"><span class="dp-needs-dot"></span> Needs Assignment</span>
+                }
+                <button class="dp-btn-route-msg"><i class="ti ti-message-2"></i> Route Message</button>
+            </div>
+        </div>
+
+        <div class="rp-table-wrap">
+            <table class="rp-table dp-table">
+                <colgroup>
+                    <col class="dp-col-shift" />
+                    <col class="dp-col-bus" />
+                    <col class="dp-col-driver" />
+                    <col class="dp-col-status" />
+                    <col class="dp-col-actions" />
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>Shift</th>
+                        <th>Bus ID</th>
+                        <th>Driver</th>
+                        <th>Trip Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!route.Shifts.Any())
+                    {
+                        <tr class="dp-trip-row dp-empty-row" data-trip-status="">
+                            <td colspan="5" class="dp-empty-cell">No trips scheduled for today.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var shift in route.Shifts)
+                        {
+                            var shiftTrips = shift.Trips;
+                            var shiftId = $"{route.RouteId}-{shift.ShiftType}".Replace(" ", "-");
+
+                            @for (int i = 0; i < shiftTrips.Count; i++)
+                            {
+                                var trip = shiftTrips[i];
+
+                                // Vehicle status icon
+                                var (vDotClass, vTooltip) = trip.VehicleStatus switch
+                                {
+                                    "On Trip" => ("dp-dot--green", "On trip"),
+                                    "Ready to Deploy" => ("dp-dot--blue", "Ready to deploy"),
+                                    "Flagged" => ("dp-dot--red", "Flagged"),
+                                    "Pending" => ("dp-dot--yellow", "Pending checklist"),
+                                    _ => ("dp-dot--gray", trip.VehicleStatus)
+                                };
+
+                                // Driver status icon
+                                var (dDotClass, dTooltip) = trip.DriverStatus switch
+                                {
+                                    "On Trip" => ("dp-dot--green", "On trip"),
+                                    "Available" => ("dp-dot--blue", "Available"),
+                                    "Unavailable" => ("dp-dot--red", "Unavailable"),
+                                    _ => ("dp-dot--gray", trip.DriverStatus)
+                                };
+
+                                // Trip status badge
+                                var (badgeClass, badgeLabel) = trip.TripStatus switch
+                                {
+                                    "Active" => ("dp-badge--active", "Active"),
+                                    "Not Yet Started" => ("dp-badge--not-started", "Not Yet Started"),
+                                    "Pending" => ("dp-badge--pending", "Pending"),
+                                    "Assignment Issue" => ("dp-badge--issue", "Assignment Issue"),
+                                    "Completed" => ("dp-badge--completed", "Completed"),
+                                    _ => ("dp-badge--completed", trip.TripStatus)
+                                };
+
+                                <tr class="dp-trip-row"
+                                    data-trip-status="@trip.TripStatus"
+                                    data-shift-id="@shiftId">
+                                    @if (i == 0)
+                                    {
+                                        <td class="dp-shift-cell" rowspan="@shiftTrips.Count">
+                                            @shift.ShiftType<br />
+                                            <span class="dp-shift-time">(@shift.ShiftStartTime – @shift.ShiftEndTime)</span>
+                                        </td>
+                                    }
+                                    <td>
+                                        <div class="dp-status-wrap">
+                                            <span class="dp-status-dot @vDotClass"></span>
+                                            <span class="dp-tooltip">@vTooltip</span>
+                                            <strong>@trip.VehicleId</strong>
+                                            <span class="rp-plate">| @trip.PlateNumber</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="dp-status-wrap">
+                                            <span class="dp-status-dot @dDotClass"></span>
+                                            <span class="dp-tooltip">@dTooltip</span>
+                                            @trip.DriverName
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="dp-badge @badgeClass">@badgeLabel</span>
+                                    </td>
+                                    <td>
+                                        <div class="dp-actions-cell">
+                                            <button class="rp-btn-view" onclick="openTripModal('@trip.TripId')">View</button>
+                                            <button class="dp-btn-reassign" disabled="@(trip.TripStatus == "Active" ? "disabled" : null)">Reassign</button>
+                                            <button class="dp-btn-msg" title="Message"><i class="ti ti-message"></i></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<!-- LEGEND -->
+<div class="rp-card dp-legend-card">
+    <div class="dp-legend-row">
+        <span class="dp-legend-label">Legend</span>
+        <span class="dp-legend-item"><span class="dp-status-dot dp-dot--green"></span> On trip</span>
+        <span class="dp-legend-item"><span class="dp-status-dot dp-dot--blue"></span> Bus: ready to deploy &nbsp;|&nbsp; Driver: available</span>
+        <span class="dp-legend-item"><span class="dp-status-dot dp-dot--yellow"></span> Bus: pending checklist</span>
+        <span class="dp-legend-item"><span class="dp-status-dot dp-dot--red"></span> Bus: flagged &nbsp;|&nbsp; Driver: unavailable</span>
+    </div>
+</div>
+
+<style>
+    :root {
+        --rp-text: #2D3748;
+        --rp-muted: #9AA5B4;
+        --rp-border: #E8ECF0;
+        --rp-bg: #F8F9FA;
+        --rp-white: #FFFFFF;
+        --rp-teal: #4AADA8;
+        --rp-radius: 14px;
+        --rp-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+
+    /* ── Page title ─────────────────────────────────────────── */
+    .rp-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--rp-text);
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 20px;
+    }
+
+    /* ── Topbar filters ─────────────────────────────────────── */
+    .rp-route-wrap, .rp-status-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .rp-filter-label {
+        font-size: 0.88rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--rp-text);
+        font-weight: 500;
+        white-space: nowrap;
+    }
+
+    .rp-select-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .rp-select {
+        appearance: none;
+        padding: 6px 32px 6px 12px;
+        border: 1.5px solid var(--rp-border);
+        border-radius: 10px;
+        font-size: 0.82rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--rp-text);
+        background: var(--rp-bg);
+        cursor: pointer;
+        outline: none;
+        font-weight: 500;
+    }
+
+    .rp-select-arrow {
+        position: absolute;
+        right: 10px;
+        pointer-events: none;
+        color: var(--rp-text);
+        display: flex;
+    }
+
+    /* ── Stat grid ──────────────────────────────────────────── */
+    .dp-stat-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 20px;
+        align-items: stretch;
+    }
+
+    .rp-stat-card {
+        background: var(--rp-white);
+        border: 1px solid var(--rp-border);
+        border-radius: var(--rp-radius);
+        padding: 20px 22px;
+        box-shadow: var(--rp-shadow);
+    }
+
+    .rp-stat-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .rp-stat-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 16px;
+    }
+
+    .rp-stat-icon--green {
+        background: #E8F8EE;
+        color: #27AE60;
+    }
+
+    .rp-stat-icon--red {
+        background: #FEECEC;
+        color: #E74C3C;
+    }
+
+    .rp-stat-icon--amber {
+        background: #FFF8E1;
+        color: #F59E0B;
+    }
+
+    .rp-stat-label {
+        font-size: 0.82rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--rp-muted);
+        font-weight: 500;
+    }
+
+    .rp-stat-value {
+        font-size: 1.85rem;
+        font-weight: 700;
+        color: var(--rp-text);
+        font-family: 'Segoe UI', sans-serif;
+        line-height: 1.1;
+    }
+
+    .rp-stat-sub {
+        font-size: 0.78rem;
+        color: var(--rp-muted);
+        font-family: 'Segoe UI', sans-serif;
+        margin-top: 4px;
+    }
+
+    /* ── Side info card (flagged/unavailable) ──────────────── */
+    .dp-side-card {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .dp-side-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+    }
+
+    .dp-side-value--red {
+        color: #E74C3C;
+    }
+
+    /* ── Toolbar ────────────────────────────────────────────── */
+    .dp-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+    .dp-btn-primary {
+        background: var(--rp-teal);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        padding: 9px 18px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 150ms;
+    }
+
+        .dp-btn-primary:hover {
+            background: #3D938F;
+            color: #fff;
+        }
+
+    .dp-btn-secondary {
+        background: var(--rp-white);
+        border: 1.5px solid var(--rp-border);
+        border-radius: 10px;
+        padding: 9px 18px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        color: var(--rp-text);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: border-color 150ms, color 150ms;
+    }
+
+        .dp-btn-secondary:hover {
+            border-color: var(--rp-teal);
+            color: var(--rp-teal);
+        }
+
+    .dp-search-wrap {
+        margin-left: auto;
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .dp-search-icon {
+        position: absolute;
+        left: 12px;
+        color: var(--rp-muted);
+        font-size: 15px;
+        pointer-events: none;
+    }
+
+    .dp-search-input {
+        padding: 9px 14px 9px 34px;
+        border: 1.5px solid var(--rp-border);
+        border-radius: 10px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--rp-text);
+        background: var(--rp-bg);
+        outline: none;
+        width: 220px;
+        transition: border-color 150ms;
+    }
+
+        .dp-search-input:focus {
+            border-color: var(--rp-teal);
+        }
+
+    /* ── Route card ─────────────────────────────────────────── */
+    .rp-card {
+        background: var(--rp-white);
+        border: 1px solid var(--rp-border);
+        border-radius: var(--rp-radius);
+        padding: 20px 22px;
+        box-shadow: var(--rp-shadow);
+        margin-bottom: 20px;
+    }
+
+    .dp-route-card {
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .dp-route-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 22px;
+        background: #F1F4F8;
+        border-bottom: 1.5px solid var(--rp-border);
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .dp-route-name {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--rp-text);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .dp-route-header-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .dp-needs-badge {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.78rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        color: #E74C3C;
+    }
+
+    .dp-needs-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #E74C3C;
+        flex-shrink: 0;
+    }
+
+    .dp-btn-route-msg {
+        background: var(--rp-white);
+        color: var(--rp-text);
+        border: 1.5px solid var(--rp-border);
+        border-radius: 8px;
+        padding: 6px 16px;
+        font-size: 0.78rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: border-color 150ms, color 150ms;
+    }
+
+        .dp-btn-route-msg:hover {
+            border-color: var(--rp-teal);
+            color: var(--rp-teal);
+        }
+
+    /* ── Table ──────────────────────────────────────────────── */
+    .rp-table-wrap {
+        overflow-x: auto;
+    }
+
+    .rp-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 0.875rem;
+    }
+
+    .dp-table {
+        table-layout: fixed;
+    }
+
+    .rp-table thead tr {
+        border-bottom: 1.5px solid var(--rp-border);
+    }
+
+    .rp-table th {
+        padding: 10px 22px;
+        text-align: left;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--rp-muted);
+        white-space: nowrap;
+    }
+
+    .rp-table td {
+        padding: 13px 22px;
+        color: var(--rp-text);
+        border-bottom: 1px solid var(--rp-border);
+        vertical-align: middle;
+    }
+
+    .rp-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .rp-table tbody tr:hover {
+        background: #FAFBFC;
+    }
+
+    .rp-plate {
+        font-size: 0.75rem;
+        color: var(--rp-muted);
+    }
+
+    .dp-col-shift {
+        width: 16%;
+    }
+
+    .dp-col-bus {
+        width: 22%;
+    }
+
+    .dp-col-driver {
+        width: 20%;
+    }
+
+    .dp-col-status {
+        width: 18%;
+    }
+
+    .dp-col-actions {
+        width: 24%;
+    }
+
+    .dp-shift-cell {
+        color: var(--rp-muted);
+        font-size: 0.8rem;
+        text-align: center;
+        line-height: 1.6;
+        border-right: 1.5px solid var(--rp-border);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .dp-shift-time {
+        font-size: 0.72rem;
+        color: var(--rp-muted);
+    }
+
+    .dp-empty-cell {
+        text-align: center;
+        padding: 28px 22px;
+        color: var(--rp-muted);
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    /* ── Status icons / dots ────────────────────────────────── */
+    .dp-status-wrap {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .dp-status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        cursor: default;
+    }
+
+    .dp-dot--green {
+        background: #27AE60;
+    }
+
+    .dp-dot--blue {
+        background: #3B82F6;
+    }
+
+    .dp-dot--red {
+        background: #E74C3C;
+    }
+
+    .dp-dot--yellow {
+        background: #F59E0B;
+    }
+
+    .dp-dot--gray {
+        background: var(--rp-muted);
+    }
+
+    .dp-tooltip {
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 0;
+        background: var(--rp-text);
+        color: #fff;
+        font-size: 0.72rem;
+        font-family: 'Segoe UI', sans-serif;
+        white-space: nowrap;
+        padding: 4px 10px;
+        border-radius: 6px;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 150ms;
+        z-index: 50;
+    }
+
+    .dp-status-wrap:hover .dp-tooltip {
+        opacity: 1;
+    }
+
+    /* ── Trip status badges ─────────────────────────────────── */
+    .dp-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        font-family: 'Segoe UI', sans-serif;
+        white-space: nowrap;
+    }
+
+    .dp-badge--active {
+        background: #E8F8EE;
+        color: #27AE60;
+    }
+
+    .dp-badge--not-started {
+        background: #EAF3FF;
+        color: #3B82F6;
+    }
+
+    .dp-badge--pending {
+        background: #FFF8E1;
+        color: #F59E0B;
+    }
+
+    .dp-badge--issue {
+        background: #FEECEC;
+        color: #E74C3C;
+    }
+
+    .dp-badge--completed {
+        background: #F0F0F0;
+        color: #6B7280;
+    }
+
+    /* ── Action buttons ─────────────────────────────────────── */
+    .dp-actions-cell {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .rp-btn-view {
+        padding: 6px 18px;
+        border: 1.5px solid var(--rp-border);
+        border-radius: 8px;
+        background: var(--rp-white);
+        font-size: 0.8rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--rp-text);
+        cursor: pointer;
+        font-weight: 500;
+        transition: border-color 180ms, background 180ms;
+    }
+
+        .rp-btn-view:hover {
+            border-color: var(--rp-teal);
+            color: var(--rp-teal);
+        }
+
+    .dp-btn-reassign {
+        background: var(--rp-teal);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 6px 14px;
+        font-size: 0.8rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 150ms;
+    }
+
+        .dp-btn-reassign:hover {
+            background: #3D938F;
+        }
+
+        .dp-btn-reassign:disabled {
+            background: var(--rp-border);
+            color: var(--rp-muted);
+            cursor: not-allowed;
+        }
+
+            .dp-btn-reassign:disabled:hover {
+                background: var(--rp-border);
+            }
+
+    .dp-btn-msg {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        color: var(--rp-muted);
+        font-size: 1rem;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+        transition: color 150ms;
+    }
+
+        .dp-btn-msg:hover {
+            color: var(--rp-teal);
+        }
+
+    /* ── Legend ─────────────────────────────────────────────── */
+    .dp-legend-card {
+        margin-bottom: 0;
+        padding: 14px 22px;
+    }
+
+    .dp-legend-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        align-items: center;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .dp-legend-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--rp-muted);
+        font-weight: 700;
+    }
+
+    .dp-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.8rem;
+        color: var(--rp-text);
+    }
+
+    @@media (max-width: 900px) {
+        .dp-stat-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @@media (max-width: 640px) {
+        .dp-stat-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+@section TopbarContent {
+    <div class="rp-route-wrap">
+        <span class="rp-filter-label">Route:</span>
+        <div class="rp-select-wrap">
+            <select class="rp-select" id="routeFilter">
+                <option value="0">All Routes</option>
+                @foreach (var route in Model.Routes)
+                {
+                    <option value="@route.RouteId">@route.RouteName</option>
+                }
+            </select>
+            <span class="rp-select-arrow">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
+            </span>
+        </div>
+    </div>
+
+    <div class="rp-status-wrap">
+        <span class="rp-filter-label">Status:</span>
+        <div class="rp-select-wrap">
+            <select class="rp-select" id="statusFilter">
+                <option value="">All</option>
+                <option value="Active">Active</option>
+                <option value="Not Yet Started">Not Yet Started</option>
+                <option value="Pending">Pending</option>
+                <option value="Assignment Issue">Assignment Issue</option>
+                <option value="Completed">Completed</option>
+            </select>
+            <span class="rp-select-arrow">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
+            </span>
+        </div>
+    </div>
+}
+
+<script>
+    function applyFilters() {
+        const q = document.getElementById('searchInput').value.toLowerCase();
+        const routeId = document.getElementById('routeFilter').value;
+        const status = document.getElementById('statusFilter').value;
+
+        document.querySelectorAll('.dp-route-card').forEach(card => {
+            const cardRouteId = card.dataset.routeId;
+            const routeMatches = routeId === '0' || routeId === '' || cardRouteId === routeId;
+
+            // Routes with no trips today
+            const emptyRow = card.querySelector('.dp-empty-row');
+            if (emptyRow) {
+                const showEmpty = routeMatches && status === '' && q === '';
+                card.style.display = showEmpty ? '' : 'none';
+                emptyRow.style.display = showEmpty ? '' : 'none';
+                return;
+            }
+
+            const rows = Array.from(card.querySelectorAll('.dp-trip-row'));
+            let anyVisibleInCard = false;
+
+            // Group rows by shift id, preserving order
+            const shiftGroups = {};
+            const shiftOrder = [];
+            rows.forEach(row => {
+                const sid = row.dataset.shiftId;
+                if (!shiftGroups[sid]) {
+                    shiftGroups[sid] = [];
+                    shiftOrder.push(sid);
+                }
+                shiftGroups[sid].push(row);
+            });
+
+            shiftOrder.forEach(sid => {
+                const groupRows = shiftGroups[sid];
+
+                // Step 1: Always restore shift cell to the first row of the group
+                // so we start from a clean, predictable state each time filters run.
+                let shiftCell = null;
+                groupRows.forEach(row => {
+                    const cell = row.querySelector('.dp-shift-cell');
+                    if (cell) shiftCell = cell;
+                });
+                if (shiftCell && !groupRows[0].querySelector('.dp-shift-cell')) {
+                    groupRows[0].insertBefore(shiftCell, groupRows[0].firstChild);
+                }
+
+                // Step 2: Determine visibility for each row
+                const visibility = groupRows.map(row => {
+                    const rowStatus = row.dataset.tripStatus || '';
+                    const statusMatches = status === '' || rowStatus === status;
+                    const textMatches = q === '' || row.textContent.toLowerCase().includes(q);
+                    return routeMatches && statusMatches && textMatches;
+                });
+
+                const visibleCount = visibility.filter(Boolean).length;
+
+                if (visibleCount === 0) {
+                    // Hide all rows in this shift, including the one holding the shift cell
+                    groupRows.forEach(row => { row.style.display = 'none'; });
+                    return;
+                }
+
+                anyVisibleInCard = true;
+
+                // Step 3: Move shift cell to first visible row if it isn't already there
+                const firstVisibleIndex = visibility.indexOf(true);
+                const firstVisibleRow = groupRows[firstVisibleIndex];
+                if (shiftCell && !firstVisibleRow.querySelector('.dp-shift-cell')) {
+                    firstVisibleRow.insertBefore(shiftCell, firstVisibleRow.firstChild);
+                }
+
+                // Step 4: Update rowspan to match visible count
+                if (shiftCell) shiftCell.setAttribute('rowspan', visibleCount);
+
+                // Step 5: Show/hide each row
+                groupRows.forEach((row, idx) => {
+                    row.style.display = visibility[idx] ? '' : 'none';
+                });
+            });
+
+            card.style.display = (routeMatches && anyVisibleInCard) ? '' : 'none';
+        });
+    }
+
+    function filterRows() { applyFilters(); }
+
+    document.getElementById('routeFilter').addEventListener('change', applyFilters);
+    document.getElementById('statusFilter').addEventListener('change', applyFilters);
+</script>
+
+@* ── Trip Detail Modal ──────────────────────────────────────── *@
+@await Html.PartialAsync("_TripDetailModal")
