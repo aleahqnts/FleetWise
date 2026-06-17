@@ -5,12 +5,10 @@ using FleetWise.Models;
 namespace FleetWise.Services;
 
 /// <summary>
-/// Development-only stand-in producer for live telemetry (PLAN.md Block 9 / §2.3).
-/// Every 5 seconds it advances each Active trip along its route geometry and inserts
-/// one ordinary row into the Supabase <c>telemetry_data</c> table — the exact table
-/// real IoT hardware or Chester's mobile app will later write to. The read path
-/// (FleetMapController) never knows the data is simulated; cut-over = delete one
-/// registration line in Program.cs (see Step 9.2).
+/// Development-only stand-in producer for live telemetry. Every 5 seconds it advances
+/// each Active trip along its route geometry and inserts one row into the Supabase
+/// <c>telemetry_data</c> table — the same table real hardware would write to, so the
+/// read path never depends on the data being simulated.
 /// </summary>
 public class TelemetrySimulator : BackgroundService
 {
@@ -27,11 +25,10 @@ public class TelemetrySimulator : BackgroundService
     private readonly ILogger<TelemetrySimulator> _logger;
     private readonly Random _rng = new();
 
-    // Route geometry never changes mid-run, so it's cached after first read (§9.1).
+    // Route geometry never changes mid-run, so it's cached after the first read.
     private readonly Dictionary<int, RouteGeometry> _geometryCache = new();
 
-    // Per-trip simulation state lives in memory; on restart buses resume from the
-    // route start, which is fine for a simulator (§9.1).
+    // Per-trip simulation state lives in memory; on restart buses resume from the route start.
     private readonly Dictionary<string, TripState> _states = new();
 
     // A driver to attach to auto-created trips (driver_id is NOT NULL); resolved once.
@@ -45,9 +42,8 @@ public class TelemetrySimulator : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // The Supabase.Client is a singleton, so it is used directly here. There are no
-        // *scoped* services to resolve in a tick, so no per-tick DI scope is created —
-        // the captive-dependency hazard §9.1 warns about simply doesn't arise.
+        // The Supabase.Client is a singleton used directly here; there are no scoped
+        // services to resolve per tick, so no DI scope is created.
         using var timer = new PeriodicTimer(TickInterval);
 
         while (!stoppingToken.IsCancellationRequested &&
@@ -73,8 +69,7 @@ public class TelemetrySimulator : BackgroundService
     {
         // Keep the registry and the map in agreement: a vehicle marked 'On Trip' should
         // actually be running. Auto-create an Active trip for any On-Trip vehicle that
-        // lacks one, so every On-Trip bus moves (Development convenience — in production
-        // real dispatch / the driver app opens trips). See PLAN §2.3 / Block 9.
+        // lacks one, so every On-Trip bus moves.
         await EnsureActiveTripsForOnTripVehiclesAsync();
 
         var tripsResponse = await _supabase

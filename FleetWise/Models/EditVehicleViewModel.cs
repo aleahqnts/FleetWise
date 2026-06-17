@@ -3,13 +3,12 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace FleetWise.Models
 {
-    // Backs the Edit Vehicle modal (Block 17): the editable Vehicle Profile plus the latest
-    // Maintenance Log's Change Status / Verified by. Carries its own dropdown + display data so
-    // the partial is self-sufficient whether it's fetched (GET EditForm) or re-rendered on a
-    // failed POST.
+    // Backs the Edit Vehicle modal: the editable Vehicle Profile plus the latest Maintenance
+    // Log's Change Status / Verified by. Carries its own dropdown + display data so the partial
+    // is self-sufficient whether it's fetched (GET EditForm) or re-rendered on a failed POST.
     public class EditVehicleViewModel
     {
-        // Read-only — the PK can't change (mockup greys it out).
+        // Read-only — the PK can't change.
         [Display(Name = "Vehicle ID")]
         public string VehicleId { get; set; } = string.Empty;
 

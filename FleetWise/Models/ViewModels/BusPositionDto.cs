@@ -3,9 +3,8 @@ using System.Text.Json.Serialization;
 namespace FleetWise.Models.ViewModels;
 
 /// <summary>
-/// The purpose-built contract the Fleet Map consumes (PLAN.md Block 10 / §2.7 Interface
-/// Segregation): one live bus, with occupancy % and estimated revenue computed
-/// server-side so every consumer (markers, tooltip, side panel) shows identical numbers.
+/// The contract the Fleet Map consumes: one live bus, with occupancy % and estimated revenue
+/// computed server-side so every consumer (markers, tooltip, side panel) shows identical numbers.
 /// </summary>
 public class BusPositionDto
 {

@@ -11,7 +11,7 @@ namespace FleetWise.Controllers
     {
         private const StringComparison OIC = StringComparison.OrdinalIgnoreCase;
 
-        // Fixed filter vocabularies (mirror the registry mockup's badge sets, §2.8).
+        // Fixed filter vocabularies for the Status and Issues dropdowns.
         private static readonly string[] StatusFilterOptions =
             { "Ready to Deploy", "On Trip", "Pending", "Flagged" };
 
@@ -19,7 +19,7 @@ namespace FleetWise.Controllers
             { "No Issues", "Needs Attention", "Under Repair" };
 
         // The Edit modal's "Change Status" dropdown — exactly the maintenance_status_enum
-        // labels (§2.8). Selecting "No Issues" is the resolve action.
+        // labels. Selecting "No Issues" is the resolve action.
         private static readonly string[] MaintenanceStatusOptions =
             { "Needs Attention", "Under Repair", "No Issues" };
 
@@ -38,7 +38,7 @@ namespace FleetWise.Controllers
 
             var vm = new VehiclesIndexViewModel
             {
-                // Rows are loaded async via VehicleRows so navigation feels instant (Block 2 refinement).
+                // Rows are loaded async via VehicleRows so navigation feels instant.
                 Rows = new List<VehicleListItemViewModel>(),
 
                 TotalVehicles = vehicles.Count,
@@ -94,7 +94,7 @@ namespace FleetWise.Controllers
                 PlateNumber = model.PlateNumber.Trim(),
                 VehicleType = model.VehicleType.Trim(),
                 RouteId = model.RouteId,
-                Capacity = 50,                         // sensible default — not on the mockup (§Block 15.2)
+                Capacity = 50,                         // sensible default — not captured by the form
                 VehicleStatus = "Ready to Deploy",     // new units start deployable (vehicle_status_enum label)
                 CreatedAt = PhClock.Now,
             };
@@ -105,9 +105,8 @@ namespace FleetWise.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        // Fetch-partial (Block 2 addendum): fresh per-vehicle data for the View Details modal,
-        // no heavy page payload. Combines the profile, the latest driver inspection, and the
-        // maintenance history.
+        // Fetch-partial: fresh per-vehicle data for the View Details modal, no heavy page
+        // payload. Combines the profile, the latest driver inspection, and the maintenance history.
         [HttpGet]
         public async Task<IActionResult> Details(string id)
         {
@@ -215,7 +214,7 @@ namespace FleetWise.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // "Resolve" = the operator set the maintenance status to "No Issues" (§2.8 / Step 17.4).
+            // "Resolve" = the operator set the maintenance status to "No Issues".
             var resolving = string.Equals(model.MaintenanceStatus?.Trim(), "No Issues", OIC);
 
             // Update the maintenance log the modal was editing (a vehicle may have none).
@@ -243,8 +242,8 @@ namespace FleetWise.Controllers
 
             if (resolving)
             {
-                // "Update the Last Maintenance Date when a bus returns from the shop" (Step 17.4),
-                // and clear a Flagged badge so the registry reflects the fix.
+                // Stamp the last maintenance date and clear a Flagged badge so the registry
+                // reflects the fix.
                 vehicle.LastMaintenanceDate = PhClock.Today;
                 if (string.Equals(vehicle.VehicleStatus?.Trim(), "Flagged", OIC))
                     vehicle.VehicleStatus = "Ready to Deploy";
@@ -325,7 +324,7 @@ namespace FleetWise.Controllers
         }
 
         // Re-render the registry with the Add Vehicle modal re-opened and validation errors shown
-        // (PRG can't carry ModelState, so a failed POST returns the view directly — mirrors Block 3).
+        // (PRG can't carry ModelState, so a failed POST returns the view directly).
         private async Task<IActionResult> ReRenderIndexAsync(AddVehicleViewModel addModel)
         {
             var (vehicles, routes, _) = await LoadVehicleDataAsync();
@@ -432,7 +431,7 @@ namespace FleetWise.Controllers
                 .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
                 .ToList();
 
-        // Vehicle Type dropdown: the fleet's only two types (§VehicleTypeOptions).
+        // Vehicle Type dropdown: the fleet's only two types (VehicleTypeOptions).
         private static List<SelectListItem> BuildTypeOptions() =>
             VehicleTypeOptions
                 .Select(t => new SelectListItem { Value = t, Text = t })
@@ -457,9 +456,9 @@ namespace FleetWise.Controllers
             return open is null ? "No Issues" : NormalizeMaintenance(open.MaintenanceStatus);
         }
 
-        // The DB's maintenance_status vocabulary isn't fixed; map it onto the mockup's two
-        // "open" badges. An unresolved log always means there's something to act on, so an
-        // unknown/blank status defaults to "Needs Attention".
+        // Map the stored maintenance_status onto the two "open" badges. An unresolved log
+        // always means there's something to act on, so an unknown/blank status defaults to
+        // "Needs Attention".
         private static string NormalizeMaintenance(string? maintenanceStatus)
         {
             var s = (maintenanceStatus ?? "").Trim();
@@ -490,8 +489,8 @@ namespace FleetWise.Controllers
             return failed.Count > 0 ? string.Join(", ", failed) : "None";
         }
 
-        // checklist_status_enum has no "Flagged" value, so the mockup's red Flagged badge is
-        // derived: Failed → Flagged; otherwise show the raw status (Passed / Pending).
+        // checklist_status_enum has no "Flagged" value, so the red Flagged badge is derived:
+        // Failed → Flagged; otherwise show the raw status (Passed / Pending).
         private static string DeriveInspectionBadge(string checklistStatus)
         {
             var s = (checklistStatus ?? "").Trim();
