@@ -16,7 +16,7 @@ else
 
         @if (!items.Any())
         {
-            <p class="muted">No notifications yet.</p>
+            <p class="muted">No messages in the last 2 weeks.</p>
         }
         else
         {
@@ -25,18 +25,15 @@ else
                 <h2 class="ngroup">@g.Key</h2>
                 @foreach (var n in g)
                 {
-                    <div class="ncard @(n.IsRead ? "" : "unread")" @onclick="@(() => Toggle(n))">
-                        <span class="nicon @IconClass(n.Type)">
-                            @switch (n.Type)
+                    <div class="ncard @(IsUnread(n) ? "unread" : "")" @onclick="@(() => Toggle(n))">
+                        <span class="nicon @IconClass(n)">
+                            @switch (Aud(n))
                             {
-                                case "completed":
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.5 2.5 5-6" /></svg>
+                                case "all":
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1z" /><path d="M15 8a5 5 0 0 1 0 8" /></svg>
                                     break;
-                                case "assigned":
+                                case "route":
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z" /><circle cx="12" cy="10" r="2.5" /></svg>
-                                    break;
-                                case "alert":
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></svg>
                                     break;
                                 default:
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
@@ -44,18 +41,25 @@ else
                             }
                         </span>
                         <div class="nbody">
-                            <p class="nt">@n.Title</p>
-                            @if (expandedId == n.NotificationId)
+                            <div class="nhead">
+                                <span class="nscope @ScopeClass(n)">@ScopeLabel(n)</span>
+                                @if (IsHighPriority(n))
+                                {
+                                    <span class="nprio">High priority</span>
+                                }
+                            </div>
+                            <p class="nt">@n.Subject</p>
+                            @if (expandedId == n.MessageId)
                             {
                                 <p class="np full">@n.Body</p>
-                                <p class="ntime">@n.CreatedAt.ToString("MMM d, yyyy · h:mm tt")</p>
+                                <p class="ntime">@PhTime.Raw(n.CreatedAt).ToString("MMM d, yyyy · h:mm tt")</p>
                             }
                             else
                             {
                                 <p class="np">@n.Body</p>
                             }
                         </div>
-                        @if (!n.IsRead)
+                        @if (IsUnread(n))
                         {
                             <span class="ndot"></span>
                         }
@@ -68,16 +72,39 @@ else
 
 @code {
     private bool loading = true;
-    private List<NotificationModel> items = new();
+    private List<MessageModel> items = new();
 
-    private IEnumerable<IGrouping<string, NotificationModel>> Grouped => items.GroupBy(n => Label(n.CreatedAt));
+    private IEnumerable<IGrouping<string, MessageModel>> Grouped =>
+        items.GroupBy(n => Label(PhTime.Raw(n.CreatedAt)));
 
-    private static string IconClass(string type) => type switch
+    private static string Aud(MessageModel n) => (n.TargetAudience ?? "").ToLowerInvariant();
+
+    // unread dot + mark-read only apply to driver-targeted msgs (1 recipient)
+    private static bool IsUnread(MessageModel n) => Aud(n) == "driver" && !n.IsRead;
+
+    private static bool IsHighPriority(MessageModel n) =>
+        string.Equals(n.Priority, "high", StringComparison.OrdinalIgnoreCase);
+
+    private static string ScopeLabel(MessageModel n) => Aud(n) switch
     {
-        "completed" => "completed",
-        "assigned" => "assigned",
-        "alert" => "alert",
-        _ => "message"
+        "all"   => "Broadcast · All drivers",
+        "route" => "Route message",
+        _       => "Direct message"
+    };
+
+    private static string ScopeClass(MessageModel n) => Aud(n) switch
+    {
+        "all"   => "scope-all",
+        "route" => "scope-route",
+        _       => "scope-driver"
+    };
+
+    // icon always matches audience (uniform); priority shown via the red tag
+    private static string IconClass(MessageModel n) => Aud(n) switch
+    {
+        "all"   => "completed",
+        "route" => "assigned",
+        _       => "message"
     };
 
     private static string Label(DateTime d)
@@ -91,20 +118,20 @@ else
     protected override async Task OnInitializedAsync()
     {
         if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
-        items = await Data.GetNotificationsAsync(Session.CurrentUser!.UserId);
+        items = await Data.GetMessagesAsync(Session.CurrentUser!.UserId);
         loading = false;
     }
 
     private long? expandedId;
 
-    private async Task Toggle(NotificationModel n)
+    private async Task Toggle(MessageModel n)
     {
-        expandedId = expandedId == n.NotificationId ? null : n.NotificationId;
-        if (!n.IsRead)
+        expandedId = expandedId == n.MessageId ? null : n.MessageId;
+        if (IsUnread(n))
         {
             n.IsRead = true;
-            try { await Data.MarkNotificationReadAsync(n.NotificationId); }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Notif.Read] {ex}"); }
+            try { await Data.MarkMessageReadAsync(n.MessageId); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Msg.Read] {ex}"); }
         }
     }
 
@@ -119,7 +146,7 @@ else
     }
     [JSInvokable] public async Task Refresh()
     {
-        items = await Data.GetNotificationsAsync(Session.CurrentUser!.UserId);
+        items = await Data.GetMessagesAsync(Session.CurrentUser!.UserId);
         StateHasChanged();
     }
     public void Dispose() => _ptrRef?.Dispose();
