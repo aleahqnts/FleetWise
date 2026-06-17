@@ -1,4 +1,5 @@
 ﻿using FleetWise.Models;
+using FleetWise.Services;
 using FleetWise.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,7 +21,7 @@ namespace FleetWise.Controllers
         public async Task<IActionResult> Index()
         {
             // --- Always scope dispatch to today's date ---
-            var today = DateTime.Today.ToString("yyyy-MM-dd");
+            var today = PhClock.Today.ToString("yyyy-MM-dd");
 
             // --- Fetch all data in parallel ---
             var tripsTask = _supabase.From<Trip>()
@@ -79,7 +80,10 @@ namespace FleetWise.Controllers
                         ? "Ready to Deploy"
                         : "Flagged";
 
-                var driverStatus = driver == null ? "Unavailable" : driverAvail;
+                // Treat null/missing availability as Available
+                var driverStatus = driver == null
+                    ? "Unavailable"
+                    : string.IsNullOrEmpty(driverAvail) ? "Available" : driverAvail;
 
                 var tripStatus = (vehicleStatus == "Flagged" || driverStatus == "Unavailable")
                     ? "Assignment Issue"
@@ -90,7 +94,12 @@ namespace FleetWise.Controllers
                 return (vehicle, driver, vehicleStatus, driverStatus, tripStatus);
             }
 
-            var resolved = trips.ToDictionary(t => t.TripId, Resolve);
+            var resolved = new Dictionary<string, (Vehicle Vehicle, UserModel Driver, string VehicleStatus, string DriverStatus, string TripStatus)>();
+            foreach (var trip in trips)
+            {
+                try { resolved[trip.TripId] = Resolve(trip); }
+                catch { resolved[trip.TripId] = (null, null, "Pending", "Available", "Pending"); }
+            }
 
             // --- Stats ---
             int activeTrips = trips.Count(t => resolved[t.TripId].TripStatus == "Active");
@@ -252,7 +261,6 @@ namespace FleetWise.Controllers
                 ShiftEndTime = DateTime.Today.Add(trip.ShiftEndTime).ToString("h:mm tt"),
                 RouteName = route?.RouteName ?? "—",
                 VehicleId = trip.VehicleId,
-                VehicleType = "Bus", // vehicle_type column dropped — every unit is a bus
                 PlateNumber = vehicle?.PlateNumber ?? "—",
                 VehicleStatus = vehicleStatus,
                 DriverName = driver != null ? $"{driver.FirstName} {driver.LastName}" : "Unassigned",
@@ -293,6 +301,351 @@ namespace FleetWise.Controllers
             return Json(vm);
         }
 
+        // ── GET options for Add Trip modal ────────────────────────────
+        [HttpGet]
+        public async Task<IActionResult> GetAddTripOptions()
+        {
+            var today = PhClock.Today.ToString("yyyy-MM-dd");
+
+            var tripsTask = _supabase.From<Trip>()
+                                        .Filter("date", Operator.Equals, today)
+                                        .Get();
+            var vehiclesTask = _supabase.From<Vehicle>().Get();
+            var routesTask = _supabase.From<BusRoute>().Get();
+            var driversTask = _supabase.From<UserModel>()
+                                        .Filter("role_id", Operator.Equals, "2")
+                                        .Filter("account_status", Operator.Equals, "Activated")
+                                        .Get();
+            var availTask = _supabase.From<DriverAvailability>().Get();
+
+            await Task.WhenAll(tripsTask, vehiclesTask, routesTask, driversTask, availTask);
+
+            var todayTrips = tripsTask.Result.Models;
+            var vehicles = vehiclesTask.Result.Models;
+            var routes = routesTask.Result.Models;
+            var drivers = driversTask.Result.Models;
+            var availability = availTask.Result.Models
+                                        .ToDictionary(a => a.UserId, a => a.AvailabilityStatus);
+
+            // Build per-vehicle booked shifts for today
+            var vehicleBookedShifts = todayTrips
+                .GroupBy(t => t.VehicleId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(t => t.ShiftType).Distinct().ToList()
+                );
+
+            // Build per-driver booked shifts for today
+            var driverBookedShifts = todayTrips
+                .GroupBy(t => t.DriverId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(t => t.ShiftType).Distinct().ToList()
+                );
+
+            var vm = new AddTripOptionsViewModel
+            {
+                Routes = routes
+                    .OrderBy(r => r.RouteId)
+                    .Select(r => new RouteOption
+                    {
+                        RouteId = r.RouteId,
+                        RouteName = r.RouteName
+                    }).ToList(),
+
+                // Only vehicles that are NOT Flagged
+                Vehicles = vehicles
+                    .Where(v => v.VehicleStatus != "Flagged")
+                    .OrderBy(v => v.VehicleId)
+                    .Select(v => new VehicleOption
+                    {
+                        VehicleId = v.VehicleId,
+                        PlateNumber = v.PlateNumber,
+                        BookedShifts = vehicleBookedShifts.TryGetValue(v.VehicleId, out var vs)
+                                        ? vs : new()
+                    }).ToList(),
+
+                // Only drivers who are Available (not Unavailable)
+                Drivers = drivers
+                    .Where(d => !availability.TryGetValue(d.UserId, out var s) || s != "Unavailable")
+                    .OrderBy(d => d.FirstName)
+                    .Select(d => new DriverOption
+                    {
+                        DriverId = d.UserId,
+                        DriverName = $"{d.FirstName} {d.LastName}",
+                        BookedShifts = driverBookedShifts.TryGetValue(d.UserId, out var ds)
+                                        ? ds : new()
+                    }).ToList()
+            };
+
+            return Json(vm);
+        }
+
+        // ── POST create trip ──────────────────────────────────────────
+        [HttpPost]
+        public async Task<IActionResult> CreateTrip([FromBody] CreateTripRequest req)
+        {
+            if (req == null
+             || string.IsNullOrEmpty(req.ShiftType)
+             || string.IsNullOrEmpty(req.VehicleId)
+             || req.RouteId == 0
+             || req.DriverId == 0)
+                return BadRequest("Missing required fields.");
+
+            // Parse shift times
+            if (!TimeSpan.TryParse(req.ShiftStartTime, out var startTime)
+             || !TimeSpan.TryParse(req.ShiftEndTime, out var endTime))
+                return BadRequest("Invalid shift times.");
+
+            var newTrip = new Trip
+            {
+                // Specify UTC so Postgrest serialises as yyyy-MM-dd, matching the Index filter
+                Date = DateTime.SpecifyKind(PhClock.Today, DateTimeKind.Utc),
+                ShiftType = req.ShiftType,
+                ShiftStartTime = startTime,
+                ShiftEndTime = endTime,
+                RouteId = req.RouteId,
+                VehicleId = req.VehicleId,
+                DriverId = req.DriverId,
+                TripStatus = "Not Yet Started",
+                EstimatedRevenue = 0
+            };
+
+            var insertResult = await _supabase.From<Trip>().Insert(newTrip);
+            var inserted = insertResult.Models.FirstOrDefault();
+            await SyncTripStatuses();
+
+            return Ok(new { tripId = inserted?.TripId });
+        }
+
+
+        // ── GET options for Reassign Trip modal ───────────────────────
+        [HttpGet]
+        public async Task<IActionResult> GetReassignOptions(string tripId)
+        {
+            if (string.IsNullOrEmpty(tripId))
+                return BadRequest("Trip ID is required.");
+
+            var today = PhClock.Today.ToString("yyyy-MM-dd");
+
+            // Fetch the trip being reassigned so we know its shift
+            var tripResp = await _supabase.From<Trip>()
+                .Filter("trip_id", Operator.Equals, tripId)
+                .Get();
+            var trip = tripResp.Models.FirstOrDefault();
+            if (trip == null) return NotFound("Trip not found.");
+
+            var tripsTask = _supabase.From<Trip>().Filter("date", Operator.Equals, today).Get();
+            var vehiclesTask = _supabase.From<Vehicle>().Get();
+            var driversTask = _supabase.From<UserModel>()
+                                        .Filter("role_id", Operator.Equals, "2")
+                                        .Filter("account_status", Operator.Equals, "Activated")
+                                        .Get();
+            var availTask = _supabase.From<DriverAvailability>().Get();
+            var routeTask = _supabase.From<BusRoute>()
+                                        .Filter("route_id", Operator.Equals, trip.RouteId.ToString())
+                                        .Get();
+
+            await Task.WhenAll(tripsTask, vehiclesTask, driversTask, availTask, routeTask);
+
+            var todayTrips = tripsTask.Result.Models;
+            var vehicles = vehiclesTask.Result.Models;
+            var drivers = driversTask.Result.Models;
+            var availability = availTask.Result.Models.ToDictionary(a => a.UserId, a => a.AvailabilityStatus);
+            var route = routeTask.Result.Models.FirstOrDefault();
+
+            // Vehicles already in this shift (excluding the trip being reassigned)
+            var vehiclesInShift = todayTrips
+                .Where(t => t.TripId != tripId && t.ShiftType == trip.ShiftType)
+                .Select(t => t.VehicleId)
+                .ToHashSet();
+
+            // Drivers already in this shift (excluding the trip being reassigned)
+            var driversInShift = todayTrips
+                .Where(t => t.TripId != tripId && t.ShiftType == trip.ShiftType)
+                .Select(t => t.DriverId)
+                .ToHashSet();
+
+            // Available vehicles: not Flagged AND not already in this shift
+            // Always include the trip's current vehicle so it appears as the default
+            var availableVehicles = vehicles
+                .Where(v => v.VehicleStatus != "Flagged" && (!vehiclesInShift.Contains(v.VehicleId) || v.VehicleId == trip.VehicleId))
+                .OrderBy(v => v.VehicleId)
+                .Select(v => new
+                {
+                    vehicleId = v.VehicleId,
+                    plateNumber = v.PlateNumber,
+                    status = v.VehicleStatus
+                });
+
+            // Available drivers: not Unavailable AND not already in this shift
+            // Always include the trip's current driver so they appear as the default
+            var availableDrivers = drivers
+                .Where(d => (!availability.TryGetValue(d.UserId, out var s) || s != "Unavailable")
+                         && (!driversInShift.Contains(d.UserId) || d.UserId == trip.DriverId))
+                .OrderBy(d => d.LastName)
+                .Select(d => new
+                {
+                    driverId = d.UserId,
+                    driverName = $"{d.FirstName} {d.LastName}"
+                });
+
+            return Json(new
+            {
+                tripInfo = new
+                {
+                    tripId = trip.TripId,
+                    shiftType = trip.ShiftType,
+                    shiftStart = DateTime.Today.Add(trip.ShiftStartTime).ToString("h:mm tt"),
+                    shiftEnd = DateTime.Today.Add(trip.ShiftEndTime).ToString("h:mm tt"),
+                    routeName = route?.RouteName ?? "—",
+                    tripStatus = trip.TripStatus,
+                    currentVehicleId = trip.VehicleId,
+                    currentDriverId = trip.DriverId
+                },
+                vehicles = availableVehicles,
+                drivers = availableDrivers
+            });
+        }
+
+        // ── POST reassign trip ────────────────────────────────────────
+        [HttpPost]
+        public async Task<IActionResult> ReassignTrip([FromBody] ReassignTripRequest req)
+        {
+            if (req == null || string.IsNullOrEmpty(req.TripId))
+                return BadRequest("Trip ID is required.");
+
+            var tripResp = await _supabase.From<Trip>()
+                .Filter("trip_id", Operator.Equals, req.TripId)
+                .Get();
+            var trip = tripResp.Models.FirstOrDefault();
+            if (trip == null) return NotFound("Trip not found.");
+
+            // Only update what was explicitly changed
+            if (!string.IsNullOrEmpty(req.VehicleId))
+                trip.VehicleId = req.VehicleId;
+
+            if (req.DriverId.HasValue && req.DriverId.Value > 0)
+                trip.DriverId = req.DriverId.Value;
+
+            // Use Update with filter to avoid inserting a duplicate row
+            await _supabase.From<Trip>()
+                .Filter("trip_id", Operator.Equals, req.TripId)
+                .Set(t => t.VehicleId, trip.VehicleId)
+                .Set(t => t.DriverId, trip.DriverId)
+                .Update();
+
+            await SyncTripStatuses();
+
+            return Ok(new { tripId = trip.TripId });
+        }
+
+        // ── GET driver count (all routes, or filtered by routeId) ─────
+        [HttpGet]
+        public async Task<IActionResult> GetDriverCount(int? routeId)
+        {
+            var today = PhClock.Today.ToString("yyyy-MM-dd");
+
+            if (routeId.HasValue)
+            {
+                // Count distinct drivers assigned to this route today
+                var trips = await _supabase.From<Trip>()
+                    .Filter("date", Operator.Equals, today)
+                    .Filter("route_id", Operator.Equals, routeId.Value.ToString())
+                    .Get();
+
+                var driverIds = trips.Models.Select(t => t.DriverId).Distinct().ToList();
+                return Json(new { count = driverIds.Count });
+            }
+            else
+            {
+                var drivers = await _supabase.From<UserModel>()
+                    .Filter("role_id", Operator.Equals, "2")
+                    .Filter("account_status", Operator.Equals, "Activated")
+                    .Get();
+
+                return Json(new { count = drivers.Models.Count });
+            }
+        }
+
+        // ── POST broadcast message to all drivers ─────────────────────
+        [HttpPost]
+        public async Task<IActionResult> BroadcastMessage([FromBody] BroadcastMessageRequest req)
+        {
+            if (req == null || string.IsNullOrWhiteSpace(req.Body))
+                return BadRequest("Message body is required.");
+
+            var senderIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            int.TryParse(senderIdClaim, out var senderId);
+
+            await _supabase.From<Message>().Insert(new Message
+            {
+                SenderId = senderId,
+                TargetAudience = "All",
+                TargetId = null,
+                Subject = req.Subject?.Trim(),
+                Body = req.Body.Trim(),
+                Priority = req.Priority ?? "Normal",
+                CreatedAt = DateTime.UtcNow
+            });
+
+            return Ok();
+        }
+
+        // ── POST route message (all drivers on a route) ───────────────
+        [HttpPost]
+        public async Task<IActionResult> SendRouteMessage([FromBody] RouteMessageRequest req)
+        {
+            if (req == null || string.IsNullOrWhiteSpace(req.Body) || req.RouteId == 0)
+                return BadRequest("Route ID and message body are required.");
+
+            var senderIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            int.TryParse(senderIdClaim, out var senderId);
+
+            await _supabase.From<Message>().Insert(new Message
+            {
+                SenderId = senderId,
+                TargetAudience = "Route",
+                TargetId = req.RouteId.ToString(),
+                Subject = req.Subject?.Trim(),
+                Body = req.Body.Trim(),
+                Priority = req.Priority ?? "Normal",
+                CreatedAt = DateTime.UtcNow
+            });
+
+            return Ok();
+        }
+
+        // ── POST trip message (single driver on a trip) ───────────────
+        [HttpPost]
+        public async Task<IActionResult> SendTripMessage([FromBody] TripMessageRequest req)
+        {
+            if (req == null || string.IsNullOrWhiteSpace(req.Body) || string.IsNullOrEmpty(req.TripId))
+                return BadRequest("Trip ID and message body are required.");
+
+            // Resolve the driver ID from the trip
+            var tripResp = await _supabase.From<Trip>()
+                .Filter("trip_id", Operator.Equals, req.TripId)
+                .Get();
+            var trip = tripResp.Models.FirstOrDefault();
+            if (trip == null) return NotFound("Trip not found.");
+
+            var senderIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            int.TryParse(senderIdClaim, out var senderId);
+
+            await _supabase.From<Message>().Insert(new Message
+            {
+                SenderId = senderId,
+                TargetAudience = "Driver",
+                TargetId = trip.DriverId.ToString(),
+                Subject = req.Subject?.Trim(),
+                Body = req.Body.Trim(),
+                Priority = req.Priority ?? "Normal",
+                CreatedAt = DateTime.UtcNow
+            });
+
+            return Ok();
+        }
 
         // ── Update driver availability ────────────────────────────────
         [HttpPost]
@@ -328,7 +681,7 @@ namespace FleetWise.Controllers
 
         private async Task SyncTripStatuses(string date = null)
         {
-            date ??= DateTime.Today.ToString("yyyy-MM-dd");
+            date ??= PhClock.Today.ToString("yyyy-MM-dd");
 
             var tripsTask = _supabase.From<Trip>()
                                        .Filter("date", Operator.Equals, date)
