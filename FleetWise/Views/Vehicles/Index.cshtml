@@ -125,7 +125,7 @@
 
 <script>
     // Load the vehicle table rows in the background so the page itself renders instantly
-    // (still server-rendered HTML over fetch, not a SPA — §2.6).
+    // (server-rendered HTML fetched into the table body).
     document.addEventListener('DOMContentLoaded', function () {
         loadVehicleRows();
 
