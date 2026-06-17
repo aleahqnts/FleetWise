@@ -145,17 +145,39 @@ public class DriverDataService
         return r.Models;
     }
 
-    public async Task<List<NotificationModel>> GetNotificationsAsync(int userId)
+    // Messages the driver should see: broadcast (all) + route msgs for any route
+    // the driver runs + driver-targeted msgs. Capped to the last 14 days so the
+    // history stays small. Volume is tiny -> resolve route/driver match client-side.
+    public async Task<List<MessageModel>> GetMessagesAsync(int userId)
     {
-        var r = await _supabase.From<NotificationModel>()
-            .Filter("user_id", Operator.Equals, userId.ToString())
+        var cutoff = PhTime.Now.AddDays(-14);
+
+        // route ids this driver runs (all-time; small set)
+        var trips = await _supabase.From<Trip>()
+            .Filter("driver_id", Operator.Equals, userId.ToString())
+            .Get();
+        var myRoutes = trips.Models
+            .Select(t => t.RouteId.ToString())
+            .ToHashSet();
+
+        var r = await _supabase.From<MessageModel>()
+            .Filter("created_at", Operator.GreaterThanOrEqual, cutoff.ToString("yyyy-MM-dd HH:mm:ss"))
             .Order("created_at", Ordering.Descending)
             .Get();
-        return r.Models;
+
+        var me = userId.ToString();
+        return r.Models.Where(m => (m.TargetAudience ?? "").ToLowerInvariant() switch
+        {
+            "all"    => true,
+            "route"  => myRoutes.Contains(m.TargetId),
+            "driver" => m.TargetId == me,
+            _        => false
+        }).ToList();
     }
 
-    public async Task MarkNotificationReadAsync(long id)
-        => await PatchAsync($"notifications?notification_id=eq.{id}", new { is_read = true });
+    // Read state only meaningful for driver-targeted msgs (1 recipient).
+    public async Task MarkMessageReadAsync(long id)
+        => await PatchAsync($"messages?message_id=eq.{id}", new { is_read = true });
 
     public async Task<UserModel?> GetUserAsync(int userId)
     {

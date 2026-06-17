@@ -15,7 +15,7 @@
     opacity: 0;
     overflow: hidden;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     transition: height 0.15s ease;
 }
@@ -26,6 +26,8 @@
     border: 2.5px solid #cdeede;
     border-top-color: #2e9e8f;
     border-radius: 50%;
+    /* drop below the status bar / notch so spinner stays visible */
+    margin-top: calc(env(safe-area-inset-top) + 14px);
 }
 
 #ptr-ind.spin .ptr-spin {

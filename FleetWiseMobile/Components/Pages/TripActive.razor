@@ -30,6 +30,7 @@ else
             <div>
                 <p class="bus-name">@(vehicle?.VehicleId ?? trip.VehicleId) <span class="plate">(@(vehicle?.PlateNumber ?? "—"))</span></p>
                 <p class="route">@(route?.RouteName ?? $"Route {trip.RouteId}")</p>
+                <p class="trip-id">Trip ID: @trip.TripId</p>
             </div>
         </div>
 
