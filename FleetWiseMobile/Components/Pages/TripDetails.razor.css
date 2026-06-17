@@ -6,7 +6,7 @@
     color: #8a93a2;
 }
 
-.td { padding: 52px 22px 28px; }
+.td { padding: 52px 22px calc(28px + env(safe-area-inset-bottom)); }
 
 .td-header {
     display: flex;

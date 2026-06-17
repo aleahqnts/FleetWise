@@ -7,7 +7,7 @@
 }
 .ta-empty { text-align: center; color: #8a93a2; margin-top: 40px; }
 
-.ta { padding: 52px 22px 28px; }
+.ta { padding: 52px 22px calc(28px + env(safe-area-inset-bottom)); }
 
 .ta-head {
     display: flex;

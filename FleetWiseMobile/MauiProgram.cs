@@ -26,6 +26,14 @@ public static class MauiProgram
 		builder.Services.AddSingleton<Services.AuthService>();
 		builder.Services.AddSingleton<Services.DriverDataService>();
 
+		// GPS telemetry: on-device buffer + background tracker.
+		builder.Services.AddSingleton<Services.TelemetryQueue>();
+#if ANDROID
+		builder.Services.AddSingleton<Services.ITripTracker, Platforms.Android.AndroidTripTracker>();
+#else
+		builder.Services.AddSingleton<Services.ITripTracker, Services.NoopTripTracker>();
+#endif
+
 #if DEBUG
 		builder.Services.AddBlazorWebViewDeveloperTools();
 		builder.Logging.AddDebug();

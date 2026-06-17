@@ -1,6 +1,8 @@
 @page "/notifications"
+@implements IDisposable
 @inject SessionService Session
 @inject DriverDataService Data
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 
 @if (loading)
@@ -105,4 +107,20 @@ else
             catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Notif.Read] {ex}"); }
         }
     }
+
+    private DotNetObjectReference<Notifications>? _ptrRef;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _ptrRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("ptr.set", _ptrRef);
+        }
+    }
+    [JSInvokable] public async Task Refresh()
+    {
+        items = await Data.GetNotificationsAsync(Session.CurrentUser!.UserId);
+        StateHasChanged();
+    }
+    public void Dispose() => _ptrRef?.Dispose();
 }

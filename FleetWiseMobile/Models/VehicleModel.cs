@@ -13,9 +13,6 @@ public class Vehicle : BaseModel
     [Column("plate_number")]
     public string PlateNumber { get; set; }
 
-    [Column("vehicle_type")]
-    public string VehicleType { get; set; }
-
     [Column("route_id")]
     public int? RouteId { get; set; }
 
