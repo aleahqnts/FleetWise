@@ -54,6 +54,7 @@ namespace FleetWise.Controllers
                 SearchTerm = search,
             };
 
+            SetModalViewData(vm, new AddVehicleViewModel(), openModal: null);
             return View(vm);
         }
 
@@ -62,6 +63,40 @@ namespace FleetWise.Controllers
         {
             var items = await BuildRowsAsync(route, type, status, condition, search);
             return PartialView("_VehicleRows", items);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create(AddVehicleViewModel model)
+        {
+            if (ModelState.IsValid)
+            {
+                var existing = await _supabase.From<Vehicle>()
+                    .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, model.VehicleId.Trim())
+                    .Get();
+
+                if (existing.Models.Count > 0)
+                    ModelState.AddModelError(nameof(model.VehicleId), "A vehicle with this ID already exists.");
+            }
+
+            if (!ModelState.IsValid)
+                return await ReRenderIndexAsync(model);
+
+            var vehicle = new Vehicle
+            {
+                VehicleId = model.VehicleId.Trim(),
+                PlateNumber = model.PlateNumber.Trim(),
+                VehicleType = model.VehicleType.Trim(),
+                RouteId = model.RouteId,
+                Capacity = 50,                         // sensible default — not on the mockup (§Block 15.2)
+                VehicleStatus = "Ready to Deploy",     // new units start deployable (vehicle_status_enum label)
+                CreatedAt = DateTime.UtcNow,
+            };
+
+            await _supabase.From<Vehicle>().Insert(vehicle);
+
+            TempData["Success"] = $"Vehicle \"{model.VehicleId}\" was added successfully.";
+            return RedirectToAction(nameof(Index));
         }
 
         // ── Data loading & projection ────────────────────────────────────────
@@ -130,6 +165,50 @@ namespace FleetWise.Controllers
                     Maintenance = maintenance.GetValueOrDefault(v.VehicleId, "No Issues"),
                 })
                 .ToList();
+        }
+
+        // Re-render the registry with the Add Vehicle modal re-opened and validation errors shown
+        // (PRG can't carry ModelState, so a failed POST returns the view directly — mirrors Block 3).
+        private async Task<IActionResult> ReRenderIndexAsync(AddVehicleViewModel addModel)
+        {
+            var (vehicles, routes, _) = await LoadVehicleDataAsync();
+
+            var vm = new VehiclesIndexViewModel
+            {
+                Rows = new List<VehicleListItemViewModel>(),
+                TotalVehicles = vehicles.Count,
+                FlaggedVehicles = vehicles.Count(v => DisplayStatus(v.VehicleStatus) == "Flagged"),
+                ScheduledMaintenance = 0,
+                RouteOptions = routes
+                    .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
+                    .ToList(),
+                TypeOptions = vehicles
+                    .Select(v => v.VehicleType)
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(t => t)
+                    .ToList(),
+                StatusOptions = StatusFilterOptions.ToList(),
+                ConditionOptions = ConditionFilterOptions.ToList(),
+            };
+
+            SetModalViewData(vm, addModel, openModal: "AddVehicle");
+            return View("Index", vm);
+        }
+
+        // Supplies the Add Vehicle modal with its bound model, dropdown data, and reopen flag.
+        private void SetModalViewData(VehiclesIndexViewModel vm, AddVehicleViewModel addModel, string? openModal)
+        {
+            ViewBag.AddVehicleModel = addModel;
+            ViewBag.RouteOptions = vm.RouteOptions;
+            // Vehicle Type dropdown: mockup's Bus/Van plus any existing distinct types.
+            ViewBag.TypeOptions = new[] { "Bus", "Van" }
+                .Concat(vm.TypeOptions)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(t => t)
+                .Select(t => new SelectListItem { Value = t, Text = t })
+                .ToList();
+            ViewBag.OpenModal = openModal;
         }
 
         private static string DeriveMaintenance(IEnumerable<MaintenanceLog> logs)
