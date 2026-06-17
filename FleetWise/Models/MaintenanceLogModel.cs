@@ -39,9 +39,7 @@ public class MaintenanceLog : BaseModel
     [Column("remarks")]
     public string Remarks { get; set; }
 
-    // Added for the Edit Vehicle modal's "Verified by" field (Block 17). Requires the
-    // additive column run in the Supabase SQL Editor:
-    //   ALTER TABLE maintenance_logs ADD COLUMN IF NOT EXISTS verified_by text;
+    // Backs the Edit Vehicle modal's "Verified by" field.
     [Column("verified_by")]
     public string VerifiedBy { get; set; }
 }

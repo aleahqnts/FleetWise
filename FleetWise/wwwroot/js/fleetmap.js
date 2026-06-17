@@ -45,7 +45,7 @@
     }
 
     // vehicleId -> live Leaflet marker; markers are moved in place between polls,
-    // never recreated, so open tooltips don't flicker (Step 11.2).
+    // never recreated, so open tooltips don't flicker.
     var busMarkers = {};
 
     var routeSelect = document.getElementById('fmRouteFilter');
@@ -54,7 +54,7 @@
     var connBadge = document.getElementById('fmConnBadge');
     var legendEl = document.getElementById('fmLegend');
 
-    // Side panel (Figure 19) — tracks which bus is open so each poll refreshes it live.
+    // Side panel — tracks which bus is open so each poll refreshes it live.
     var panel = document.getElementById('fmPanel');
     var panelClose = document.getElementById('fmPanelClose');
     var selectedVehicleId = null;

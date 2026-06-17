@@ -127,7 +127,7 @@ namespace FleetWise.Controllers
 
         // Live bus positions: latest telemetry row per Active trip, joined in C# to
         // vehicle/route/driver, with occupancy % and revenue computed server-side so
-        // every consumer (markers, tooltip, side panel) shows identical numbers (§2.7).
+        // every consumer (markers, tooltip, side panel) shows identical numbers.
         public async Task<IActionResult> Positions(int? routeId, string? status)
         {
             var tripsResponse = await _supabase
@@ -274,7 +274,7 @@ namespace FleetWise.Controllers
             return Json(positions);
         }
 
-        // "6AM – 12PM" from the trip's shift start/end times (Figure 19 header).
+        // "6AM – 12PM" from the trip's shift start/end times.
         private static string FormatShift(Trip trip)
         {
             static string Fmt(TimeSpan t) =>
@@ -294,7 +294,7 @@ namespace FleetWise.Controllers
 
         // Normalize the stored vehicle_status to the labels the Status filter shows
         // ("Active" / "Idle" / "Offline"). Buses on the map are on live trips, so the
-        // running state reads "Active" (matches Figures 18–19).
+        // running state reads "Active".
         private static string DisplayStatus(string? vehicleStatus) => vehicleStatus switch
         {
             null or "" => "Active",

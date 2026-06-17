@@ -1,8 +1,7 @@
 namespace FleetWise.Services
 {
-    // Philippine wall-clock time. Aleah's convention: all app-written timestamps are PH
-    // wall-clock (the driver app writes Manila time), never raw UTC — so our writes must
-    // match or dates/ordering drift 8 hours. PH has no DST, so it's a fixed UTC+8.
+    // Philippine wall-clock time. All written timestamps are PH wall-clock, never raw UTC,
+    // so dates and ordering don't drift 8 hours. PH has no DST, so it's a fixed UTC+8.
     public static class PhClock
     {
         private static readonly TimeZoneInfo Tz = ResolveTz();

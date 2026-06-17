@@ -1,7 +1,7 @@
 namespace FleetWise.Models
 {
-    // Read-only projection for the View Vehicle Details modal (Block 16): Vehicle Profile +
-    // latest driver Inspection Log + Maintenance Log history, fetched fresh per vehicle.
+    // Read-only projection for the View Vehicle Details modal: Vehicle Profile + latest driver
+    // Inspection Log + Maintenance Log history, fetched fresh per vehicle.
     public class VehicleDetailsViewModel
     {
         public string VehicleId { get; set; } = string.Empty;
