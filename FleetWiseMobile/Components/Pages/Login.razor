@@ -1,0 +1,104 @@
+@page "/"
+@layout LoginLayout
+@inject AuthService Auth
+@inject SessionService Session
+@inject DriverDataService Data
+@inject NavigationManager Nav
+
+<div class="login-bg">
+    <img class="logo-img" src="images/fleetwise-logo.png" alt="RouteSync" />
+    <p class="app-name"><span class="n1">Route</span><span class="n2">Sync</span></p>
+
+    <div class="card">
+        <h1>Sign In</h1>
+
+        <div class="field">
+            <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg></span>
+            <input type="email" placeholder="Email" autocomplete="username"
+                   @bind="email" @bind:event="oninput" />
+        </div>
+
+        <div class="field">
+            <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg></span>
+            <input type="@(showPwd ? "text" : "password")" placeholder="Password" autocomplete="current-password"
+                   @bind="password" @bind:event="oninput" @onkeydown="OnKey" />
+            <button type="button" class="eye" @onclick="@(() => showPwd = !showPwd)">
+                @if (showPwd)
+                {
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7c2 0 3.8.6 5.3 1.5M22 12s-3.5 7-10 7c-2 0-3.8-.6-5.3-1.5" /><path d="M3 3l18 18" /><circle cx="12" cy="12" r="3" /></svg>
+                }
+                else
+                {
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
+                }
+            </button>
+        </div>
+
+        <div class="forgot"><a @onclick="Forgot">Forgot Password?</a></div>
+
+        @if (!string.IsNullOrEmpty(message))
+        {
+            <div class="message">@message</div>
+        }
+
+        <button class="btn-signin" @onclick="SignIn" disabled="@busy">
+            @(busy ? "Signing in..." : "Sign In")
+        </button>
+    </div>
+</div>
+
+@code {
+    private string email = "";
+    private string password = "";
+    private string? message;
+    private bool busy;
+    private bool showPwd;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await Session.RestoreAsync())
+        {
+            // Mid-trip? Go straight back to the counter, not Home (survives
+            // WebView reboots on suspend / network change).
+            var active = await SecureStorage.Default.GetAsync("fw_active_trip");
+            if (!string.IsNullOrEmpty(active)) Nav.NavigateTo($"/trip-active/{active}");
+            else Nav.NavigateTo("/home");
+        }
+    }
+
+    private async Task SignIn()
+    {
+        message = null;
+        busy = true;
+        try
+        {
+            var user = await Auth.ValidateAsync(email.Trim(), password);
+            if (user is null)
+            {
+                message = "Invalid email or password.";
+                return;
+            }
+
+            await Session.SetAsync(user);
+            try { await Data.StampLoginAsync(user.UserId); } catch { /* non-blocking */ }
+            Nav.NavigateTo("/home");
+        }
+        catch (Exception ex)
+        {
+            message = "Login failed. Check your connection and try again.";
+            System.Diagnostics.Debug.WriteLine($"[Login] {ex}");
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SignIn();
+    }
+
+    private void Forgot()
+        => message = "Password reset isn't available yet — please contact your operator.";
+}

@@ -1,7 +1,753 @@
-﻿@*
-    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-*@
+@model VehiclesIndexViewModel
 @{
+    ViewData["Title"] = "Vehicles";
+    Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<h3>Vehicles</h3>
+<!-- PAGE TITLE -->
+<h2 class="vh-title">Vehicles</h2>
+
+@if (TempData["Success"] is string successMsg)
+{
+    <div class="vh-alert vh-alert--success" role="alert">@successMsg</div>
+}
+@if (TempData["Error"] is string errorMsg)
+{
+    <div class="vh-alert vh-alert--error" role="alert">@errorMsg</div>
+}
+
+<!-- SUMMARY CARDS -->
+<div class="vh-cards">
+    <div class="vh-card">
+        <div class="vh-card-icon vh-card-icon--green">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 6v6" /><path d="M15 6v6" /><path d="M2 12h19.6" />
+                <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3" />
+                <circle cx="7" cy="18" r="2" /><path d="M9 18h5" /><circle cx="16" cy="18" r="2" />
+            </svg>
+        </div>
+        <div class="vh-card-text">
+            <span class="vh-card-label">Total Vehicles</span>
+            <span class="vh-card-value">@Model.TotalVehicles</span>
+        </div>
+    </div>
+
+    <div class="vh-card">
+        <div class="vh-card-icon vh-card-icon--red">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" /><line x1="8" y1="12" x2="16" y2="12" />
+            </svg>
+        </div>
+        <div class="vh-card-text">
+            <span class="vh-card-label">Flagged Vehicles</span>
+            <span class="vh-card-value">@Model.FlaggedVehicles</span>
+        </div>
+    </div>
+
+    <div class="vh-card">
+        <div class="vh-card-icon vh-card-icon--amber">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+        </div>
+        <div class="vh-card-text">
+            <span class="vh-card-label">Scheduled Maintenance</span>
+            <span class="vh-card-value">@Model.ScheduledMaintenance</span>
+        </div>
+    </div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="vh-toolbar">
+    <button type="button" class="vh-btn vh-btn--primary" data-bs-toggle="modal" data-bs-target="#addVehicleModal">+ Add Vehicle</button>
+
+    <form method="get" class="vh-search-form">
+        <input type="hidden" name="route" value="@Model.SelectedRoute" />
+        <input type="hidden" name="status" value="@Model.SelectedStatus" />
+        <input type="hidden" name="condition" value="@Model.SelectedCondition" />
+        <div class="vh-search-wrap">
+            <span class="vh-search-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
+                     stroke="#9AA5B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+            </span>
+            <input type="text" name="search" value="@Model.SearchTerm" class="vh-search-input" placeholder="Search by ID or plate" />
+        </div>
+    </form>
+</div>
+
+<!-- VEHICLE INFORMATION TABLE CARD -->
+<div class="vh-card-table">
+    <div class="vh-card-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <line x1="10" y1="9" x2="8" y2="9" />
+        </svg>
+        <span>Vehicle Information</span>
+    </div>
+
+    <div class="vh-table-wrap">
+        <table class="vh-table">
+            <thead>
+                <tr>
+                    <th>Vehicle ID</th>
+                    <th>Route</th>
+                    <th>Status</th>
+                    <th>Maintenance</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="vehiclesTableBody">
+                <tr>
+                    <td colspan="5" class="vh-table-loading">
+                        <div class="vh-spinner"></div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@await Html.PartialAsync("_AddVehicleModal", (AddVehicleViewModel)ViewBag.AddVehicleModel)
+@await Html.PartialAsync("_ViewVehicleModal")
+@await Html.PartialAsync("_EditVehicleModal")
+
+<script>
+    // Load the vehicle table rows in the background so the page itself renders instantly
+    // (server-rendered HTML fetched into the table body).
+    document.addEventListener('DOMContentLoaded', function () {
+        loadVehicleRows();
+
+        // Delegated: rows are injected via fetch, so listen on the (static) tbody. View/Edit
+        // clicks fetch that vehicle's data into the modal; Bootstrap opens it in parallel.
+        document.getElementById('vehiclesTableBody').addEventListener('click', function (e) {
+            const viewBtn = e.target.closest('[data-bs-target="#viewVehicleModal"]');
+            if (viewBtn) {
+                loadVehicleDetails(viewBtn.getAttribute('data-vehicle-id'));
+                return;
+            }
+            const editBtn = e.target.closest('[data-bs-target="#editVehicleModal"]');
+            if (editBtn) {
+                loadVehicleEditForm(editBtn.getAttribute('data-vehicle-id'));
+            }
+        });
+
+        // Auto-reopen the relevant modal after a failed POST (validation errors preserved).
+        const openModal = '@(ViewBag.OpenModal ?? "")';
+        if (openModal === 'AddVehicle') {
+            new bootstrap.Modal(document.getElementById('addVehicleModal')).show();
+        } else if (openModal === 'EditVehicle') {
+            new bootstrap.Modal(document.getElementById('editVehicleModal')).show();
+        }
+    });
+
+    function loadVehicleDetails(id) {
+        const content = document.getElementById('viewVehicleContent');
+        content.innerHTML = '<div class="vh-modal-loading"><div class="vh-spinner"></div></div>';
+        fetch('@Url.Action("Details", "Vehicles")?id=' + encodeURIComponent(id))
+            .then(function (response) {
+                if (!response.ok) throw new Error();
+                return response.text();
+            })
+            .then(function (html) { content.innerHTML = html; })
+            .catch(function () {
+                content.innerHTML = '<div class="vh-modal-loading vh-modal-error">Failed to load vehicle details.</div>';
+            });
+    }
+
+    function loadVehicleEditForm(id) {
+        const content = document.getElementById('editVehicleContent');
+        content.innerHTML = '<div class="vh-modal-loading"><div class="vh-spinner"></div></div>';
+        fetch('@Url.Action("EditForm", "Vehicles")?id=' + encodeURIComponent(id))
+            .then(function (response) {
+                if (!response.ok) throw new Error();
+                return response.text();
+            })
+            .then(function (html) { content.innerHTML = html; })
+            .catch(function () {
+                content.innerHTML = '<div class="vh-modal-loading vh-modal-error">Failed to load vehicle.</div>';
+            });
+    }
+
+    function loadVehicleRows() {
+        const tbody = document.getElementById('vehiclesTableBody');
+        fetch('@Url.Action("VehicleRows", "Vehicles")' + window.location.search)
+            .then(function (response) { return response.text(); })
+            .then(function (html) { tbody.innerHTML = html; })
+            .catch(function () {
+                tbody.innerHTML = '<tr><td colspan="6" class="vh-empty">Failed to load vehicles.</td></tr>';
+            });
+    }
+</script>
+
+@section TopbarContent {
+    <form method="get" class="vh-filters">
+        <input type="hidden" name="search" value="@Model.SearchTerm" />
+        <div class="vh-filter">
+            <label class="vh-filter-label">Route:</label>
+            <div class="vh-select-wrap">
+                <select name="route" class="vh-select" onchange="this.form.submit()">
+                    <option value="">All Routes</option>
+                    @foreach (var r in Model.RouteOptions)
+                    {
+                        <option value="@r.Value" selected="@(r.Value == Model.SelectedRoute)">@r.Text</option>
+                    }
+                </select>
+                <span class="vh-select-arrow">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                </span>
+            </div>
+        </div>
+        <div class="vh-filter">
+            <label class="vh-filter-label">Status:</label>
+            <div class="vh-select-wrap">
+                <select name="status" class="vh-select" onchange="this.form.submit()">
+                    <option value="">All</option>
+                    @foreach (var s in Model.StatusOptions)
+                    {
+                        <option value="@s" selected="@(s == Model.SelectedStatus)">@s</option>
+                    }
+                </select>
+                <span class="vh-select-arrow">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                </span>
+            </div>
+        </div>
+        <div class="vh-filter">
+            <label class="vh-filter-label">Issues:</label>
+            <div class="vh-select-wrap">
+                <select name="condition" class="vh-select" onchange="this.form.submit()">
+                    <option value="">All</option>
+                    @foreach (var c in Model.ConditionOptions)
+                    {
+                        <option value="@c" selected="@(c == Model.SelectedCondition)">@c</option>
+                    }
+                </select>
+                <span class="vh-select-arrow">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                </span>
+            </div>
+        </div>
+    </form>
+}
+
+<style>
+    :root {
+        --vh-teal: #4AADA8;
+        --vh-teal-light: #E8F6F5;
+        --vh-navy: #2F3B82;
+        --vh-text: #2D3748;
+        --vh-muted: #9AA5B4;
+        --vh-border: #E8ECF0;
+        --vh-bg: #F8F9FA;
+        --vh-white: #FFFFFF;
+        --vh-radius: 14px;
+        --vh-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+
+    /* ── Page title ─────────────────────────────────────────── */
+    .vh-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 20px;
+    }
+
+    /* ── Summary cards ──────────────────────────────────────── */
+    .vh-cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+        margin-bottom: 22px;
+    }
+
+    .vh-card {
+        background: var(--vh-white);
+        border: 1px solid var(--vh-border);
+        border-radius: var(--vh-radius);
+        box-shadow: var(--vh-shadow);
+        padding: 20px 22px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .vh-card-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .vh-card-icon--green { background: #E8F8EE; color: #27AE60; }
+    .vh-card-icon--red   { background: #FDECEC; color: #E53E3E; }
+    .vh-card-icon--amber { background: #FEF6E0; color: #D69E2E; }
+
+    .vh-card-text {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .vh-card-label {
+        font-size: 0.85rem;
+        color: var(--vh-muted);
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 500;
+    }
+
+    .vh-card-value {
+        font-size: 1.7rem;
+        font-weight: 700;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        line-height: 1.1;
+    }
+
+    /* ── Toolbar ────────────────────────────────────────────── */
+    .vh-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+    }
+
+    .vh-btn {
+        padding: 9px 20px;
+        border-radius: 10px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        border: 1.5px solid var(--vh-border);
+        transition: all 180ms;
+        white-space: nowrap;
+    }
+
+    .vh-btn--primary {
+        background: var(--vh-teal);
+        border-color: var(--vh-teal);
+        color: #fff;
+    }
+
+    .vh-btn--outline {
+        background: var(--vh-white);
+        color: var(--vh-text);
+    }
+
+    .vh-search-wrap { position: relative; }
+
+    .vh-search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+    }
+
+    .vh-search-input {
+        width: 260px;
+        padding: 8px 14px 8px 36px;
+        border: 1.5px solid var(--vh-border);
+        border-radius: 10px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--vh-text);
+        background: var(--vh-white);
+        outline: none;
+        transition: border-color 180ms;
+    }
+
+    .vh-search-input:focus { border-color: var(--vh-teal); }
+
+    /* ── Table card ─────────────────────────────────────────── */
+    .vh-card-table {
+        background: var(--vh-white);
+        border: 1px solid var(--vh-border);
+        border-radius: var(--vh-radius);
+        padding: 20px 22px;
+        box-shadow: var(--vh-shadow);
+    }
+
+    .vh-card-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        padding-bottom: 14px;
+        margin-bottom: 14px;
+        border-bottom: 1px solid var(--vh-border);
+    }
+
+    .vh-card-header svg { color: var(--vh-teal); flex-shrink: 0; }
+
+    .vh-table-wrap { overflow-x: auto; }
+
+    .vh-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 0.875rem;
+    }
+
+    .vh-table thead tr { border-bottom: 1.5px solid var(--vh-border); }
+
+    .vh-table th {
+        padding: 10px 14px;
+        text-align: left;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--vh-muted);
+        white-space: nowrap;
+    }
+
+    .vh-table td {
+        padding: 13px 14px;
+        color: var(--vh-text);
+        border-bottom: 1px solid var(--vh-border);
+        vertical-align: middle;
+    }
+
+    .vh-table tbody tr:last-child td { border-bottom: none; }
+    .vh-table tbody tr:hover { background: #FAFBFC; }
+
+    .vh-id { font-weight: 600; color: var(--vh-text); }
+    .vh-plate { font-size: 0.78rem; color: var(--vh-muted); }
+
+    /* ── Badges ─────────────────────────────────────────────── */
+    .vh-badge {
+        display: inline-block;
+        padding: 5px 14px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        font-family: 'Segoe UI', sans-serif;
+        white-space: nowrap;
+    }
+
+    .vh-badge--ready     { background: #E8F6F5; color: #2C9C96; }
+    .vh-badge--ontrip    { background: #E3F2FD; color: #2B6CB0; }
+    .vh-badge--pending   { background: #FEF9E7; color: #B7950B; }
+    .vh-badge--flagged   { background: #FDECEC; color: #E53E3E; }
+    .vh-badge--ok        { background: #E8F8EE; color: #27AE60; }
+    .vh-badge--attention { background: #FDECEC; color: #E53E3E; }
+    .vh-badge--repair    { background: #FEF9E7; color: #B7950B; }
+    .vh-badge--default   { background: var(--vh-bg); color: var(--vh-text); }
+
+    /* ── Action buttons ─────────────────────────────────────── */
+    .vh-actions-cell { display: flex; gap: 8px; }
+
+    .vh-btn-action {
+        padding: 6px 18px;
+        border: 1.5px solid var(--vh-border);
+        border-radius: 20px;
+        background: var(--vh-white);
+        font-size: 0.8rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--vh-text);
+        cursor: pointer;
+        font-weight: 500;
+        transition: border-color 180ms, color 180ms;
+    }
+
+    .vh-btn-action:hover { border-color: var(--vh-teal); color: var(--vh-teal); }
+
+    /* ── Table loading spinner / empty state ────────────────── */
+    .vh-table-loading {
+        text-align: center;
+        padding: 32px 14px;
+    }
+
+    .vh-empty {
+        text-align: center;
+        padding: 28px 14px;
+        color: var(--vh-muted);
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 0.875rem;
+    }
+
+    .vh-spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid var(--vh-border);
+        border-top-color: var(--vh-teal);
+        border-radius: 50%;
+        animation: vh-spin 0.8s linear infinite;
+        margin: 0 auto;
+    }
+
+    @@keyframes vh-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* ── Alerts ─────────────────────────────────────────────── */
+    .vh-alert {
+        padding: 12px 18px;
+        border-radius: var(--vh-radius);
+        font-size: 0.875rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 500;
+        margin-bottom: 16px;
+    }
+
+    .vh-alert--success {
+        background: var(--vh-teal-light);
+        color: var(--vh-teal);
+        border: 1px solid var(--vh-teal);
+    }
+
+    .vh-alert--error {
+        background: #FDECEC;
+        color: #E53E3E;
+        border: 1px solid #F5B5B5;
+    }
+
+    /* ── Topbar filters ─────────────────────────────────────── */
+    .vh-filters {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        flex-wrap: wrap;
+    }
+
+    .vh-filter { display: flex; align-items: center; gap: 8px; }
+
+    .vh-filter-label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .vh-select-wrap { position: relative; display: flex; align-items: center; }
+
+    .vh-select {
+        appearance: none;
+        padding: 7px 32px 7px 14px;
+        border: 1.5px solid var(--vh-border);
+        border-radius: 10px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--vh-text);
+        background: var(--vh-bg);
+        cursor: pointer;
+        outline: none;
+        font-weight: 500;
+    }
+
+    .vh-select-arrow {
+        position: absolute;
+        right: 10px;
+        pointer-events: none;
+        color: var(--vh-text);
+        display: flex;
+    }
+
+    /* ── Modals (shared by Add/View/Edit Vehicle) ───────────── */
+    .vh-modal .modal-content {
+        border-radius: var(--vh-radius);
+        border: 1px solid var(--vh-border);
+    }
+
+    .vh-modal .modal-header {
+        position: relative;
+        justify-content: center;
+        border-bottom: 1px solid var(--vh-border);
+        padding: 18px 24px;
+    }
+
+    .vh-modal .modal-header .btn-close {
+        position: absolute;
+        right: 1.25rem;
+        top: 50%;
+        transform: translateY(-50%);
+        margin: 0;
+    }
+
+    .vh-modal-title {
+        color: var(--vh-navy);
+        font-weight: 700;
+        font-size: 1.3rem;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .vh-modal-sm { max-width: 540px; }
+
+    .vh-modal-body { padding: 0; }
+
+    .vh-section-header {
+        background: var(--vh-bg);
+        color: var(--vh-muted);
+        font-weight: 700;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        padding: 10px 24px;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .vh-section-body { padding: 18px 24px; }
+
+    .vh-form-row {
+        display: grid;
+        grid-template-columns: 130px 1fr;
+        align-items: center;
+        gap: 8px 14px;
+        margin-bottom: 14px;
+    }
+
+    .vh-form-row:last-child { margin-bottom: 0; }
+
+    .vh-form-row label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .vh-form-input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1.5px solid var(--vh-border);
+        border-radius: 10px;
+        font-size: 0.875rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--vh-text);
+        background: var(--vh-bg);
+        outline: none;
+        transition: border-color 180ms;
+    }
+
+    .vh-form-input:focus { border-color: var(--vh-teal); }
+
+    .vh-form-input:disabled {
+        background: #EDF0F3;
+        color: var(--vh-muted);
+        cursor: not-allowed;
+    }
+
+    .vh-field-error {
+        grid-column: 2;
+        font-size: 0.78rem;
+        color: #E53E3E;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .vh-field-error:empty { display: none; }
+
+    /* ── Detail rows (View modal) ───────────────────────────── */
+    .vh-detail-row {
+        font-size: 0.9rem;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 8px;
+    }
+
+    .vh-detail-row:last-child { margin-bottom: 0; }
+
+    .vh-detail-row strong { font-weight: 600; }
+
+    .vh-detail-empty { color: var(--vh-muted); }
+
+    /* Spinner / error shown while the View modal fetches its details partial. */
+    .vh-modal-loading {
+        padding: 56px 24px;
+        text-align: center;
+    }
+
+    .vh-modal-error {
+        color: #E53E3E;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 0.875rem;
+    }
+
+    .vh-remarks {
+        background: #FEF9E7;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 0.85rem;
+        color: #6B5D1B;
+        font-family: 'Segoe UI', sans-serif;
+        margin-top: 6px;
+    }
+
+    .vh-timeline {
+        list-style: none;
+        padding: 0;
+        margin: 10px 0 0;
+    }
+
+    .vh-timeline li {
+        position: relative;
+        padding-left: 18px;
+        font-size: 0.85rem;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 7px;
+    }
+
+    .vh-timeline li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 6px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--vh-muted);
+    }
+
+    /* ── Modal footer / badge inside section header ─────────── */
+    .vh-section-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+
+    .vh-section-badge::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    /* ── Responsive ─────────────────────────────────────────── */
+    @@media (max-width: 900px) {
+        .vh-cards { grid-template-columns: 1fr; }
+    }
+
+    @@media (max-width: 768px) {
+        .vh-toolbar { flex-direction: column; align-items: stretch; }
+        .vh-search-input { width: 100%; }
+        .vh-filters { gap: 12px; }
+        .vh-form-row { grid-template-columns: 1fr; }
+    }
+</style>

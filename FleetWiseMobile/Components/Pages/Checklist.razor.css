@@ -1,0 +1,246 @@
+.cl-loading {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8a93a2;
+}
+
+.cl {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding: 52px 18px calc(24px + env(safe-area-inset-bottom));
+    box-sizing: border-box;
+}
+
+.cl-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 18px;
+}
+
+.back {
+    border: none;
+    background: none;
+    font-size: 22px;
+    color: #1b2a56;
+    cursor: pointer;
+    width: 32px;
+}
+
+.cl-title {
+    flex: 1;
+    text-align: center;
+}
+
+.cl-title h1 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 800;
+    color: #1b2a56;
+}
+
+.cl-bus {
+    margin: 2px 0 0;
+    color: #2e9e8f;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.spacer { width: 32px; }
+
+.steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.step {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid #2e9e8f;
+    color: #2e9e8f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    background: #fff;
+    flex: 0 0 auto;
+}
+
+.step.active {
+    background: #2e9e8f;
+    color: #fff;
+}
+
+.bar {
+    width: 26px;
+    height: 2px;
+    background: #bfe0d9;
+}
+
+.bar.active { background: #2e9e8f; }
+
+.section-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: #1b2a56;
+    margin: 4px 0 12px;
+}
+
+.items {
+    flex: 1;
+    border: 1px solid #e6e8ee;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 14px;
+    border-bottom: 1px solid #eef0f4;
+}
+
+.item:last-child { border-bottom: none; }
+
+.num {
+    color: #8a93a2;
+    font-size: 14px;
+    width: 22px;
+}
+
+.label {
+    flex: 1;
+    color: #1b2a56;
+    font-size: 14px;
+}
+
+.marks {
+    display: flex;
+    gap: 8px;
+}
+
+.mark {
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+}
+
+.mark svg { width: 18px; height: 18px; }
+
+.mark.check {
+    border: 1.5px solid #bfe0d9;
+    color: #3aaf5d;
+}
+
+.mark.check.on {
+    background: #16a34a;
+    border-color: #16a34a;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(22, 163, 74, 0.4);
+}
+
+.mark.minus {
+    border: 1.5px solid #f3c7c7;
+    color: #d0494b;
+}
+
+.mark.minus.on {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
+}
+
+.cl-msg {
+    color: #d0494b;
+    font-size: 13px;
+    text-align: center;
+    margin: 0 0 10px;
+}
+
+.btn-teal {
+    width: 100%;
+    border: none;
+    border-radius: 10px;
+    padding: 15px;
+    background: #2e9e8f;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.btn-teal:disabled { opacity: 0.6; }
+
+/* Confirmation */
+.cl-confirm {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+}
+
+.confirm-check svg {
+    width: 84px;
+    height: 84px;
+}
+
+.cl-confirm h2 {
+    color: #1b2a56;
+    font-size: 22px;
+    font-weight: 800;
+    margin: 18px 0 22px;
+}
+
+.confirm-card {
+    width: 100%;
+    max-width: 340px;
+    border: 1px solid #e6e8ee;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 26px;
+}
+
+.confirm-sub {
+    color: #8a93a2;
+    font-size: 13px;
+    margin: 0 0 8px;
+    text-align: center;
+}
+
+.confirm-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-top: 1px solid #eef0f4;
+    color: #1b2a56;
+    font-size: 14px;
+}
+
+.confirm-row .ok {
+    color: #3aaf5d;
+    font-weight: 700;
+}
+
+.cl-confirm .btn-teal {
+    max-width: 340px;
+}

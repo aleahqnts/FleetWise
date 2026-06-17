@@ -20,8 +20,8 @@ public class TelemetryData : BaseModel
     [Column("longitude")]
     public decimal Longitude { get; set; }
 
-    [Column("current_passengers")]
-    public int CurrentPassengers { get; set; }
+    [Column("total_passengers")]
+    public int TotalPassengers { get; set; }
 
     [Column("speed")]
     public decimal? Speed { get; set; }
