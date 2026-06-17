@@ -1,7 +1,9 @@
 @page "/profile"
+@implements IDisposable
 @using Microsoft.AspNetCore.Identity
 @inject SessionService Session
 @inject DriverDataService Data
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 
 @if (loading)
@@ -101,6 +103,12 @@ else
     {
         if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
 
+        await LoadUser();
+        loading = false;
+    }
+
+    private async Task LoadUser()
+    {
         user = await Data.GetUserAsync(Session.CurrentUser!.UserId);
         if (user is not null)
         {
@@ -109,8 +117,19 @@ else
             emName = user.EmergencyContactName ?? "";
             emNumber = FormatPhone(Digits(user.EmergencyContactNumber));
         }
-        loading = false;
     }
+
+    private DotNetObjectReference<Profile>? _ptrRef;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _ptrRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("ptr.set", _ptrRef);
+        }
+    }
+    [JSInvokable] public async Task Refresh() { await LoadUser(); StateHasChanged(); }
+    public void Dispose() => _ptrRef?.Dispose();
 
     private async Task SaveProfile()
     {

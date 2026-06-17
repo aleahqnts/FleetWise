@@ -2,6 +2,7 @@
 @layout LoginLayout
 @inject SessionService Session
 @inject DriverDataService Data
+@inject ITripTracker Tracker
 @inject NavigationManager Nav
 
 @if (loading)
@@ -98,7 +99,11 @@ else
         try
         {
             await Data.StartTripAsync(TripId);
-            Nav.NavigateTo($"/trip-active/{TripId}");
+            await EnsureLocationPermissionAsync();
+            Tracker.Start(TripId);
+            // Replace history so hardware-back from the counter can't return to this
+            // stale "Confirm Start Trip?" page.
+            Nav.NavigateTo($"/trip-active/{TripId}", new NavigationOptions { ReplaceHistoryEntry = true });
         }
         catch (Exception ex)
         {
@@ -106,5 +111,21 @@ else
             System.Diagnostics.Debug.WriteLine($"[TripDetails] {ex}");
             busy = false;
         }
+    }
+
+    // Foreground location first; then background (Android sends user to settings).
+    private static async Task EnsureLocationPermissionAsync()
+    {
+        try
+        {
+            var s = await Permissions.CheckStatusAsync<Permissions.LocationWhenInUse>();
+            if (s != PermissionStatus.Granted)
+                await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
+
+            var bg = await Permissions.CheckStatusAsync<Permissions.LocationAlways>();
+            if (bg != PermissionStatus.Granted)
+                await Permissions.RequestAsync<Permissions.LocationAlways>();
+        }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[TripDetails.Perm] {ex}"); }
     }
 }
