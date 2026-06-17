@@ -1,51 +1,11 @@
 @*
-    View Vehicle Details modal — static BUS-02 example (Block 16 loads real data per vehicle via fetch).
+    View Vehicle Details modal shell — Block 16 fills #viewVehicleContent per vehicle via
+    fetch('/Vehicles/Details?id=…') with the _VehicleDetails partial (header + body).
 *@
 <div class="modal fade vh-modal" id="viewVehicleModal" tabindex="-1" aria-labelledby="viewVehicleModalLabel" aria-hidden="true">
     <div class="modal-dialog vh-modal-sm">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title vh-modal-title" id="viewVehicleModalLabel">BUS-02</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body vh-modal-body">
-
-                <!-- Vehicle Profile -->
-                <div class="vh-section-header">Vehicle Profile</div>
-                <div class="vh-section-body">
-                    <div class="vh-detail-row"><strong>Plate Number:</strong> 234GVA</div>
-                    <div class="vh-detail-row"><strong>Vehicle Type:</strong> Bus</div>
-                    <div class="vh-detail-row"><strong>Route:</strong> Route 01</div>
-                </div>
-
-                <!-- Inspection Log -->
-                <div class="vh-section-header">
-                    <span>Inspection Log</span>
-                    <span class="vh-section-badge vh-badge--flagged">Flagged</span>
-                </div>
-                <div class="vh-section-body">
-                    <div class="vh-detail-row"><strong>Reported By:</strong> Juan Dela Cruz</div>
-                    <div class="vh-detail-row"><strong>Time of Report:</strong> 05:30 AM</div>
-                    <div class="vh-detail-row"><strong>Issue:</strong> Tires, Air Conditioning</div>
-                    <div class="vh-detail-row"><strong>Remarks:</strong></div>
-                    <div class="vh-remarks">Left rear tire pressure is low, and the air conditioning in the back is leaking.</div>
-                </div>
-
-                <!-- Maintenance Log -->
-                <div class="vh-section-header">
-                    <span>Maintenance Log</span>
-                    <span class="vh-section-badge vh-badge--attention">Needs Attention</span>
-                </div>
-                <div class="vh-section-body">
-                    <div class="vh-detail-row"><strong>Current Status:</strong> Needs Attention</div>
-                    <div class="vh-detail-row"><strong>Issue Summary:</strong> Tire Issue, Air conditioning Issue</div>
-                    <ul class="vh-timeline">
-                        <li>11/20/25 &ndash; ML-01 &ndash; Resolved</li>
-                        <li>11/19/25 &ndash; ML-01 &ndash; Under Repair</li>
-                    </ul>
-                </div>
-
-            </div>
+        <div class="modal-content" id="viewVehicleContent">
+            <div class="vh-modal-loading"><div class="vh-spinner"></div></div>
         </div>
     </div>
 </div>

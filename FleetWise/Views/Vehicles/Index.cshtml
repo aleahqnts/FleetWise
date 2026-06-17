@@ -129,12 +129,35 @@
     document.addEventListener('DOMContentLoaded', function () {
         loadVehicleRows();
 
+        // Delegated: rows are injected via fetch, so listen on the (static) tbody. A View
+        // click fetches that vehicle's details into the modal; Bootstrap opens it in parallel.
+        document.getElementById('vehiclesTableBody').addEventListener('click', function (e) {
+            const btn = e.target.closest('[data-bs-target="#viewVehicleModal"]');
+            if (btn) {
+                loadVehicleDetails(btn.getAttribute('data-vehicle-id'));
+            }
+        });
+
         // Auto-reopen the Add Vehicle modal after a failed POST (validation errors preserved).
         const openModal = '@(ViewBag.OpenModal ?? "")';
         if (openModal === 'AddVehicle') {
             new bootstrap.Modal(document.getElementById('addVehicleModal')).show();
         }
     });
+
+    function loadVehicleDetails(id) {
+        const content = document.getElementById('viewVehicleContent');
+        content.innerHTML = '<div class="vh-modal-loading"><div class="vh-spinner"></div></div>';
+        fetch('@Url.Action("Details", "Vehicles")?id=' + encodeURIComponent(id))
+            .then(function (response) {
+                if (!response.ok) throw new Error();
+                return response.text();
+            })
+            .then(function (html) { content.innerHTML = html; })
+            .catch(function () {
+                content.innerHTML = '<div class="vh-modal-loading vh-modal-error">Failed to load vehicle details.</div>';
+            });
+    }
 
     function loadVehicleRows() {
         const tbody = document.getElementById('vehiclesTableBody');
@@ -642,6 +665,20 @@
     .vh-detail-row:last-child { margin-bottom: 0; }
 
     .vh-detail-row strong { font-weight: 600; }
+
+    .vh-detail-empty { color: var(--vh-muted); }
+
+    /* Spinner / error shown while the View modal fetches its details partial. */
+    .vh-modal-loading {
+        padding: 56px 24px;
+        text-align: center;
+    }
+
+    .vh-modal-error {
+        color: #E53E3E;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 0.875rem;
+    }
 
     .vh-remarks {
         background: #FEF9E7;
