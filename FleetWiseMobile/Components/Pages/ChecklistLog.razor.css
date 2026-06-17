@@ -1,0 +1,122 @@
+.log-loading {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8a93a2;
+}
+
+.log {
+    padding: 0 22px 28px;
+}
+
+.log-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 52px 0 12px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #eef0f4;
+}
+
+.back {
+    border: none;
+    background: none;
+    font-size: 22px;
+    color: #1b2a56;
+    cursor: pointer;
+    width: 32px;
+}
+
+.log-title {
+    flex: 1;
+    text-align: center;
+}
+
+.log-title h1 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 800;
+    color: #1b2a56;
+}
+
+.log-bus {
+    margin: 2px 0 0;
+    color: #2e9e8f;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.spacer { width: 32px; }
+
+.empty {
+    text-align: center;
+    color: #8a93a2;
+    margin-top: 40px;
+}
+
+.summary {
+    border: 1px solid #e6e8ee;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+}
+
+.sum-status {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 800;
+}
+
+.sum-status.ok { color: #2e9e8f; }
+.sum-status.bad { color: #d0494b; }
+
+.sum-time {
+    margin: 3px 0 0;
+    color: #8a93a2;
+    font-size: 13px;
+}
+
+.sec-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: #1b2a56;
+    margin: 16px 0 8px;
+}
+
+.sec-items {
+    border: 1px solid #e6e8ee;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.log-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #eef0f4;
+}
+
+.log-item:last-child { border-bottom: none; }
+
+.num { color: #8a93a2; font-size: 14px; width: 22px; }
+.label { flex: 1; color: #1b2a56; font-size: 14px; }
+
+.badge {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.badge svg { width: 16px; height: 16px; }
+
+.badge.pass { background: #e3f7ea; color: #3aaf5d; }
+.badge.fail { background: #fce8e8; color: #d0494b; }

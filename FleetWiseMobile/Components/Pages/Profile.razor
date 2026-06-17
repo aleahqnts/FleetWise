@@ -1,0 +1,193 @@
+@page "/profile"
+@using Microsoft.AspNetCore.Identity
+@inject SessionService Session
+@inject DriverDataService Data
+@inject NavigationManager Nav
+
+@if (loading)
+{
+    <div class="page-loading">Loading...</div>
+}
+else if (user is null)
+{
+    <div class="profile"><p class="muted">Couldn't load profile.</p></div>
+}
+else
+{
+    <div class="profile">
+        <h1 class="ptitle">Profile</h1>
+
+        <div class="pcard">
+            <img class="pavatar" src="images/user-avatar.png" alt="" />
+            <p class="pname">@Session.DisplayName</p>
+            <span class="prole">Driver</span>
+        </div>
+
+        <p class="psec">Account</p>
+        <div class="pinfo">
+            <div class="prow"><span class="pk">Email</span><span class="pv">@user.EmailAddress</span></div>
+            <div class="prow"><span class="pk">Status</span><span class="pv">@(user.AccountStatus ?? "—")</span></div>
+            <div class="prow"><span class="pk">Member since</span><span class="pv">@user.CreatedAt.ToString("MMM d, yyyy")</span></div>
+        </div>
+
+        <p class="psec">Personal Info</p>
+        <div class="pform">
+            <label>Contact number</label>
+            <input value="@contact" @oninput="OnContactInput" inputmode="numeric" maxlength="13" placeholder="0917 123 4567" />
+            @if (contact.Length > 0 && !PhoneValid(contact))
+            {
+                <p class="err-msg">Format: 09XX XXX XXXX</p>
+            }
+            <label>Address</label>
+            <input @bind="address" placeholder="Home address" />
+            <label>Emergency contact name</label>
+            <input @bind="emName" placeholder="Full name" />
+            <label>Emergency contact number</label>
+            <input value="@emNumber" @oninput="OnEmNumberInput" inputmode="numeric" maxlength="13" placeholder="0917 123 4567" />
+            @if (emNumber.Length > 0 && !PhoneValid(emNumber))
+            {
+                <p class="err-msg">Format: 09XX XXX XXXX</p>
+            }
+
+            @if (!string.IsNullOrEmpty(profileMsg))
+            {
+                <p class="@(profileOk ? "ok-msg" : "err-msg")">@profileMsg</p>
+            }
+            <button class="psave" @onclick="SaveProfile" disabled="@savingProfile">
+                @(savingProfile ? "Saving..." : "Save Changes")
+            </button>
+        </div>
+
+        <p class="psec">Security</p>
+        <button class="popt" @onclick="@(() => showPwdForm = !showPwdForm)">
+            <span>Change Password</span>
+            <span class="chev @(showPwdForm ? "open" : "")">&#8250;</span>
+        </button>
+        @if (showPwdForm)
+        {
+            <div class="pform">
+                <input type="password" @bind="curPwd" placeholder="Current password" />
+                <input type="password" @bind="newPwd" placeholder="New password" />
+                <input type="password" @bind="confirmPwd" placeholder="Confirm new password" />
+
+                @if (!string.IsNullOrEmpty(pwdMsg))
+                {
+                    <p class="@(pwdOk ? "ok-msg" : "err-msg")">@pwdMsg</p>
+                }
+                <button class="psave" @onclick="ChangePassword" disabled="@savingPwd">
+                    @(savingPwd ? "Updating..." : "Update Password")
+                </button>
+            </div>
+        }
+
+        <button class="plogout" @onclick="Logout">Log out</button>
+    </div>
+}
+
+@code {
+    private bool loading = true;
+    private UserModel? user;
+
+    private string contact = "", address = "", emName = "", emNumber = "";
+    private bool savingProfile, profileOk;
+    private string? profileMsg;
+
+    private string curPwd = "", newPwd = "", confirmPwd = "";
+    private bool savingPwd, pwdOk;
+    private bool showPwdForm;
+    private string? pwdMsg;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
+
+        user = await Data.GetUserAsync(Session.CurrentUser!.UserId);
+        if (user is not null)
+        {
+            contact = FormatPhone(Digits(user.ContactNumber));
+            address = user.Address ?? "";
+            emName = user.EmergencyContactName ?? "";
+            emNumber = FormatPhone(Digits(user.EmergencyContactNumber));
+        }
+        loading = false;
+    }
+
+    private async Task SaveProfile()
+    {
+        profileMsg = null;
+        if (contact.Length > 0 && !PhoneValid(contact)) { profileMsg = "Contact number must be 09XX XXX XXXX."; profileOk = false; return; }
+        if (emNumber.Length > 0 && !PhoneValid(emNumber)) { profileMsg = "Emergency number must be 09XX XXX XXXX."; profileOk = false; return; }
+
+        savingProfile = true;
+        try
+        {
+            await Data.UpdateProfileAsync(user!.UserId, Nz(contact), Nz(address), Nz(emName), Nz(emNumber));
+            profileMsg = "Changes saved."; profileOk = true;
+        }
+        catch (Exception ex)
+        {
+            profileMsg = "Save failed. Check your connection.";
+            System.Diagnostics.Debug.WriteLine($"[Profile.Save] {ex}");
+        }
+        finally { savingProfile = false; }
+    }
+
+    private async Task ChangePassword()
+    {
+        pwdMsg = null;
+        if (newPwd.Length < 6) { pwdMsg = "New password too short (min 6)."; pwdOk = false; return; }
+        if (newPwd != confirmPwd) { pwdMsg = "New passwords don't match."; pwdOk = false; return; }
+
+        var hasher = new PasswordHasher<UserModel>();
+        if (user!.PasswordHash is null ||
+            hasher.VerifyHashedPassword(user, user.PasswordHash, curPwd) == PasswordVerificationResult.Failed)
+        {
+            pwdMsg = "Current password is incorrect."; pwdOk = false; return;
+        }
+
+        savingPwd = true;
+        try
+        {
+            var newHash = hasher.HashPassword(user, newPwd);
+            await Data.UpdatePasswordAsync(user.UserId, newHash);
+            user.PasswordHash = newHash;
+            curPwd = newPwd = confirmPwd = "";
+            pwdMsg = "Password updated."; pwdOk = true;
+        }
+        catch (Exception ex)
+        {
+            pwdMsg = "Update failed. Check your connection."; pwdOk = false;
+            System.Diagnostics.Debug.WriteLine($"[Profile.Pwd] {ex}");
+        }
+        finally { savingPwd = false; }
+    }
+
+    private static string? Nz(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    private void OnContactInput(ChangeEventArgs e) => contact = FormatPhone(Digits(e.Value?.ToString()));
+    private void OnEmNumberInput(ChangeEventArgs e) => emNumber = FormatPhone(Digits(e.Value?.ToString()));
+
+    private static string Digits(string? s)
+    {
+        var d = new string((s ?? "").Where(char.IsDigit).ToArray());
+        return d.Length > 11 ? d[..11] : d;
+    }
+
+    // 09XX XXX XXXX  (groups of 4-3-4)
+    private static string FormatPhone(string digits)
+        => digits.Length <= 4 ? digits
+         : digits.Length <= 7 ? $"{digits[..4]} {digits[4..]}"
+         : $"{digits[..4]} {digits[4..7]} {digits[7..]}";
+
+    private static bool PhoneValid(string formatted)
+    {
+        var d = new string(formatted.Where(char.IsDigit).ToArray());
+        return d.Length == 11 && d.StartsWith("09");
+    }
+
+    private void Logout()
+    {
+        Session.Logout();
+        Nav.NavigateTo("/");
+    }
+}

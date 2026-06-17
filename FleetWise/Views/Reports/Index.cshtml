@@ -22,7 +22,7 @@
             </span>
             <span class="rp-stat-label">Total Trips</span>
         </div>
-        <div class="rp-stat-value" id="statTotalTrips">25</div>
+        <div class="rp-stat-value rp-skeleton" id="statTotalTrips">—</div>
         <div class="rp-stat-sub">Completed</div>
     </div>
 
@@ -37,7 +37,7 @@
             </span>
             <span class="rp-stat-label">Delayed/Missed Trips</span>
         </div>
-        <div class="rp-stat-value" id="statDelayedTrips">10</div>
+       <div class="rp-stat-value rp-skeleton" id="statDelayedTrips">—</div>
         <div class="rp-stat-sub">Delayed</div>
     </div>
 
@@ -54,8 +54,8 @@
             </span>
             <span class="rp-stat-label">Total Passengers</span>
         </div>
-        <div class="rp-stat-value" id="statTotalPassengers">201</div>
-        <div class="rp-stat-delta rp-delta--up" id="statPassengerDelta">&#x25B4; +32 vs yesterday</div>
+        <div class="rp-stat-value rp-skeleton" id="statTotalPassengers">—</div>
+        <div class="rp-stat-delta" id="statPassengerDelta"></div>
     </div>
 
     <div class="rp-stat-card">
@@ -69,8 +69,8 @@
             </span>
             <span class="rp-stat-label">Total Revenue</span>
         </div>
-        <div class="rp-stat-value" id="statTotalRevenue">&#8369;3,015</div>
-        <div class="rp-stat-delta rp-delta--up" id="statRevenueDelta">&#x25B4; +&#8369;500 vs yesterday</div>
+        <div class="rp-stat-value rp-skeleton" id="statTotalRevenue">—</div>
+        <div class="rp-stat-delta" id="statRevenueDelta"></div>
     </div>
 
 </div>
@@ -136,8 +136,8 @@
             <span class="rp-card-title">Passenger Summary</span>
             <div class="rp-period-select-wrap ms-auto">
                 <select class="rp-period-select" id="passengerPeriodSelect">
-                    <option>This Day</option>
-                    <option selected>This Week</option>
+                    <option selected>This Day</option>
+                    <option>This Week</option>
                     <option>Last Week</option>
                     <option>This Month</option>
                 </select>
@@ -184,8 +184,8 @@
             <span class="rp-card-title">Revenue Summary</span>
             <div class="rp-period-select-wrap ms-auto">
                 <select class="rp-period-select" id="revenuePeriodSelect">
-                    <option>This Day</option>
-                    <option selected>This Week</option>
+                    <option selected>This Day</option>
+                    <option>This Week</option>
                     <option>Last Week</option>
                     <option>This Month</option>
                 </select>
@@ -616,6 +616,10 @@
     document.getElementById('statTotalPassengers').textContent = formatNumber(stats.totalPassengers);
     document.getElementById('statTotalRevenue').innerHTML = formatCurrencyCompact(stats.totalRevenue);
 
+    ['statTotalTrips', 'statDelayedTrips', 'statTotalPassengers', 'statTotalRevenue'].forEach(id => {
+    document.getElementById(id).classList.remove('rp-skeleton');
+    });
+
     const pEl = document.getElementById('statPassengerDelta');
     pEl.className = 'rp-stat-delta ' + deltaClass(stats.passengerDelta);
     pEl.innerHTML = `${deltaArrow(stats.passengerDelta)} ${stats.passengerDelta >= 0 ? '+' : ''}${formatNumber(stats.passengerDelta)} vs yesterday`;
@@ -795,8 +799,8 @@
     document.getElementById('passengerPeriodSelect').addEventListener('change', () => loadAll());
     document.getElementById('revenuePeriodSelect').addEventListener('change', () => loadAll());
 
-    document.getElementById('dateFilter').value = new Date().toISOString().split('T')[0];
-
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('dateFilter').value = today;
     loadAll();
 </script>
 
@@ -1378,6 +1382,15 @@
     .rp-delta--down {
     color: #E74C3C;
     }
+
+    .rp-skeleton {
+    color: #D0D5DD;
+    animation: rp-pulse 1.2s ease-in-out infinite;
+    }
+@@keyframes rp-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+}
 
     /* ── Shared card ────────────────────────────────────────── */
     .rp-card {

@@ -1,4 +1,6 @@
 ﻿#nullable disable
+using System.Collections.Generic;
+using Newtonsoft.Json;
 using Postgrest.Attributes;
 using Postgrest.Models;
 
@@ -25,7 +27,7 @@ public class MaintenanceLog : BaseModel
     // dictionary — same pattern as Role.WebPermissions. A plain string here makes
     // Postgrest's deserializer throw on the leading '{'.
     [Column("issue_details")]
-    public Dictionary<string, object> IssueDetails { get; set; }
+    public MaintenanceIssueDetails IssueDetails { get; set; }
 
     [Column("maintenance_status")]
     public string MaintenanceStatus { get; set; }
@@ -42,4 +44,13 @@ public class MaintenanceLog : BaseModel
     // Backs the Edit Vehicle modal's "Verified by" field.
     [Column("verified_by")]
     public string VerifiedBy { get; set; }
+}
+
+// Shape of the `issue_details` jsonb column: { "issues": ["Tires", "Air Conditioning", ...] }
+// Newtonsoft ignores any other/unexpected keys in the jsonb by default, so this stays
+// resilient even if more fields get added to issue_details later.
+public class MaintenanceIssueDetails
+{
+    [JsonProperty("issues")]
+    public List<string> Issues { get; set; } = new();
 }

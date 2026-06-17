@@ -56,6 +56,10 @@ namespace FleetWise.Controllers
             // ── Passenger Count (from telemetry_data) ─────────────────
             var telemetryResponse = await _supabase
                 .From<TelemetryData>()
+                .Filter("timestamp", Postgrest.Constants.Operator.GreaterThanOrEqual,
+                        yesterday.ToString("yyyy-MM-dd"))   // catches 22:00–23:59 PHT yesterday
+                .Filter("timestamp", Postgrest.Constants.Operator.LessThan,
+                        today.AddDays(1).ToString("yyyy-MM-dd"))
                 .Get();
 
             var todayTripIds = todayTrips.Select(t => t.TripId).ToHashSet();
@@ -73,27 +77,29 @@ namespace FleetWise.Controllers
                 .Sum(g => g.OrderByDescending(t => t.Timestamp).First().CurrentPassengers);
 
             // ── Passenger Demand Chart (hourly buckets) ───────────────
-            var labelHours = new[] { 8, 9, 10, 11, 12, 13, 14 };
+            // Covers all three shifts: 06:00–14:00, 14:00–22:00, 22:00–06:00
+            var labelHours = new[] { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5 };
 
             var labels = labelHours
-                .Select(h => h < 12 ? $"{h}:00 AM" : h == 12 ? "12:00 PM" : $"{h - 12}:00 PM")
+                .Select(h => h == 0 ? "12:00 AM"
+                    : h < 12 ? $"{h}:00 AM"
+                    : h == 12 ? "12:00 PM"
+                    : $"{h - 12}:00 PM")
                 .ToList();
 
-            var tripPassengerMap = telemetryResponse.Models
-                .Where(t => todayTripIds.Contains(t.TripId))
-                .GroupBy(t => t.TripId)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.OrderByDescending(t => t.Timestamp).First().CurrentPassengers
-                );
+            // Bucket telemetry readings (for today's trips) by the local hour the reading
+            // was recorded. Timestamps are stored in UTC; convert to PHT (UTC+8) for bucketing.
+            var phtOffset = TimeSpan.FromHours(8);
+
+            var todayTelemetry = telemetryResponse.Models
+                .Where(t => todayTripIds.Contains(t.TripId));
 
             var data = labelHours.Select(h =>
             {
-                var tripsInHour = todayTrips
-                    .Where(t => t.ShiftStartTime.Hours == h)
-                    .Select(t => t.TripId);
-
-                return tripsInHour.Sum(id => tripPassengerMap.TryGetValue(id, out var p) ? p : 0);
+                return todayTelemetry
+                    .Where(t => DateTime.SpecifyKind(t.Timestamp, DateTimeKind.Utc).Add(phtOffset).Hour == h)
+                    .GroupBy(t => t.TripId)
+                    .Sum(g => g.OrderByDescending(t => t.Timestamp).First().CurrentPassengers);
             }).ToList();
 
             int yMax = data.Any(d => d > 0) ? (int)(Math.Ceiling((data.Max() + 50) / 100.0) * 100) : 400;
