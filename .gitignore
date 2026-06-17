@@ -362,6 +362,8 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
+PLAN.md
+.claude
 # tooling
 /d
 skills-lock.json

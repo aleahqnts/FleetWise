@@ -1,0 +1,50 @@
+@model List<VehicleListItemViewModel>
+
+@functions {
+    string StatusClass(string status) => status switch
+    {
+        "Ready to Deploy" => "vh-badge--ready",
+        "On Trip" => "vh-badge--ontrip",
+        "Pending" => "vh-badge--pending",
+        "Flagged" => "vh-badge--flagged",
+        _ => "vh-badge--default"
+    };
+
+    string MaintClass(string maintenance) => maintenance switch
+    {
+        "No Issues" => "vh-badge--ok",
+        "Needs Attention" => "vh-badge--attention",
+        "Under Repair" => "vh-badge--repair",
+        _ => "vh-badge--default"
+    };
+}
+
+@if (Model.Count == 0)
+{
+    <tr>
+        <td colspan="5" class="vh-empty">No vehicles found.</td>
+    </tr>
+}
+else
+{
+    @foreach (var v in Model)
+    {
+        <tr>
+            <td>
+                <div class="vh-id">@v.VehicleId</div>
+                <div class="vh-plate">@v.PlateNumber</div>
+            </td>
+            <td>@v.RouteName</td>
+            <td><span class="vh-badge @StatusClass(v.Status)">@v.Status</span></td>
+            <td><span class="vh-badge @MaintClass(v.Maintenance)">@v.Maintenance</span></td>
+            <td>
+                <div class="vh-actions-cell">
+                    <button type="button" class="vh-btn-action" data-bs-toggle="modal" data-bs-target="#viewVehicleModal"
+                            data-vehicle-id="@v.VehicleId">View</button>
+                    <button type="button" class="vh-btn-action" data-bs-toggle="modal" data-bs-target="#editVehicleModal"
+                            data-vehicle-id="@v.VehicleId">Edit</button>
+                </div>
+            </td>
+        </tr>
+    }
+}
