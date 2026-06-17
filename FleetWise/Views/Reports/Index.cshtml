@@ -37,7 +37,7 @@
             </span>
             <span class="rp-stat-label">Delayed/Missed Trips</span>
         </div>
-       <div class="rp-stat-value rp-skeleton" id="statDelayedTrips">—</div>
+        <div class="rp-stat-value rp-skeleton" id="statDelayedTrips">—</div>
         <div class="rp-stat-sub">Delayed</div>
     </div>
 
@@ -798,7 +798,7 @@
     document.getElementById('passengerPeriodSelect').addEventListener('change', () => loadAll());
     document.getElementById('revenuePeriodSelect').addEventListener('change', () => loadAll());
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Manila' }).split(',')[0];
     document.getElementById('dateFilter').value = today;
     loadAll();
 </script>
@@ -874,7 +874,7 @@
     vehicleField.style.display = cfg.showVehicle ? '' : 'none';
 
     // Default date to today
-    dateInput.value = new Date().toISOString().split('T')[0];
+    dateInput.value = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Manila' }).split(',')[0];
 
     // Reset all selects
     routeSelect.value  = '';
@@ -1385,10 +1385,16 @@
     color: #D0D5DD;
     animation: rp-pulse 1.2s ease-in-out infinite;
     }
-@@keyframes rp-pulse {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.4; }
-}
+
+    @@keyframes rp-pulse {
+    0%, 100% {
+    opacity: 1;
+    }
+
+    50% {
+    opacity: 0.4;
+    }
+    }
 
     /* ── Shared card ────────────────────────────────────────── */
     .rp-card {

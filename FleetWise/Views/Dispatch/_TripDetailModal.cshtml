@@ -48,11 +48,7 @@
             <!-- Vehicle Details -->
             <div class="tdm-subsection-header">Vehicle Details</div>
             <div class="tdm-section-body">
-                <div class="tdm-info-grid tdm-info-grid--4col">
-                    <div class="tdm-info-item">
-                        <span class="tdm-label">Vehicle Type</span>
-                        <span class="tdm-value" id="tdm-vehicle-type">—</span>
-                    </div>
+                <div class="tdm-info-grid">
                     <div class="tdm-info-item">
                         <span class="tdm-label">Vehicle ID</span>
                         <span class="tdm-value" id="tdm-vehicle-id">—</span>
@@ -474,10 +470,6 @@
     }
 
 
-    .tdm-info-grid--4col {
-        grid-template-columns: repeat(4, 1fr);
-    }
-
     .tdm-loading {
         display: flex;
         flex-direction: column;
@@ -602,7 +594,6 @@
             document.getElementById('tdm-route').textContent = d.routeName ?? '—';
 
             // Vehicle
-            document.getElementById('tdm-vehicle-type').textContent = d.vehicleType ?? '—';
             document.getElementById('tdm-vehicle-id').textContent   = d.vehicleId   ?? '—';
             document.getElementById('tdm-plate').textContent        = d.plateNumber  ?? '—';
             document.getElementById('tdm-vehicle-status').innerHTML = statusDot(d.vehicleStatus);

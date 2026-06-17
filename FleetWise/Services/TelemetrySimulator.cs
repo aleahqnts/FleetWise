@@ -104,7 +104,7 @@ public class TelemetrySimulator : BackgroundService
                 TripId = trip.TripId,
                 Latitude = (decimal)state.Lat,
                 Longitude = (decimal)state.Lng,
-                CurrentPassengers = state.Passengers,
+                TotalPassengers = state.Passengers,
                 Speed = Math.Round((decimal)state.SpeedKmh, 1),
                 Heading = (float)state.Heading,
                 Timestamp = PhClock.Now
