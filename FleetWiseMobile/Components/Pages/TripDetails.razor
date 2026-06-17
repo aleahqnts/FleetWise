@@ -1,0 +1,131 @@
+@page "/trip-details/{TripId}"
+@layout LoginLayout
+@inject SessionService Session
+@inject DriverDataService Data
+@inject ITripTracker Tracker
+@inject NavigationManager Nav
+
+@if (loading)
+{
+    <div class="td-loading">Loading...</div>
+}
+else if (trip is null)
+{
+    <div class="td"><p class="td-empty">Trip not found.</p></div>
+}
+else
+{
+    <div class="td">
+        <div class="td-header">
+            <button class="back" @onclick="@(() => Nav.NavigateTo("/home"))">&#8592;</button>
+            <div class="td-title">
+                <h1>Trip Details</h1>
+                <p class="td-sub">Review your assignment</p>
+            </div>
+            <span class="spacer"></span>
+        </div>
+
+        <div class="td-card">
+            <div class="line"><span class="i cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></svg></span> @DateLabel</div>
+            <div class="line"><span class="i sun"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6L19 19M19 5l-1.4 1.4M6.4 17.6L5 19" /></svg></span> @trip.ShiftType Shift</div>
+            <div class="line"><span class="i clock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg></span> @TimeRange</div>
+            <div class="line"><span class="i pin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z" /><circle cx="12" cy="10" r="2.5" /></svg></span> @(route?.RouteName ?? $"Route {trip.RouteId}")</div>
+
+            <div class="divider"></div>
+            <p class="muted">Bus to Drive</p>
+            <p class="bus">@(vehicle?.VehicleId ?? trip.VehicleId)</p>
+            <p class="muted">Plate Number: @(vehicle?.PlateNumber ?? "—")</p>
+
+            @if (checklist is not null)
+            {
+                <div class="done">
+                    <p class="green strong">Bus Checklist Completed</p>
+                    <p class="muted">@checklist.SubmittedAt.ToString("MMM d, h:mm tt")</p>
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(msg))
+        {
+            <p class="err">@msg</p>
+        }
+
+        <button class="btn-green" @onclick="Start" disabled="@busy">Start Trip</button>
+    </div>
+}
+
+@code {
+    [Parameter] public string TripId { get; set; } = "";
+
+    private bool loading = true;
+    private bool busy;
+    private string? msg;
+    private Trip? trip;
+    private BusRoute? route;
+    private Vehicle? vehicle;
+    private BusChecklist? checklist;
+
+    private string DateLabel
+    {
+        get
+        {
+            if (trip is null) return "";
+            var d = trip.Date.Date;
+            return (d == DateTime.Today ? "Today, " : "") + d.ToString("MMMM d, yyyy");
+        }
+    }
+
+    private string TimeRange => trip is null ? "" :
+        $"{DateTime.Today.Add(trip.ShiftStartTime):h:mm tt} to {DateTime.Today.Add(trip.ShiftEndTime):h:mm tt}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
+
+        trip = await Data.GetTripAsync(TripId);
+        if (trip is not null)
+        {
+            route = await Data.GetRouteAsync(trip.RouteId);
+            vehicle = await Data.GetVehicleAsync(trip.VehicleId);
+            checklist = await Data.GetChecklistAsync(trip.TripId);
+        }
+        loading = false;
+    }
+
+    private async Task Start()
+    {
+        busy = true;
+        msg = null;
+        try
+        {
+            await Data.StartTripAsync(TripId);
+            await EnsureLocationPermissionAsync();
+            Tracker.Start(TripId);
+            // Replace history so hardware-back from the counter can't return to this
+            // stale "Confirm Start Trip?" page.
+            Nav.NavigateTo($"/trip-active/{TripId}", new NavigationOptions { ReplaceHistoryEntry = true });
+        }
+        catch (Exception ex)
+        {
+            msg = "Couldn't start trip. Check your connection.";
+            System.Diagnostics.Debug.WriteLine($"[TripDetails] {ex}");
+            busy = false;
+        }
+    }
+
+    // Foreground location first; then background (Android sends user to settings).
+    private static async Task EnsureLocationPermissionAsync()
+    {
+        try
+        {
+            var s = await Permissions.CheckStatusAsync<Permissions.LocationWhenInUse>();
+            if (s != PermissionStatus.Granted)
+                await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
+
+            var bg = await Permissions.CheckStatusAsync<Permissions.LocationAlways>();
+            if (bg != PermissionStatus.Granted)
+                await Permissions.RequestAsync<Permissions.LocationAlways>();
+        }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[TripDetails.Perm] {ex}"); }
+    }
+}

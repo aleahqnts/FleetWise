@@ -23,6 +23,10 @@ public class BusChecklist : BaseModel
     [Column("submitted_at")]
     public DateTime SubmittedAt { get; set; }
 
+    // These five are jsonb columns in Postgres — flat { "item": "Pass"/"Fail" } maps, not
+    // text — so they deserialize to a dictionary (a plain string makes Postgrest's deserializer
+    // throw on the leading '{'). The inspection "Issue" is derived from the entries whose
+    // value isn't "Pass".
     [Column("exterior_inspection")]
     public Dictionary<string, string> ExteriorInspection { get; set; }
 

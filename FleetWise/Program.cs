@@ -23,6 +23,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<FareCalculator>();
 
 builder.Services.AddControllersWithViews();
 
@@ -37,6 +38,12 @@ builder.Services.AddSingleton(provider => {
     client.InitializeAsync().Wait();   // actually opens the connection
     return client;
 });
+
+// Simulated live telemetry producer — Development only, so it never runs in production.
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddHostedService<TelemetrySimulator>();
+}
 
 var app = builder.Build();
 

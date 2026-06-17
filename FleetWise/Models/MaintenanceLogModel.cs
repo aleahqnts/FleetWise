@@ -12,8 +12,10 @@ public class MaintenanceLog : BaseModel
     [PrimaryKey("log_id")]
     public int LogId { get; set; }
 
+    // Nullable: a maintenance log can be opened without an originating bus_checklist
+    // (the DB column is nullable), so a non-nullable int throws on deserialize.
     [Column("checklist_id")]
-    public int ChecklistId { get; set; }
+    public int? ChecklistId { get; set; }
 
     [Column("vehicle_id")]
     public string VehicleId { get; set; }
@@ -21,6 +23,9 @@ public class MaintenanceLog : BaseModel
     [Column("trip_id")]
     public string TripId { get; set; }
 
+    // issue_details is a JSON object column in Postgres (not text), so it maps to a
+    // dictionary — same pattern as Role.WebPermissions. A plain string here makes
+    // Postgrest's deserializer throw on the leading '{'.
     [Column("issue_details")]
     public MaintenanceIssueDetails IssueDetails { get; set; }
 
@@ -35,6 +40,10 @@ public class MaintenanceLog : BaseModel
 
     [Column("remarks")]
     public string Remarks { get; set; }
+
+    // Backs the Edit Vehicle modal's "Verified by" field.
+    [Column("verified_by")]
+    public string VerifiedBy { get; set; }
 }
 
 // Shape of the `issue_details` jsonb column: { "issues": ["Tires", "Air Conditioning", ...] }
