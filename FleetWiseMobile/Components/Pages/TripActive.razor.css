@@ -1,7 +1,13 @@
-.ta-loading { padding: 40px; text-align: center; color: #8a93a2; }
+.ta-loading {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8a93a2;
+}
 .ta-empty { text-align: center; color: #8a93a2; margin-top: 40px; }
 
-.ta { padding: 20px 22px 28px; }
+.ta { padding: 52px 22px 28px; }
 
 .ta-head {
     display: flex;

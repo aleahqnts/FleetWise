@@ -375,3 +375,4 @@ skills-lock.json
 /d
 skills-lock.json
 .agents/
+/.claude/skills

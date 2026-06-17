@@ -1,15 +1,108 @@
 @page "/notifications"
 @inject SessionService Session
+@inject DriverDataService Data
 @inject NavigationManager Nav
 
-<div class="stub">
-    <h1>Notifications</h1>
-    <p>Notifications — deferred (capstone scope).</p>
-</div>
+@if (loading)
+{
+    <div class="page-loading">Loading...</div>
+}
+else
+{
+    <div class="notif">
+        <h1 class="ntitle">Notifications</h1>
+
+        @if (!items.Any())
+        {
+            <p class="muted">No notifications yet.</p>
+        }
+        else
+        {
+            @foreach (var g in Grouped)
+            {
+                <h2 class="ngroup">@g.Key</h2>
+                @foreach (var n in g)
+                {
+                    <div class="ncard @(n.IsRead ? "" : "unread")" @onclick="@(() => Toggle(n))">
+                        <span class="nicon @IconClass(n.Type)">
+                            @switch (n.Type)
+                            {
+                                case "completed":
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.5 2.5 5-6" /></svg>
+                                    break;
+                                case "assigned":
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z" /><circle cx="12" cy="10" r="2.5" /></svg>
+                                    break;
+                                case "alert":
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></svg>
+                                    break;
+                                default:
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                                    break;
+                            }
+                        </span>
+                        <div class="nbody">
+                            <p class="nt">@n.Title</p>
+                            @if (expandedId == n.NotificationId)
+                            {
+                                <p class="np full">@n.Body</p>
+                                <p class="ntime">@n.CreatedAt.ToString("MMM d, yyyy · h:mm tt")</p>
+                            }
+                            else
+                            {
+                                <p class="np">@n.Body</p>
+                            }
+                        </div>
+                        @if (!n.IsRead)
+                        {
+                            <span class="ndot"></span>
+                        }
+                    </div>
+                }
+            }
+        }
+    </div>
+}
 
 @code {
-    protected override void OnInitialized()
+    private bool loading = true;
+    private List<NotificationModel> items = new();
+
+    private IEnumerable<IGrouping<string, NotificationModel>> Grouped => items.GroupBy(n => Label(n.CreatedAt));
+
+    private static string IconClass(string type) => type switch
     {
-        if (!Session.IsLoggedIn) Nav.NavigateTo("/");
+        "completed" => "completed",
+        "assigned" => "assigned",
+        "alert" => "alert",
+        _ => "message"
+    };
+
+    private static string Label(DateTime d)
+    {
+        var dd = d.Date;
+        if (dd == DateTime.Today) return "Today";
+        if (dd == DateTime.Today.AddDays(-1)) return "Yesterday";
+        return dd.ToString("MMMM d, yyyy");
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
+        items = await Data.GetNotificationsAsync(Session.CurrentUser!.UserId);
+        loading = false;
+    }
+
+    private long? expandedId;
+
+    private async Task Toggle(NotificationModel n)
+    {
+        expandedId = expandedId == n.NotificationId ? null : n.NotificationId;
+        if (!n.IsRead)
+        {
+            n.IsRead = true;
+            try { await Data.MarkNotificationReadAsync(n.NotificationId); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Notif.Read] {ex}"); }
+        }
     }
 }

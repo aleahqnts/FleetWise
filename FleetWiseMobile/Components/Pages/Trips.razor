@@ -3,35 +3,38 @@
 @inject DriverDataService Data
 @inject NavigationManager Nav
 
-<div class="trips">
-    <h1 class="trips-title">Trips</h1>
+@if (loading)
+{
+    <div class="page-loading">Loading...</div>
+}
+else
+{
+    <div class="trips">
+        <h1 class="trips-title">Trips</h1>
 
-    @if (loading)
-    {
-        <p class="muted">Loading...</p>
-    }
-    else if (!trips.Any())
-    {
-        <p class="muted">No trips yet.</p>
-    }
-    else
-    {
-        @foreach (var g in Grouped)
+        @if (!trips.Any())
         {
-            <h2 class="group">@g.Key</h2>
-            @foreach (var t in g)
+            <p class="muted">No trips yet.</p>
+        }
+        else
+        {
+            @foreach (var g in Grouped)
             {
-                <div class="trip-card">
-                    <div>
-                        <p class="tid">@t.TripId</p>
-                        <p class="tdate">@t.Date.ToString("MMMM d, yyyy")</p>
+                <h2 class="group">@g.Key</h2>
+                @foreach (var t in g)
+                {
+                    <div class="trip-card">
+                        <div>
+                            <p class="tid">@t.TripId</p>
+                            <p class="tdate">@t.Date.ToString("MMMM d, yyyy")</p>
+                        </div>
+                        <button class="link-btn" @onclick="@(() => Nav.NavigateTo($"/trip-report/{t.TripId}"))">View Trip</button>
                     </div>
-                    <button class="link-btn" @onclick="@(() => Nav.NavigateTo($"/trip-report/{t.TripId}"))">View Trip</button>
-                </div>
+                }
             }
         }
-    }
-</div>
+    </div>
+}
 
 @code {
     private bool loading = true;

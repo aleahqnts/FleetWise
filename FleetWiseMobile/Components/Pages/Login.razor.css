@@ -83,6 +83,24 @@
     color: #1b2a56;
 }
 
+/* Hide WebView2/Edge native password reveal + clear buttons (keep our custom eye) */
+.field input::-ms-reveal,
+.field input::-ms-clear {
+    display: none;
+}
+
+.field .eye {
+    border: none;
+    background: none;
+    color: #9aa3b2;
+    cursor: pointer;
+    padding: 0 2px;
+    display: flex;
+    align-items: center;
+}
+
+.field .eye svg { width: 18px; height: 18px; display: block; }
+
 .forgot {
     text-align: right;
     margin-bottom: 18px;
