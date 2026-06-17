@@ -23,16 +23,14 @@ namespace FleetWise.Controllers
         private static readonly string[] MaintenanceStatusOptions =
             { "Needs Attention", "Under Repair", "No Issues" };
 
-        // The only vehicle types the fleet has — single source of truth for the Type filter
-        // and the Add/Edit modal dropdowns.
-        private static readonly string[] VehicleTypeOptions =
-            { "Bus", "Mini Bus" };
+        // Every vehicle is a bus, so vehicle_type isn't shown or chosen; new units default to this.
+        private const string DefaultVehicleType = "Bus";
 
         private readonly Supabase.Client _supabase;
 
         public VehiclesController(Supabase.Client supabase) => _supabase = supabase;
 
-        public async Task<IActionResult> Index(string? route, string? type, string? status, string? condition, string? search)
+        public async Task<IActionResult> Index(string? route, string? status, string? condition, string? search)
         {
             var (vehicles, routes, maintenance) = await LoadVehicleDataAsync();
 
@@ -49,12 +47,10 @@ namespace FleetWise.Controllers
                 RouteOptions = routes
                     .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
                     .ToList(),
-                TypeOptions = VehicleTypeOptions.ToList(),
                 StatusOptions = StatusFilterOptions.ToList(),
                 ConditionOptions = ConditionFilterOptions.ToList(),
 
                 SelectedRoute = route,
-                SelectedType = type,
                 SelectedStatus = status,
                 SelectedCondition = condition,
                 SearchTerm = search,
@@ -65,9 +61,9 @@ namespace FleetWise.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> VehicleRows(string? route, string? type, string? status, string? condition, string? search)
+        public async Task<IActionResult> VehicleRows(string? route, string? status, string? condition, string? search)
         {
-            var items = await BuildRowsAsync(route, type, status, condition, search);
+            var items = await BuildRowsAsync(route, status, condition, search);
             return PartialView("_VehicleRows", items);
         }
 
@@ -92,7 +88,7 @@ namespace FleetWise.Controllers
             {
                 VehicleId = model.VehicleId.Trim(),
                 PlateNumber = model.PlateNumber.Trim(),
-                VehicleType = model.VehicleType.Trim(),
+                VehicleType = DefaultVehicleType,      // every vehicle is a bus (type not shown)
                 RouteId = model.RouteId,
                 Capacity = 50,                         // sensible default — not captured by the form
                 VehicleStatus = "Ready to Deploy",     // new units start deployable (vehicle_status_enum label)
@@ -157,7 +153,6 @@ namespace FleetWise.Controllers
             {
                 VehicleId = vehicle.VehicleId,
                 PlateNumber = vehicle.PlateNumber ?? "—",
-                VehicleType = vehicle.VehicleType ?? "—",
                 RouteName = routeName,
             };
 
@@ -234,9 +229,8 @@ namespace FleetWise.Controllers
                 }
             }
 
-            // Update the Vehicle Profile.
+            // Update the Vehicle Profile (vehicle_type is left as-is — every unit is a bus).
             vehicle.PlateNumber = model.PlateNumber.Trim();
-            vehicle.VehicleType = model.VehicleType.Trim();
             vehicle.RouteId = model.RouteId;
             vehicle.UpdatedAt = PhClock.Now;
 
@@ -281,7 +275,7 @@ namespace FleetWise.Controllers
             return (vehiclesResponse.Models, routesResponse.Models, maintenance);
         }
 
-        private async Task<List<VehicleListItemViewModel>> BuildRowsAsync(string? route, string? type, string? status, string? condition, string? search)
+        private async Task<List<VehicleListItemViewModel>> BuildRowsAsync(string? route, string? status, string? condition, string? search)
         {
             var (vehicles, routes, maintenance) = await LoadVehicleDataAsync();
             var routeNames = routes.ToDictionary(r => r.RouteId, r => r.RouteName);
@@ -290,9 +284,6 @@ namespace FleetWise.Controllers
 
             if (!string.IsNullOrWhiteSpace(route) && int.TryParse(route, out var routeId))
                 filtered = filtered.Where(v => v.RouteId == routeId);
-
-            if (!string.IsNullOrWhiteSpace(type))
-                filtered = filtered.Where(v => string.Equals(v.VehicleType, type, OIC));
 
             if (!string.IsNullOrWhiteSpace(status))
                 filtered = filtered.Where(v => string.Equals(DisplayStatus(v.VehicleStatus), status, OIC));
@@ -315,7 +306,6 @@ namespace FleetWise.Controllers
                 {
                     VehicleId = v.VehicleId,
                     PlateNumber = v.PlateNumber ?? "",
-                    VehicleType = v.VehicleType ?? "",
                     RouteName = v.RouteId.HasValue && routeNames.TryGetValue(v.RouteId.Value, out var rn) ? rn : "—",
                     Status = DisplayStatus(v.VehicleStatus),
                     Maintenance = maintenance.GetValueOrDefault(v.VehicleId, "No Issues"),
@@ -338,7 +328,6 @@ namespace FleetWise.Controllers
                 RouteOptions = routes
                     .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
                     .ToList(),
-                TypeOptions = VehicleTypeOptions.ToList(),
                 StatusOptions = StatusFilterOptions.ToList(),
                 ConditionOptions = ConditionFilterOptions.ToList(),
             };
@@ -375,10 +364,8 @@ namespace FleetWise.Controllers
             {
                 VehicleId = vehicle.VehicleId,
                 PlateNumber = posted?.PlateNumber ?? vehicle.PlateNumber ?? "",
-                VehicleType = posted?.VehicleType ?? vehicle.VehicleType ?? "",
                 RouteId = posted?.RouteId ?? vehicle.RouteId ?? 0,
                 RouteOptions = BuildRouteOptions(routes),
-                TypeOptions = BuildTypeOptions(),
                 StatusOptions = MaintenanceStatusOptions.ToList(),
                 CurrentStatus = DeriveMaintenance(logs),
             };
@@ -416,7 +403,6 @@ namespace FleetWise.Controllers
                 ScheduledMaintenance = vehicles.Count(v =>
                     maintenance.TryGetValue(v.VehicleId, out var m) && m == "Under Repair"),
                 RouteOptions = BuildRouteOptions(routes),
-                TypeOptions = VehicleTypeOptions.ToList(),
                 StatusOptions = StatusFilterOptions.ToList(),
                 ConditionOptions = ConditionFilterOptions.ToList(),
             };
@@ -431,18 +417,11 @@ namespace FleetWise.Controllers
                 .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
                 .ToList();
 
-        // Vehicle Type dropdown: the fleet's only two types (VehicleTypeOptions).
-        private static List<SelectListItem> BuildTypeOptions() =>
-            VehicleTypeOptions
-                .Select(t => new SelectListItem { Value = t, Text = t })
-                .ToList();
-
         // Supplies the Add Vehicle modal with its bound model, dropdown data, and reopen flag.
         private void SetModalViewData(VehiclesIndexViewModel vm, AddVehicleViewModel addModel, string? openModal)
         {
             ViewBag.AddVehicleModel = addModel;
             ViewBag.RouteOptions = vm.RouteOptions;
-            ViewBag.TypeOptions = BuildTypeOptions();
             ViewBag.OpenModal = openModal;
         }
 

@@ -97,7 +97,7 @@ public class TelemetrySimulator : BackgroundService
                 ? c
                 : 50;
 
-            var state = AdvanceTrip(trip.TripId, geometry, capacity);
+            var state = AdvanceTrip(trip.TripId, geometry, capacity, trip.TotalBoarded);
 
             var telemetry = new TelemetryData
             {
@@ -111,6 +111,17 @@ public class TelemetrySimulator : BackgroundService
             };
 
             await _supabase.From<TelemetryData>().Insert(telemetry);
+
+            // Persist the cumulative boardings so the map's revenue (total_boarded × fare)
+            // grows and never drops when passengers alight. Column-targeted update — only
+            // total_boarded is written, leaving the trip's date and other fields untouched.
+            if (state.TotalBoarded != trip.TotalBoarded)
+            {
+                await _supabase.From<Trip>()
+                    .Where(t => t.TripId == trip.TripId)
+                    .Set(t => t.TotalBoarded, state.TotalBoarded)
+                    .Update();
+            }
         }
     }
 
@@ -193,15 +204,19 @@ public class TelemetrySimulator : BackgroundService
     }
 
     /// <summary>Advance one trip along its route by one tick and return its new state.</summary>
-    private TripState AdvanceTrip(string tripId, RouteGeometry geometry, int capacity)
+    private TripState AdvanceTrip(string tripId, RouteGeometry geometry, int capacity, int dbTotalBoarded)
     {
         if (!_states.TryGetValue(tripId, out var state))
         {
-            // First sighting: start somewhere along the route with a plausible load.
+            // First sighting: start somewhere along the route with a plausible load. Seed
+            // cumulative boardings from the DB (so revenue survives a restart) but never
+            // below the current load — everyone aboard boarded at some point.
+            var initialPassengers = _rng.Next(0, Math.Max(1, (int)(capacity * 0.6)));
             state = new TripState
             {
                 DistanceMeters = _rng.NextDouble() * geometry.TotalLength,
-                Passengers = _rng.Next(0, Math.Max(1, (int)(capacity * 0.6)))
+                Passengers = initialPassengers,
+                TotalBoarded = Math.Max(dbTotalBoarded, initialPassengers)
             };
             _states[tripId] = state;
         }
@@ -219,7 +234,14 @@ public class TelemetrySimulator : BackgroundService
 
         // Drift passengers by a small random delta, clamped to the vehicle's capacity.
         var delta = _rng.Next(-MaxPassengerDelta, MaxPassengerDelta + 1);
-        state.Passengers = Math.Clamp(state.Passengers + delta, 0, capacity);
+        var newPassengers = Math.Clamp(state.Passengers + delta, 0, capacity);
+
+        // Count only boardings (positive change) toward the cumulative total.
+        var boarded = newPassengers - state.Passengers;
+        if (boarded > 0)
+            state.TotalBoarded += boarded;
+
+        state.Passengers = newPassengers;
 
         return state;
     }
@@ -250,6 +272,7 @@ public class TelemetrySimulator : BackgroundService
         public double Heading { get; set; }
         public double SpeedKmh { get; set; }
         public int Passengers { get; set; }
+        public int TotalBoarded { get; set; }
     }
 
     /// <summary>An ordered polyline with cumulative segment distances for interpolation.</summary>

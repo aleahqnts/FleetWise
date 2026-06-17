@@ -8,7 +8,6 @@ namespace FleetWise.Models
 
         // ── Vehicle Profile ──
         public string PlateNumber { get; set; } = string.Empty;
-        public string VehicleType { get; set; } = string.Empty;
         public string RouteName { get; set; } = string.Empty;
 
         // ── Inspection Log (latest bus_checklist) ──

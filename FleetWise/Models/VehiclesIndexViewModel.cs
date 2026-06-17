@@ -14,13 +14,11 @@ namespace FleetWise.Models
 
         // ── Dropdown option lists ──
         public List<SelectListItem> RouteOptions { get; set; } = new();
-        public List<string> TypeOptions { get; set; } = new();
         public List<string> StatusOptions { get; set; } = new();
         public List<string> ConditionOptions { get; set; } = new();
 
         // ── Selected filter state (echoed back so dropdowns/search keep their value) ──
         public string? SelectedRoute { get; set; }
-        public string? SelectedType { get; set; }
         public string? SelectedStatus { get; set; }
         public string? SelectedCondition { get; set; }
         public string? SearchTerm { get; set; }

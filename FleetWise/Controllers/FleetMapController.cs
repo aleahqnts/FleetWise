@@ -203,6 +203,11 @@ namespace FleetWise.Controllers
                     ? (int)Math.Round(passengers * 100.0 / capacity)
                     : 0;
 
+                // Revenue accrues from everyone who boarded (and paid), so it tracks the
+                // trip's cumulative total_boarded — never the live occupancy, which falls
+                // when passengers alight.
+                var boardedForRevenue = Math.Max(trip.TotalBoarded, passengers);
+
                 movingByVehicle[trip.VehicleId] = new BusPositionDto
                 {
                     TripId = trip.TripId,
@@ -220,7 +225,7 @@ namespace FleetWise.Controllers
                     Passengers = passengers,
                     Capacity = capacity,
                     OccupancyPct = occupancyPct,
-                    EstimatedRevenue = _fareCalculator.Estimate(passengers, fareRate),
+                    EstimatedRevenue = _fareCalculator.Estimate(boardedForRevenue, fareRate),
                     Timestamp = telemetry.Timestamp
                 };
             }
