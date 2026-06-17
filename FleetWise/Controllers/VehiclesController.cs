@@ -99,6 +99,84 @@ namespace FleetWise.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+        // Fetch-partial (Block 2 addendum): fresh per-vehicle data for the View Details modal,
+        // no heavy page payload. Combines the profile, the latest driver inspection, and the
+        // maintenance history.
+        [HttpGet]
+        public async Task<IActionResult> Details(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+                return NotFound();
+
+            var vehicleResp = await _supabase.From<Vehicle>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, id)
+                .Get();
+            var vehicle = vehicleResp.Models.FirstOrDefault();
+            if (vehicle is null)
+                return NotFound();
+
+            // Route name (route_id is nullable).
+            var routeName = "—";
+            if (vehicle.RouteId.HasValue)
+            {
+                var routeResp = await _supabase.From<BusRoute>()
+                    .Filter("route_id", Postgrest.Constants.Operator.Equals, vehicle.RouteId.Value)
+                    .Get();
+                routeName = routeResp.Models.FirstOrDefault()?.RouteName ?? "—";
+            }
+
+            // Latest inspection for this vehicle (+ the driver who reported it).
+            var checklistResp = await _supabase.From<BusChecklist>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, id)
+                .Order("submitted_at", Postgrest.Constants.Ordering.Descending)
+                .Get();
+            var checklist = checklistResp.Models.FirstOrDefault();
+
+            UserModel driver = null;
+            if (checklist != null)
+            {
+                var driverResp = await _supabase.From<UserModel>()
+                    .Filter("user_id", Postgrest.Constants.Operator.Equals, checklist.DriverId)
+                    .Get();
+                driver = driverResp.Models.FirstOrDefault();
+            }
+
+            // Maintenance history, newest first.
+            var logsResp = await _supabase.From<MaintenanceLog>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, id)
+                .Order("created_at", Postgrest.Constants.Ordering.Descending)
+                .Get();
+            var logs = logsResp.Models;
+
+            var vm = new VehicleDetailsViewModel
+            {
+                VehicleId = vehicle.VehicleId,
+                PlateNumber = vehicle.PlateNumber ?? "—",
+                VehicleType = vehicle.VehicleType ?? "—",
+                RouteName = routeName,
+            };
+
+            if (checklist != null)
+            {
+                vm.HasInspection = true;
+                vm.ReportedBy = DriverName(driver, checklist.DriverId);
+                vm.TimeOfReport = checklist.SubmittedAt.ToString("MM/dd/yy hh:mm tt");
+                vm.Issue = DeriveInspectionIssue(checklist);
+                vm.Remarks = checklist.Notes;
+                vm.InspectionBadge = DeriveInspectionBadge(checklist.ChecklistStatus);
+            }
+
+            vm.CurrentStatus = DeriveMaintenance(logs);
+            if (logs.Count > 0)
+            {
+                vm.HasMaintenance = true;
+                vm.IssueSummary = DeriveIssueSummary(logs[0]);
+                vm.MaintenanceEntries = logs.Select(FormatMaintenanceEntry).ToList();
+            }
+
+            return PartialView("_VehicleDetails", vm);
+        }
+
         // ── Data loading & projection ────────────────────────────────────────
 
         private async Task<(List<Vehicle> Vehicles, List<BusRoute> Routes, Dictionary<string, string> Maintenance)> LoadVehicleDataAsync()
@@ -230,6 +308,73 @@ namespace FleetWise.Controllers
             if (s.Contains("Repair", OIC)) return "Under Repair";
             if (s.Contains("No Issue", OIC) || s.Contains("Resolved", OIC)) return "No Issues";
             return "Needs Attention";
+        }
+
+        // Inspection "Issue" = the checklist categories whose value isn't "Pass" (the five
+        // jsonb maps), humanized and de-duplicated. "None" when everything passed.
+        private static string DeriveInspectionIssue(BusChecklist c)
+        {
+            var maps = new[]
+            {
+                c.ExteriorInspection, c.EngineCompartment, c.InteriorInspection,
+                c.BrakeSafety, c.PassengerSystems,
+            };
+
+            var failed = maps
+                .Where(m => m != null)
+                .SelectMany(m => m)
+                .Where(kv => !string.Equals(kv.Value?.Trim(), "Pass", OIC))
+                .Select(kv => Humanize(kv.Key))
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return failed.Count > 0 ? string.Join(", ", failed) : "None";
+        }
+
+        // checklist_status_enum has no "Flagged" value, so the mockup's red Flagged badge is
+        // derived: Failed → Flagged; otherwise show the raw status (Passed / Pending).
+        private static string DeriveInspectionBadge(string checklistStatus)
+        {
+            var s = (checklistStatus ?? "").Trim();
+            if (s.Equals("Failed", OIC)) return "Flagged";
+            return string.IsNullOrEmpty(s) ? "Pending" : s;
+        }
+
+        // "Issue Summary" for the maintenance section: the latest log's issue_details keys
+        // (humanized), falling back to its remarks, then a dash.
+        private static string DeriveIssueSummary(MaintenanceLog latest)
+        {
+            if (latest.IssueDetails != null && latest.IssueDetails.Count > 0)
+                return string.Join(", ", latest.IssueDetails.Keys.Select(Humanize));
+            return string.IsNullOrWhiteSpace(latest.Remarks) ? "—" : latest.Remarks;
+        }
+
+        // One timeline line per log: "MM/dd/yy – ML-## – Status" (Resolved once resolved_at is set).
+        private static string FormatMaintenanceEntry(MaintenanceLog log)
+        {
+            var date = (log.ResolvedAt ?? log.CreatedAt).ToString("MM/dd/yy");
+            var status = log.ResolvedAt != null
+                ? "Resolved"
+                : (string.IsNullOrWhiteSpace(log.MaintenanceStatus) ? "Open" : log.MaintenanceStatus.Trim());
+            return $"{date} – ML-{log.LogId:D2} – {status}";
+        }
+
+        private static string DriverName(UserModel driver, int driverId)
+        {
+            if (driver is null) return $"Driver #{driverId}";
+            var name = string.Join(" ",
+                new[] { driver.FirstName, driver.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+            return string.IsNullOrWhiteSpace(name) ? $"Driver #{driverId}" : name;
+        }
+
+        // "engine_compartment" → "Engine Compartment".
+        private static string Humanize(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return "";
+            var words = key.Replace('_', ' ').Replace('-', ' ')
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return string.Join(" ", words.Select(w => char.ToUpper(w[0]) + w[1..]));
         }
 
         // Normalize the stored vehicle_status to the registry's display labels. Matches
