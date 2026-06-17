@@ -16,8 +16,8 @@ public class Vehicle : BaseModel
     [Column("plate_number")]
     public string PlateNumber { get; set; }
 
-    [Column("vehicle_type")]
-    public string VehicleType { get; set; }
+    // Note: the vehicle_type column was dropped from the DB (every unit is a bus), so it's no
+    // longer modeled here.
 
     [Column("route_id")]
     public int? RouteId { get; set; }

@@ -313,7 +313,7 @@ namespace FleetWise.Controllers
                 shiftStart = DateTime.Today.Add(tripResponse.ShiftStartTime).ToString("hh:mm tt"),
                 shiftEnd = DateTime.Today.Add(tripResponse.ShiftEndTime).ToString("hh:mm tt"),
                 routeName = routeResponse?.RouteName ?? "N/A",
-                vehicleType = vehicleResponse?.VehicleType ?? "N/A",
+                vehicleType = "Bus", // vehicle_type column dropped — every unit is a bus
                 vehicleId = vehicleResponse?.VehicleId ?? "N/A",
                 plateNumber = vehicleResponse?.PlateNumber ?? "N/A",
                 driverName = driverResponse != null
