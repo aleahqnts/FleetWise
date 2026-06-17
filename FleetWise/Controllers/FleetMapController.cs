@@ -169,6 +169,9 @@ namespace FleetWise.Controllers
             var usersById = usersResponse.Models
                 .ToDictionary(u => u.UserId, u => u);
 
+            // One fare lookup per poll (fare_config), shared across every bus below.
+            var fareRate = await _fareCalculator.GetRateAsync();
+
             var positions = new List<BusPositionDto>();
             var movingVehicleIds = new HashSet<string>();
 
@@ -217,7 +220,7 @@ namespace FleetWise.Controllers
                     Passengers = passengers,
                     Capacity = capacity,
                     OccupancyPct = occupancyPct,
-                    EstimatedRevenue = _fareCalculator.Estimate(passengers),
+                    EstimatedRevenue = _fareCalculator.Estimate(passengers, fareRate),
                     Timestamp = telemetry.Timestamp
                 };
             }
@@ -260,7 +263,7 @@ namespace FleetWise.Controllers
                     Capacity = vehicle.Capacity,
                     OccupancyPct = 0,
                     EstimatedRevenue = 0,
-                    Timestamp = DateTime.UtcNow
+                    Timestamp = PhClock.Now
                 });
             }
 

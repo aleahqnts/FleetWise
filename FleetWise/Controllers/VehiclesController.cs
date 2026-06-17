@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using FleetWise.Models;
+using FleetWise.Services;
 
 namespace FleetWise.Controllers
 {
@@ -21,6 +22,11 @@ namespace FleetWise.Controllers
         // labels (§2.8). Selecting "No Issues" is the resolve action.
         private static readonly string[] MaintenanceStatusOptions =
             { "Needs Attention", "Under Repair", "No Issues" };
+
+        // The only vehicle types the fleet has — single source of truth for the Type filter
+        // and the Add/Edit modal dropdowns.
+        private static readonly string[] VehicleTypeOptions =
+            { "Bus", "Mini Bus" };
 
         private readonly Supabase.Client _supabase;
 
@@ -43,12 +49,7 @@ namespace FleetWise.Controllers
                 RouteOptions = routes
                     .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
                     .ToList(),
-                TypeOptions = vehicles
-                    .Select(v => v.VehicleType)
-                    .Where(t => !string.IsNullOrWhiteSpace(t))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(t => t)
-                    .ToList(),
+                TypeOptions = VehicleTypeOptions.ToList(),
                 StatusOptions = StatusFilterOptions.ToList(),
                 ConditionOptions = ConditionFilterOptions.ToList(),
 
@@ -95,7 +96,7 @@ namespace FleetWise.Controllers
                 RouteId = model.RouteId,
                 Capacity = 50,                         // sensible default — not on the mockup (§Block 15.2)
                 VehicleStatus = "Ready to Deploy",     // new units start deployable (vehicle_status_enum label)
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = PhClock.Now,
             };
 
             await _supabase.From<Vehicle>().Insert(vehicle);
@@ -229,7 +230,7 @@ namespace FleetWise.Controllers
                     log.MaintenanceStatus = model.MaintenanceStatus.Trim();
                     log.VerifiedBy = string.IsNullOrWhiteSpace(model.VerifiedBy) ? null : model.VerifiedBy.Trim();
                     if (resolving && log.ResolvedAt == null)
-                        log.ResolvedAt = DateTime.UtcNow;
+                        log.ResolvedAt = PhClock.Now;
                     await _supabase.From<MaintenanceLog>().Update(log);
                 }
             }
@@ -238,13 +239,13 @@ namespace FleetWise.Controllers
             vehicle.PlateNumber = model.PlateNumber.Trim();
             vehicle.VehicleType = model.VehicleType.Trim();
             vehicle.RouteId = model.RouteId;
-            vehicle.UpdatedAt = DateTime.UtcNow;
+            vehicle.UpdatedAt = PhClock.Now;
 
             if (resolving)
             {
                 // "Update the Last Maintenance Date when a bus returns from the shop" (Step 17.4),
                 // and clear a Flagged badge so the registry reflects the fix.
-                vehicle.LastMaintenanceDate = DateTime.UtcNow;
+                vehicle.LastMaintenanceDate = PhClock.Today;
                 if (string.Equals(vehicle.VehicleStatus?.Trim(), "Flagged", OIC))
                     vehicle.VehicleStatus = "Ready to Deploy";
             }
@@ -338,12 +339,7 @@ namespace FleetWise.Controllers
                 RouteOptions = routes
                     .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
                     .ToList(),
-                TypeOptions = vehicles
-                    .Select(v => v.VehicleType)
-                    .Where(t => !string.IsNullOrWhiteSpace(t))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(t => t)
-                    .ToList(),
+                TypeOptions = VehicleTypeOptions.ToList(),
                 StatusOptions = StatusFilterOptions.ToList(),
                 ConditionOptions = ConditionFilterOptions.ToList(),
             };
@@ -383,7 +379,7 @@ namespace FleetWise.Controllers
                 VehicleType = posted?.VehicleType ?? vehicle.VehicleType ?? "",
                 RouteId = posted?.RouteId ?? vehicle.RouteId ?? 0,
                 RouteOptions = BuildRouteOptions(routes),
-                TypeOptions = BuildTypeOptions(vehicles),
+                TypeOptions = BuildTypeOptions(),
                 StatusOptions = MaintenanceStatusOptions.ToList(),
                 CurrentStatus = DeriveMaintenance(logs),
             };
@@ -421,12 +417,7 @@ namespace FleetWise.Controllers
                 ScheduledMaintenance = vehicles.Count(v =>
                     maintenance.TryGetValue(v.VehicleId, out var m) && m == "Under Repair"),
                 RouteOptions = BuildRouteOptions(routes),
-                TypeOptions = vehicles
-                    .Select(v => v.VehicleType)
-                    .Where(t => !string.IsNullOrWhiteSpace(t))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(t => t)
-                    .ToList(),
+                TypeOptions = VehicleTypeOptions.ToList(),
                 StatusOptions = StatusFilterOptions.ToList(),
                 ConditionOptions = ConditionFilterOptions.ToList(),
             };
@@ -441,12 +432,9 @@ namespace FleetWise.Controllers
                 .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
                 .ToList();
 
-        // Vehicle Type dropdown: the mockup's Bus/Van plus any existing distinct types.
-        private static List<SelectListItem> BuildTypeOptions(IEnumerable<Vehicle> vehicles) =>
-            new[] { "Bus", "Van" }
-                .Concat(vehicles.Select(v => v.VehicleType).Where(t => !string.IsNullOrWhiteSpace(t)))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(t => t)
+        // Vehicle Type dropdown: the fleet's only two types (§VehicleTypeOptions).
+        private static List<SelectListItem> BuildTypeOptions() =>
+            VehicleTypeOptions
                 .Select(t => new SelectListItem { Value = t, Text = t })
                 .ToList();
 
@@ -455,13 +443,7 @@ namespace FleetWise.Controllers
         {
             ViewBag.AddVehicleModel = addModel;
             ViewBag.RouteOptions = vm.RouteOptions;
-            // Vehicle Type dropdown: mockup's Bus/Van plus any existing distinct types.
-            ViewBag.TypeOptions = new[] { "Bus", "Van" }
-                .Concat(vm.TypeOptions)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(t => t)
-                .Select(t => new SelectListItem { Value = t, Text = t })
-                .ToList();
+            ViewBag.TypeOptions = BuildTypeOptions();
             ViewBag.OpenModal = openModal;
         }
 
