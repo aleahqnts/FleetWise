@@ -477,12 +477,12 @@ namespace FleetWise.Controllers
             return string.IsNullOrEmpty(s) ? "Pending" : s;
         }
 
-        // "Issue Summary" for the maintenance section: the latest log's issue_details keys
-        // (humanized), falling back to its remarks, then a dash.
+        // "Issue Summary" for the maintenance section: the latest log's issue_details list,
+        // falling back to its remarks, then a dash.
         private static string DeriveIssueSummary(MaintenanceLog latest)
         {
-            if (latest.IssueDetails != null && latest.IssueDetails.Count > 0)
-                return string.Join(", ", latest.IssueDetails.Keys.Select(Humanize));
+            if (latest.IssueDetails?.Issues is { Count: > 0 } issues)
+                return string.Join(", ", issues);
             return string.IsNullOrWhiteSpace(latest.Remarks) ? "—" : latest.Remarks;
         }
 
