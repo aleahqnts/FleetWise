@@ -1,0 +1,105 @@
+@model EditVehicleViewModel
+@*
+    Edit Vehicle form — fetched into #editVehicleContent per vehicle (Block 17). Updates the
+    Vehicle Profile + the latest Maintenance Log (Change Status / Verified by); posts to
+    VehiclesController.Edit (PRG + TempData).
+*@
+@functions {
+    string MaintClass(string status) => status switch
+    {
+        "No Issues" => "vh-badge--ok",
+        "Needs Attention" => "vh-badge--attention",
+        "Under Repair" => "vh-badge--repair",
+        _ => "vh-badge--default"
+    };
+}
+<form asp-action="Edit" asp-controller="Vehicles" method="post">
+    <input type="hidden" asp-for="VehicleId" />
+    <input type="hidden" asp-for="LogId" />
+    <div class="modal-header">
+        <h5 class="modal-title vh-modal-title">Edit Vehicle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    </div>
+    <div class="modal-body vh-modal-body">
+
+        <!-- Vehicle Profile -->
+        <div class="vh-section-header">Vehicle Profile</div>
+        <div class="vh-section-body">
+            <div class="vh-form-row">
+                <label>Vehicle ID:</label>
+                <input type="text" class="vh-form-input" value="@Model.VehicleId" disabled />
+            </div>
+            <div class="vh-form-row">
+                <label asp-for="PlateNumber">Plate Number:</label>
+                <input asp-for="PlateNumber" class="vh-form-input" />
+                <span asp-validation-for="PlateNumber" class="vh-field-error"></span>
+            </div>
+            <div class="vh-form-row">
+                <label asp-for="VehicleType">Vehicle Type:</label>
+                <div class="vh-select-wrap" style="width:100%;">
+                    <select asp-for="VehicleType" class="vh-form-input" style="appearance:none;"
+                            asp-items="Model.TypeOptions">
+                        <option value="">Select type…</option>
+                    </select>
+                    <span class="vh-select-arrow">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                    </span>
+                </div>
+                <span asp-validation-for="VehicleType" class="vh-field-error"></span>
+            </div>
+            <div class="vh-form-row">
+                <label asp-for="RouteId">Route:</label>
+                <div class="vh-select-wrap" style="width:100%;">
+                    <select asp-for="RouteId" class="vh-form-input" style="appearance:none;"
+                            asp-items="Model.RouteOptions">
+                        <option value="">Select route…</option>
+                    </select>
+                    <span class="vh-select-arrow">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                    </span>
+                </div>
+                <span asp-validation-for="RouteId" class="vh-field-error"></span>
+            </div>
+        </div>
+
+        <!-- Maintenance Log Details -->
+        <div class="vh-section-header">
+            <span>Maintenance Log Details</span>
+            <span class="vh-section-badge @MaintClass(Model.CurrentStatus)">@Model.CurrentStatus</span>
+        </div>
+        <div class="vh-section-body">
+            @if (Model.HasMaintenance)
+            {
+                <div class="vh-detail-row"><strong>Date Reported:</strong> @Model.DateReported</div>
+                <div class="vh-detail-row"><strong>Issue Summary:</strong> @Model.IssueSummary</div>
+                <div class="vh-form-row" style="margin-top:14px;">
+                    <label asp-for="MaintenanceStatus">Change Status:</label>
+                    <div class="vh-select-wrap" style="width:100%;">
+                        <select asp-for="MaintenanceStatus" class="vh-form-input" style="appearance:none;">
+                            @foreach (var s in Model.StatusOptions)
+                            {
+                                <option value="@s" selected="@(s == Model.MaintenanceStatus)">@s</option>
+                            }
+                        </select>
+                        <span class="vh-select-arrow">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                        </span>
+                    </div>
+                </div>
+                <div class="vh-form-row">
+                    <label asp-for="VerifiedBy">Verified by:</label>
+                    <input asp-for="VerifiedBy" class="vh-form-input" placeholder="Mechanic Name" />
+                </div>
+            }
+            else
+            {
+                <div class="vh-detail-row vh-detail-empty">No open maintenance log for this vehicle.</div>
+            }
+        </div>
+
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="vh-btn vh-btn--outline" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="vh-btn vh-btn--primary">Save Changes</button>
+    </div>
+</form>

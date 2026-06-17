@@ -129,19 +129,26 @@
     document.addEventListener('DOMContentLoaded', function () {
         loadVehicleRows();
 
-        // Delegated: rows are injected via fetch, so listen on the (static) tbody. A View
-        // click fetches that vehicle's details into the modal; Bootstrap opens it in parallel.
+        // Delegated: rows are injected via fetch, so listen on the (static) tbody. View/Edit
+        // clicks fetch that vehicle's data into the modal; Bootstrap opens it in parallel.
         document.getElementById('vehiclesTableBody').addEventListener('click', function (e) {
-            const btn = e.target.closest('[data-bs-target="#viewVehicleModal"]');
-            if (btn) {
-                loadVehicleDetails(btn.getAttribute('data-vehicle-id'));
+            const viewBtn = e.target.closest('[data-bs-target="#viewVehicleModal"]');
+            if (viewBtn) {
+                loadVehicleDetails(viewBtn.getAttribute('data-vehicle-id'));
+                return;
+            }
+            const editBtn = e.target.closest('[data-bs-target="#editVehicleModal"]');
+            if (editBtn) {
+                loadVehicleEditForm(editBtn.getAttribute('data-vehicle-id'));
             }
         });
 
-        // Auto-reopen the Add Vehicle modal after a failed POST (validation errors preserved).
+        // Auto-reopen the relevant modal after a failed POST (validation errors preserved).
         const openModal = '@(ViewBag.OpenModal ?? "")';
         if (openModal === 'AddVehicle') {
             new bootstrap.Modal(document.getElementById('addVehicleModal')).show();
+        } else if (openModal === 'EditVehicle') {
+            new bootstrap.Modal(document.getElementById('editVehicleModal')).show();
         }
     });
 
@@ -156,6 +163,20 @@
             .then(function (html) { content.innerHTML = html; })
             .catch(function () {
                 content.innerHTML = '<div class="vh-modal-loading vh-modal-error">Failed to load vehicle details.</div>';
+            });
+    }
+
+    function loadVehicleEditForm(id) {
+        const content = document.getElementById('editVehicleContent');
+        content.innerHTML = '<div class="vh-modal-loading"><div class="vh-spinner"></div></div>';
+        fetch('@Url.Action("EditForm", "Vehicles")?id=' + encodeURIComponent(id))
+            .then(function (response) {
+                if (!response.ok) throw new Error();
+                return response.text();
+            })
+            .then(function (html) { content.innerHTML = html; })
+            .catch(function () {
+                content.innerHTML = '<div class="vh-modal-loading vh-modal-error">Failed to load vehicle.</div>';
             });
     }
 
