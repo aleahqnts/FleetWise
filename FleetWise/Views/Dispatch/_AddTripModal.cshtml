@@ -48,16 +48,6 @@
             <div class="atm-section-label">Vehicle Details</div>
             <div class="atm-section">
                 <div class="atm-field">
-                    <label class="atm-label" for="atm-vehicle-type">Vehicle Type</label>
-                    <div class="atm-select-wrap">
-                        <select id="atm-vehicle-type" class="atm-select" onchange="onVehicleTypeChange()">
-                            <option value="">All types</option>
-                            <option value="Bus">Bus</option>
-                            <option value="Minibus">Minibus</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="atm-field">
                     <label class="atm-label" for="atm-vehicle-id">Vehicle ID</label>
                     <div class="atm-select-wrap">
                         <select id="atm-vehicle-id" class="atm-select">
@@ -364,7 +354,6 @@
         setShiftTimeOptions([]);
         document.getElementById('atm-shift-time').disabled = true;
         document.getElementById('atm-route').innerHTML = '<option value="">Loading…</option>';
-        document.getElementById('atm-vehicle-type').value = '';
         setVehicleOptions([]);
         setDriverOptions([]);
         hideHint('atm-vehicle-hint');
@@ -419,10 +408,7 @@
             : times.map(t => `<option value="${t.start}|${t.end}">${t.label}</option>`).join('');
     }
 
-    // ── Vehicle type filter ───────────────────────────────────────────
-    function onVehicleTypeChange() {
-        refreshVehicles();
-    }
+   
 
     // ── Populate vehicles: exclude those already booked for this shift ─
     function refreshVehicles() {
@@ -431,15 +417,9 @@
             return;
         }
 
-        const typeFilter = document.getElementById('atm-vehicle-type').value;
-
-        const available = _atmOptions.vehicles.filter(v => {
-            // Exclude vehicles already assigned to this shift today
-            if (v.bookedShifts.includes(_atmShift)) return false;
-            // Apply type filter if selected
-            if (typeFilter && v.vehicleType !== typeFilter) return false;
-            return true;
-        });
+           const available = _atmOptions.vehicles.filter(v =>
+        !v.bookedShifts.includes(_atmShift)
+    );
 
         setVehicleOptions(available);
 
@@ -462,7 +442,7 @@
         }
         sel.innerHTML = '<option value="">Select a vehicle…</option>'
             + vehicles.map(v =>
-                `<option value="${v.vehicleId}">${v.vehicleId} | ${v.plateNumber} (${v.vehicleType})</option>`
+                `<option value="${v.vehicleId}">${v.vehicleId} | ${v.plateNumber}</option>`
             ).join('');
     }
 

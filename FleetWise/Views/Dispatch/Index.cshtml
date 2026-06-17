@@ -183,8 +183,10 @@
                                         <div class="dp-actions-cell">
                                             <button class="rp-btn-view" onclick="openTripModal('@trip.TripId')">View</button>
                                             <button class="dp-btn-reassign"
-                                                    onclick="openReassignModal('@trip.TripId')"
-                                                @(trip.TripStatus == "Active" ? "disabled" : "")>
+                                                    data-trip-id="@trip.TripId"
+                                                    data-status="@trip.TripStatus"
+                                                    onclick="handleReassignClick(this)"
+                                                @(trip.TripStatus == "Active" || trip.TripStatus == "Completed" ? "disabled" : "")>
                                                 Reassign
                                             </button>
                                             <button class="dp-btn-msg" title="Message" onclick="openTripMessageModal('@trip.TripId', '@trip.VehicleId', '@trip.DriverName')"><i class="ti ti-message"></i></button>
@@ -950,6 +952,12 @@
     }
 
     function filterRows() { applyFilters(); }
+
+    function handleReassignClick(btn) {
+        const status = btn.dataset.status;
+        if (status === 'Active' || status === 'Completed') return;
+        openReassignModal(btn.dataset.tripId);
+    }
 
     document.getElementById('routeFilter').addEventListener('change', applyFilters);
     document.getElementById('statusFilter').addEventListener('change', applyFilters);

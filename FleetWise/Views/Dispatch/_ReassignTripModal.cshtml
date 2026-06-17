@@ -47,16 +47,7 @@
             <!-- Vehicle Details -->
             <div class="rtm-section-label">Vehicle Details</div>
             <div class="rtm-section">
-                <div class="rtm-field">
-                    <label class="rtm-label" for="rtm-vehicle-type">Vehicle Type</label>
-                    <div class="rtm-select-wrap">
-                        <select id="rtm-vehicle-type" class="rtm-select" onchange="onRtmVehicleTypeChange()">
-                            <option value="">All types</option>
-                            <option value="Bus">Bus</option>
-                            <option value="Minibus">Minibus</option>
-                        </select>
-                    </div>
-                </div>
+                
                 <div class="rtm-field">
                     <label class="rtm-label" for="rtm-vehicle-id">Vehicle ID</label>
                     <div class="rtm-select-wrap">
@@ -400,7 +391,6 @@
         const shiftTypeEl = document.getElementById('rtm-shift-type');
         const shiftTimeEl = document.getElementById('rtm-shift-time');
         const routeEl     = document.getElementById('rtm-route');
-        const vehicleType = document.getElementById('rtm-vehicle-type');
         const vehicleSel  = document.getElementById('rtm-vehicle-id');
         const vehicleHint = document.getElementById('rtm-vehicle-hint');
         const driverSel   = document.getElementById('rtm-driver');
@@ -415,7 +405,6 @@
             // Reset UI
             loadingEl.style.display = 'flex';
             bodyEl.style.display    = 'none';
-            vehicleType.value       = '';
             statusBadge.style.display = 'none';
             overlay.style.display   = 'flex';
             document.body.style.overflow = 'hidden';
@@ -467,31 +456,24 @@
             if (e.key === 'Escape' && overlay.style.display === 'flex') closeReassignModal();
         });
 
-        // ── Vehicle type filter ───────────────────────────────
-        window.onRtmVehicleTypeChange = function () {
-            refreshRtmVehicles(vehicleSel.value || _rtmOptions?.tripInfo?.currentVehicleId);
-        };
+        
+            function refreshRtmVehicles(selectedId) {
+        if (!_rtmOptions) return;
 
-        function refreshRtmVehicles(selectedId) {
-            if (!_rtmOptions) return;
+        const list = _rtmOptions.vehicles;
 
-            const typeFilter = vehicleType.value;
-            const list = _rtmOptions.vehicles.filter(v =>
-                !typeFilter || v.vehicleType === typeFilter
-            );
+        vehicleSel.innerHTML = list.length === 0
+            ? '<option value="">No vehicles available for this shift</option>'
+            : '<option value="">Select a vehicle…</option>'
+              + list.map(v =>
+                  `<option value="${v.vehicleId}" ${v.vehicleId === selectedId ? 'selected' : ''}>${v.vehicleId} | ${v.plateNumber}</option>`
+              ).join('');
 
-            vehicleSel.innerHTML = list.length === 0
-                ? '<option value="">No vehicles available for this shift</option>'
-                : '<option value="">Select a vehicle…</option>'
-                  + list.map(v =>
-                      `<option value="${v.vehicleId}" ${v.vehicleId === selectedId ? 'selected' : ''}>${v.vehicleId} | ${v.plateNumber} (${v.vehicleType})</option>`
-                  ).join('');
-
-            vehicleHint.textContent = list.length === 0
-                ? 'No non-flagged vehicles are free for this shift.'
-                : '';
-            vehicleHint.classList.toggle('rtm-hint--visible', list.length === 0);
-        }
+        vehicleHint.textContent = list.length === 0
+            ? 'No non-flagged vehicles are free for this shift.'
+            : '';
+        vehicleHint.classList.toggle('rtm-hint--visible', list.length === 0);
+    }
 
         function refreshRtmDrivers(selectedId) {
             if (!_rtmOptions) return;
@@ -502,7 +484,7 @@
                 ? '<option value="">No drivers available for this shift</option>'
                 : '<option value="">Select a driver…</option>'
                   + list.map(d =>
-                      `<option value="${d.driverId}" ${d.driverId === selectedId ? 'selected' : ''}>${d.driverName}</option>`
+                      `<option value="${d.driverId}" ${d.driverId == selectedId ? 'selected' : ''}>${d.driverName}</option>`
                   ).join('');
 
             driverHint.textContent = list.length === 0

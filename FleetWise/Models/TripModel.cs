@@ -7,7 +7,7 @@ namespace FleetWise.Models;
 [Table("trips")]
 public class Trip : BaseModel
 {
-    [PrimaryKey("trip_id")]
+    [PrimaryKey("trip_id", shouldInsert: false)]
     public string TripId { get; set; }
 
     [Column("date")]

@@ -198,7 +198,7 @@ namespace FleetWise.Controllers
                 usersById.TryGetValue(trip.DriverId, out var driver);
 
                 var capacity = vehicle?.Capacity ?? 0;
-                var passengers = telemetry.CurrentPassengers;
+                var passengers = telemetry.TotalPassengers;
                 var occupancyPct = capacity > 0
                     ? (int)Math.Round(passengers * 100.0 / capacity)
                     : 0;

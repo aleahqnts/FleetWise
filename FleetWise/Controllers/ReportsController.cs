@@ -1,6 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using FleetWise.Models;
+using FleetWise.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using FleetWise.Models;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -32,7 +33,7 @@ namespace FleetWise.Controllers
             string revenuePeriod = "This Week")
         {
             if (page < 1) page = 1;
-            var anchor = (date ?? DateTime.Today).Date;
+            var anchor = (date ?? PhClock.Today).Date;
 
             // ── Reference data ─────────────────────────────────────
             var routesResp = await _supabase.From<BusRoute>().Get();
@@ -310,8 +311,8 @@ namespace FleetWise.Controllers
             {
                 tripId = tripResponse.TripId,
                 shiftType = tripResponse.ShiftType,
-                shiftStart = DateTime.Today.Add(tripResponse.ShiftStartTime).ToString("hh:mm tt"),
-                shiftEnd = DateTime.Today.Add(tripResponse.ShiftEndTime).ToString("hh:mm tt"),
+                shiftStart = PhClock.Today.Add(tripResponse.ShiftStartTime).ToString("hh:mm tt"),
+                shiftEnd = PhClock.Today.Add(tripResponse.ShiftEndTime).ToString("hh:mm tt"),
                 routeName = routeResponse?.RouteName ?? "N/A",
                 vehicleType = "Bus", // vehicle_type column dropped — every unit is a bus
                 vehicleId = vehicleResponse?.VehicleId ?? "N/A",
@@ -388,7 +389,7 @@ namespace FleetWise.Controllers
             int? driverId,
             string? vehicleId)
         {
-            var anchor = (date ?? DateTime.Today).Date;
+            var anchor = (date ?? PhClock.Today).Date;
 
             // ── Reference data ────────────────────────────────────────
             var routesResp = await _supabase.From<BusRoute>().Get();
@@ -450,7 +451,7 @@ namespace FleetWise.Controllers
                         userNames.TryGetValue(t.DriverId, out var dn) ? dn : "N/A",
                         vehiclesById.TryGetValue(t.VehicleId, out var v) ? v.PlateNumber : t.VehicleId,
                         t.ShiftType ?? "",
-                        $"{DateTime.Today.Add(t.ShiftStartTime):hh:mm tt} – {DateTime.Today.Add(t.ShiftEndTime):hh:mm tt}",
+                        $"{PhClock.Today.Add(t.ShiftStartTime):hh:mm tt} – {PhClock.Today.Add(t.ShiftEndTime):hh:mm tt}",
                         passengers(t).ToString(),
                         $"₱{t.EstimatedRevenue:N2}"
                     }).ToList()
@@ -478,7 +479,7 @@ namespace FleetWise.Controllers
                         t.Date.ToString("MMM dd, yyyy"),
                         userNames.TryGetValue(t.DriverId, out var dn) ? dn : "N/A",
                         t.ShiftType ?? "",
-                        $"{DateTime.Today.Add(t.ShiftStartTime):hh:mm tt} – {DateTime.Today.Add(t.ShiftEndTime):hh:mm tt}",
+                        $"{PhClock.Today.Add(t.ShiftStartTime):hh:mm tt} – {PhClock.Today.Add(t.ShiftEndTime):hh:mm tt}",
                         passengers(t).ToString()
                     }).ToList()
                 })
@@ -523,7 +524,7 @@ namespace FleetWise.Controllers
             int? driverId,
             string? vehicleId)
         {
-            var anchor = (date ?? DateTime.Today).Date;
+            var anchor = (date ?? PhClock.Today).Date;
 
             var routesResp = await _supabase.From<BusRoute>().Get();
             var routeNames = routesResp.Models.ToDictionary(r => r.RouteId, r => r.RouteName);
@@ -583,7 +584,7 @@ namespace FleetWise.Controllers
                     userNames.TryGetValue(t.DriverId, out var dn) ? dn : "N/A",
                     routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A",
                     t.ShiftType ?? "",
-                    $"{DateTime.Today.Add(t.ShiftStartTime):hh:mm tt} – {DateTime.Today.Add(t.ShiftEndTime):hh:mm tt}",
+                    $"{PhClock.Today.Add(t.ShiftStartTime):hh:mm tt} – {PhClock.Today.Add(t.ShiftEndTime):hh:mm tt}",
                     Passengers(t).ToString()
                 },
                 "Revenue" => t => new[]
@@ -604,8 +605,8 @@ namespace FleetWise.Controllers
                     vehiclesById.TryGetValue(t.VehicleId, out var v) ? v.PlateNumber : t.VehicleId,
                     routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A",
                     t.ShiftType ?? "",
-                    DateTime.Today.Add(t.ShiftStartTime).ToString("hh:mm tt"),
-                    DateTime.Today.Add(t.ShiftEndTime).ToString("hh:mm tt"),
+                    PhClock.Today.Add(t.ShiftStartTime).ToString("hh:mm tt"),
+                    PhClock.Today.Add(t.ShiftEndTime).ToString("hh:mm tt"),
                     Passengers(t).ToString(),
                     $"₱{t.EstimatedRevenue:N2}"
                 }
@@ -655,7 +656,7 @@ namespace FleetWise.Controllers
                             {
                                 inner.Item().Text(anchor.ToString("MMMM dd, yyyy"))
                                     .FontSize(9).FontColor("#9AA5B4");
-                                inner.Item().Text($"Generated: {DateTime.Now:MMM dd, yyyy hh:mm tt}")
+                                inner.Item().Text($"Generated: {PhClock.Now:MMM dd, yyyy hh:mm tt}")
                                     .FontSize(8).FontColor("#9AA5B4");
                             });
                         });
@@ -751,7 +752,7 @@ namespace FleetWise.Controllers
             int? driverId,
             string? vehicleId)
         {
-            var anchor = (date ?? DateTime.Today).Date;
+            var anchor = (date ?? PhClock.Today).Date;
 
             var routesResp = await _supabase.From<BusRoute>().Get();
             var routeNames = routesResp.Models.ToDictionary(r => r.RouteId, r => r.RouteName);
@@ -800,7 +801,7 @@ namespace FleetWise.Controllers
                             CsvEscape(userNames.TryGetValue(t.DriverId, out var dn) ? dn : "N/A"),
                             CsvEscape(routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A"),
                             CsvEscape(t.ShiftType ?? ""),
-                            CsvEscape($"{DateTime.Today.Add(t.ShiftStartTime):hh:mm tt} - {DateTime.Today.Add(t.ShiftEndTime):hh:mm tt}"),
+                            CsvEscape($"{PhClock.Today.Add(t.ShiftStartTime):hh:mm tt} - {PhClock.Today.Add(t.ShiftEndTime):hh:mm tt}"),
                             Passengers(t).ToString()));
                     break;
 
@@ -829,9 +830,9 @@ namespace FleetWise.Controllers
                             CsvEscape(vehiclesById.TryGetValue(t.VehicleId, out var v) ? v.PlateNumber : t.VehicleId),
                             CsvEscape(routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A"),
                             CsvEscape(t.ShiftType ?? ""),
-                            CsvEscape($"{DateTime.Today.Add(t.ShiftStartTime):hh:mm tt} - {DateTime.Today.Add(t.ShiftEndTime):hh:mm tt}"),
-                            CsvEscape(DateTime.Today.Add(t.ShiftStartTime).ToString("hh:mm tt")),
-                            CsvEscape(DateTime.Today.Add(t.ShiftEndTime).ToString("hh:mm tt")),
+                            CsvEscape($"{PhClock.Today.Add(t.ShiftStartTime):hh:mm tt} - {PhClock.Today.Add(t.ShiftEndTime):hh:mm tt}"),
+                            CsvEscape(PhClock.Today.Add(t.ShiftStartTime).ToString("hh:mm tt")),
+                            CsvEscape(PhClock.Today.Add(t.ShiftEndTime).ToString("hh:mm tt")),
                             Passengers(t).ToString(),
                             t.EstimatedRevenue.ToString("F2")));
                     break;
