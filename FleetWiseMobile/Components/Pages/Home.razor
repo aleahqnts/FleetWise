@@ -1,6 +1,9 @@
 @page "/home"
+@implements IDisposable
 @inject SessionService Session
 @inject DriverDataService Data
+@inject TelemetryQueue Queue
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 
 @if (loading)
@@ -261,6 +264,9 @@ else
     protected override async Task OnInitializedAsync()
     {
         if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
+        // Await: push any queued trip finalize FIRST so Load() reads the trip as
+        // Completed (not a stale "Active" -> phantom "Resume Trip").
+        try { await Queue.FlushAsync(); } catch { /* offline: stays queued */ }
         await Load();
     }
 
@@ -356,4 +362,16 @@ else
 
     private void StartChecklist() => Nav.NavigateTo($"/checklist/{assignment!.TripId}");
     private void StartTrip() => Nav.NavigateTo($"/trip-details/{assignment!.TripId}");
+
+    private DotNetObjectReference<Home>? _ptrRef;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _ptrRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("ptr.set", _ptrRef);
+        }
+    }
+    [JSInvokable] public async Task Refresh() { await Load(); StateHasChanged(); }
+    public void Dispose() => _ptrRef?.Dispose();
 }
