@@ -1,7 +1,647 @@
-﻿@*
-    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-*@
 @{
+    ViewData["Title"] = "Fleet Map";
 }
 
-<h3>Fleet Map</h3>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+@section TopbarContent {
+    <div class="fm-topbar">
+        <div class="fm-search-wrap">
+            <span class="fm-search-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
+                     stroke="#9AA5B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+            </span>
+            <input type="text" id="fmSearch" class="fm-search-input" placeholder="Search" />
+        </div>
+
+        <div class="fm-filters">
+            <div class="fm-filter">
+                <span class="fm-filter-label">Route:</span>
+                <div class="fm-select-wrap">
+                    <select id="fmRouteFilter" class="fm-select">
+                        <option value="">All Routes</option>
+                    </select>
+                    <span class="fm-select-arrow">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+
+            <div class="fm-filter">
+                <span class="fm-filter-label">Status:</span>
+                <div class="fm-select-wrap">
+                    <select id="fmStatusFilter" class="fm-select">
+                        <option value="">All</option>
+                        <option value="Active">Active (On Trip)</option>
+                        <option value="Ready to Deploy">Ready to Deploy</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Flagged">Flagged</option>
+                    </select>
+                    <span class="fm-select-arrow">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="fm-page">
+    <div id="fleetMap" class="fm-map"></div>
+
+    <div id="fmConnBadge" class="fm-conn-badge">
+        <span class="fm-conn-badge__dot"></span>Connection lost — retrying…
+    </div>
+
+    <aside id="fmPanel" class="fm-panel" aria-hidden="true">
+        <button id="fmPanelClose" class="fm-panel__close" aria-label="Close">&times;</button>
+
+        <div class="fm-panel__pad">
+            <div class="fm-panel__title" id="fmPanelBus">—</div>
+            <div class="fm-panel__meta">
+                <span class="fm-panel__meta-label">Route</span>
+                <span class="fm-panel__route-no" id="fmPanelRoute">—</span>
+                <span class="fm-panel__meta-label">Shift</span>
+                <span class="fm-panel__shift" id="fmPanelShift">—</span>
+            </div>
+        </div>
+
+        <div class="fm-panel__divider"></div>
+
+        <div class="fm-panel__pad">
+            <div class="fm-panel__status">
+                <span class="fm-panel__status-dot" id="fmPanelStatusDot"></span>
+                <span id="fmPanelStatus">—</span>
+            </div>
+        </div>
+
+        <div class="fm-panel__divider"></div>
+
+        <div class="fm-panel__driver">
+            <span class="fm-panel__avatar">
+                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="#3F4756">
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M12 14c-4.4 0-8 2.7-8 6v0h16v0c0-3.3-3.6-6-8-6z" />
+                </svg>
+            </span>
+            <span class="fm-panel__driver-info">
+                <span class="fm-panel__driver-name" id="fmPanelDriver">—</span>
+                <span class="fm-panel__driver-sub">Current Driver</span>
+            </span>
+        </div>
+
+        <div class="fm-panel__divider"></div>
+
+        <div class="fm-panel__pax">
+            <div class="fm-panel__pax-label">Total Passengers</div>
+            <div class="fm-panel__pax-num" id="fmPanelPax">—</div>
+        </div>
+
+        <div class="fm-panel__divider"></div>
+
+        <div class="fm-panel__rev-head">Estimated Revenue</div>
+        <div class="fm-panel__pad">
+            <div class="fm-panel__rev-val" id="fmPanelRevenue">—</div>
+        </div>
+
+        <div class="fm-panel__divider"></div>
+
+        <div class="fm-panel__pad">
+            <div class="fm-panel__updated" id="fmPanelUpdated">—</div>
+        </div>
+    </aside>
+
+    <div class="fm-legend" id="fmLegend"></div>
+</div>
+
+<style>
+    :root {
+        --fm-teal: #4AADA8;
+        --fm-border: #E8ECF0;
+        --fm-bg: #F8F9FA;
+        --fm-white: #FFFFFF;
+        --fm-text: #2D3748;
+        --fm-muted: #9AA5B4;
+        --fm-radius: 14px;
+    }
+
+    /* ── Topbar ─────────────────────────────────────────────── */
+    .fm-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex: 1;
+        gap: 24px;
+    }
+
+    .fm-search-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .fm-search-icon {
+        position: absolute;
+        left: 12px;
+        display: flex;
+        pointer-events: none;
+    }
+
+    .fm-search-input {
+        width: 320px;
+        padding: 9px 14px 9px 36px;
+        border: 1.5px solid var(--fm-border);
+        border-radius: 10px;
+        font-size: 0.9rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--fm-text);
+        background: var(--fm-bg);
+        outline: none;
+    }
+
+    .fm-search-input:focus {
+        border-color: var(--fm-teal);
+    }
+
+    .fm-filters {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+    }
+
+    .fm-filter {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .fm-filter-label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--fm-text);
+        font-family: 'Segoe UI', sans-serif;
+        white-space: nowrap;
+    }
+
+    .fm-select-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .fm-select {
+        appearance: none;
+        min-width: 140px;
+        padding: 8px 32px 8px 14px;
+        border: 1.5px solid var(--fm-border);
+        border-radius: 10px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--fm-text);
+        background: var(--fm-bg);
+        cursor: pointer;
+        outline: none;
+    }
+
+    .fm-select:focus {
+        border-color: var(--fm-teal);
+    }
+
+    .fm-select-arrow {
+        position: absolute;
+        right: 10px;
+        pointer-events: none;
+        color: var(--fm-text);
+        display: flex;
+    }
+
+    /* ── Map page (fixed to viewport, below the 80px topbar / right of the sidebar) ── */
+    .fm-page {
+        position: fixed;
+        top: 80px;
+        left: var(--fw-sidebar-collapsed, 72px);
+        right: 0;
+        bottom: 0;
+    }
+
+    .fm-map {
+        width: 100%;
+        height: 100%;
+    }
+
+    /* ── Legend ─────────────────────────────────────────────── */
+    .fm-legend {
+        position: absolute;
+        left: 20px;
+        bottom: 20px;
+        z-index: 1000;
+        background: var(--fm-white);
+        border-radius: var(--fm-radius);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+        padding: 14px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .fm-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--fm-text);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .fm-legend:empty {
+        display: none;
+    }
+
+    .fm-legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    /* ── Connection-lost badge (hidden until a poll fails) ── */
+    .fm-conn-badge {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        z-index: 1000;
+        display: none;
+        align-items: center;
+        gap: 8px;
+        background: #FEF2F2;
+        color: #B91C1C;
+        border: 1.5px solid #FECACA;
+        border-radius: 10px;
+        padding: 8px 14px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        font-family: 'Segoe UI', sans-serif;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+    }
+
+    .fm-conn-badge--visible {
+        display: flex;
+    }
+
+    .fm-conn-badge__dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #DC2626;
+    }
+
+    /* ── Terminal label (above the parked-bus grid) ── */
+    .fm-terminal-label {
+        background: transparent !important;
+        border: none !important;
+    }
+
+    .fm-terminal-pill {
+        display: inline-block;
+        white-space: nowrap;
+        background: #2D3748;
+        color: #fff;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        padding: 5px 12px;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    /* ── Bus markers ── */
+    .fm-bus-marker {
+        background: transparent !important;
+        border: none !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .fm-bus-marker span {
+        display: inline-block;
+        padding: 5px 12px;
+        border-radius: 14px;
+        color: #fff;
+        font-size: 0.75rem;
+        font-weight: 700;
+        font-family: 'Segoe UI', sans-serif;
+        letter-spacing: 0.03em;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+        white-space: nowrap;
+    }
+
+    /* ── Hover tooltip ── */
+    .fm-tooltip-wrap.leaflet-tooltip {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+    }
+
+    .fm-tooltip-wrap.leaflet-tooltip::before {
+        display: none;
+    }
+
+    .fm-tooltip {
+        background: var(--fm-white);
+        border-radius: 10px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+        padding: 10px 14px;
+        font-family: 'Segoe UI', sans-serif;
+        min-width: 160px;
+    }
+
+    .fm-tooltip__header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 4px;
+    }
+
+    .fm-tooltip__bus {
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--fm-text);
+    }
+
+    .fm-tooltip__route {
+        font-size: 0.75rem;
+        color: var(--fm-muted);
+    }
+
+    .fm-tooltip__plate {
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--fm-muted);
+        margin-bottom: 6px;
+    }
+
+    .fm-tooltip__status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.75rem;
+        color: #16A34A;
+        margin-bottom: 8px;
+    }
+
+    .fm-tooltip__dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #16A34A;
+    }
+
+    .fm-tooltip__passengers {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        border: 1px solid var(--fm-border);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 0.8rem;
+        color: var(--fm-text);
+    }
+
+    /* ── Click side panel ── */
+    .fm-panel {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        bottom: 16px;
+        width: 300px;
+        z-index: 1100;
+        background: var(--fm-white);
+        border-radius: var(--fm-radius);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, .18);
+        padding: 22px 0;
+        font-family: 'Segoe UI', sans-serif;
+        transform: translateX(calc(100% + 24px));
+        transition: transform .25s ease;
+        overflow-y: auto;
+    }
+
+    .fm-panel--open {
+        transform: translateX(0);
+    }
+
+    .fm-panel__pad {
+        padding: 0 22px;
+    }
+
+    .fm-panel__divider {
+        border-top: 1px solid var(--fm-border);
+        margin: 16px 0;
+    }
+
+    .fm-panel__close {
+        position: absolute;
+        top: 16px;
+        right: 18px;
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        line-height: 1;
+        color: var(--fm-muted);
+        cursor: pointer;
+    }
+
+    .fm-panel__close:hover {
+        color: var(--fm-text);
+    }
+
+    .fm-panel__title {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #1A202C;
+        letter-spacing: 0.01em;
+        margin-bottom: 10px;
+    }
+
+    .fm-panel__meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.92rem;
+    }
+
+    .fm-panel__meta-label {
+        color: var(--fm-muted);
+    }
+
+    .fm-panel__route-no {
+        font-weight: 800;
+        color: #2563EB;
+        margin-right: 6px;
+    }
+
+    .fm-panel__shift {
+        font-weight: 700;
+        color: #E8A33D;
+        background: #FCF3DF;
+        border-radius: 6px;
+        padding: 2px 8px;
+    }
+
+    .fm-panel__status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #6B7280;
+    }
+
+    .fm-panel__status-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #34C759;
+        flex-shrink: 0;
+    }
+
+    .fm-panel__driver {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: #F1F3F5;
+        padding: 14px 22px;
+    }
+
+    .fm-panel__avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: #BFE0F2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+
+    .fm-panel__driver-info {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .fm-panel__driver-name {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #1A202C;
+    }
+
+    .fm-panel__driver-sub {
+        font-size: 0.82rem;
+        color: var(--fm-muted);
+    }
+
+    .fm-panel__pax {
+        display: flex;
+        align-items: center;
+        padding: 6px 22px;
+    }
+
+    .fm-panel__pax-label {
+        flex: 1;
+        text-align: center;
+        font-size: 1.05rem;
+        color: #4A5568;
+        line-height: 1.25;
+    }
+
+    .fm-panel__pax-num {
+        flex: 1;
+        text-align: center;
+        font-size: 1.9rem;
+        font-weight: 800;
+        color: #1A202C;
+        border-left: 1px solid var(--fm-border);
+    }
+
+    .fm-panel__rev-head {
+        background: #F1F3F5;
+        padding: 10px 22px;
+        font-size: 1rem;
+        color: #2D3748;
+    }
+
+    .fm-panel__rev-val {
+        margin-top: 14px;
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #1A202C;
+    }
+
+    .fm-panel__updated {
+        font-size: 0.85rem;
+        font-style: italic;
+        color: var(--fm-muted);
+    }
+
+    /* ── Stop markers — distinct from bus markers ── */
+    .fm-stop-marker {
+        background: transparent !important;
+        border: none !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .fm-stop-dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #6366F1;
+        border: 3px solid #fff;
+        box-shadow: 0 3px 8px rgba(0, 0, 0, .3);
+    }
+
+    /* ── Stop tooltip ── */
+    .fm-stop-tooltip.leaflet-tooltip {
+        background: var(--fm-white);
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+        padding: 6px 10px;
+        border: none;
+        font-size: 0.8rem;
+        color: var(--fm-text);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .fm-stop-tooltip.leaflet-tooltip::before {
+        display: none;
+    }
+</style>
+
+@section Scripts {
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        window.fleetMapBounds = @Html.Raw(ViewBag.MapBounds is double[] b
+            ? $"[{b[0]},{b[1]},{b[2]},{b[3]}]"
+            : "null");
+    </script>
+    <script src="~/js/fleetmap.js" asp-append-version="true"></script>
+}
