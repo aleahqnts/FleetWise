@@ -1,0 +1,22 @@
+@*
+    Edit Vehicle modal shell — #editVehicleContent is filled per vehicle via
+    fetch('/Vehicles/EditForm?id=…') with the _EditVehicleForm partial. On a failed POST the
+    server pre-renders that partial here (ViewBag.EditVehicleModel) and reopens it.
+*@
+@{
+    var editModel = ViewBag.EditVehicleModel as FleetWise.Models.EditVehicleViewModel;
+}
+<div class="modal fade vh-modal" id="editVehicleModal" tabindex="-1" aria-labelledby="editVehicleModalLabel" aria-hidden="true">
+    <div class="modal-dialog vh-modal-sm">
+        <div class="modal-content" id="editVehicleContent">
+            @if (editModel != null)
+            {
+                @await Html.PartialAsync("_EditVehicleForm", editModel)
+            }
+            else
+            {
+                <div class="vh-modal-loading"><div class="vh-spinner"></div></div>
+            }
+        </div>
+    </div>
+</div>

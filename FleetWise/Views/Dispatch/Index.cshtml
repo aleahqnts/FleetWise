@@ -60,8 +60,10 @@
 
 <!-- TOOLBAR -->
 <div class="dp-toolbar">
-    <a href="#" class="dp-btn-primary"><i class="ti ti-plus"></i> Add Trip</a>
-    <button class="dp-btn-secondary"><i class="ti ti-speakerphone"></i> Broadcast Message</button>
+    <button class="dp-btn-primary" onclick="openAddTripModal()">
+        <i class="ti ti-plus"></i> Add Trip
+    </button>
+    <button class="dp-btn-secondary" onclick="openBroadcastModal()"><i class="ti ti-speakerphone"></i> Broadcast Message</button>
     <div class="dp-search-wrap">
         <i class="ti ti-search dp-search-icon"></i>
         <input type="text" id="searchInput" class="dp-search-input" placeholder="Search…" oninput="filterRows()" />
@@ -79,7 +81,7 @@
                 {
                     <span class="dp-needs-badge"><span class="dp-needs-dot"></span> Needs Assignment</span>
                 }
-                <button class="dp-btn-route-msg"><i class="ti ti-message-2"></i> Route Message</button>
+                <button class="dp-btn-route-msg" onclick="openRouteMessageModal(@route.RouteId, '@route.RouteName')"><i class="ti ti-message-2"></i> Route Message</button>
             </div>
         </div>
 
@@ -179,9 +181,15 @@
                                     </td>
                                     <td>
                                         <div class="dp-actions-cell">
-                                            <button class="rp-btn-view">View</button>
-                                            <button class="dp-btn-reassign">Reassign</button>
-                                            <button class="dp-btn-msg" title="Message"><i class="ti ti-message"></i></button>
+                                            <button class="rp-btn-view" onclick="openTripModal('@trip.TripId')">View</button>
+                                            <button class="dp-btn-reassign"
+                                                    data-trip-id="@trip.TripId"
+                                                    data-status="@trip.TripStatus"
+                                                    onclick="handleReassignClick(this)"
+                                                @(trip.TripStatus == "Active" || trip.TripStatus == "Completed" ? "disabled" : "")>
+                                                Reassign
+                                            </button>
+                                            <button class="dp-btn-msg" title="Message" onclick="openTripMessageModal('@trip.TripId', '@trip.VehicleId', '@trip.DriverName')"><i class="ti ti-message"></i></button>
                                         </div>
                                     </td>
                                 </tr>
@@ -747,6 +755,16 @@
             background: #3D938F;
         }
 
+        .dp-btn-reassign:disabled {
+            background: var(--rp-border);
+            color: var(--rp-muted);
+            cursor: not-allowed;
+        }
+
+            .dp-btn-reassign:disabled:hover {
+                background: var(--rp-border);
+            }
+
     .dp-btn-msg {
         background: transparent;
         border: none;
@@ -935,6 +953,18 @@
 
     function filterRows() { applyFilters(); }
 
+    function handleReassignClick(btn) {
+        const status = btn.dataset.status;
+        if (status === 'Active' || status === 'Completed') return;
+        openReassignModal(btn.dataset.tripId);
+    }
+
     document.getElementById('routeFilter').addEventListener('change', applyFilters);
     document.getElementById('statusFilter').addEventListener('change', applyFilters);
 </script>
+
+@* ── Trip Detail Modal ──────────────────────────────────────── *@
+@await Html.PartialAsync("_TripDetailModal")
+@await Html.PartialAsync("_AddTripModal")
+@await Html.PartialAsync("_ReassignTripModal")
+@await Html.PartialAsync("_BroadcastMessageModal")

@@ -1,0 +1,533 @@
+@* Views/Dispatch/_AddTripModal.cshtml *@
+
+<div id="addTripModal" class="atm-overlay" role="dialog" aria-modal="true" style="display:none;">
+    <div class="atm-dialog">
+
+        <!-- Header -->
+        <div class="atm-header">
+            <h2 class="atm-title">Add New Trip</h2>
+            <button class="atm-close" onclick="closeAddTripModal()">&times;</button>
+        </div>
+
+        <!-- Body -->
+        <div class="atm-body">
+
+            <!-- Trip Information -->
+            <div class="atm-section-label">Trip Information</div>
+            <div class="atm-section">
+                <div class="atm-field">
+                    <label class="atm-label" for="atm-shift-type">Shift Type</label>
+                    <div class="atm-select-wrap">
+                        <select id="atm-shift-type" class="atm-select" onchange="onShiftChange()">
+                            <option value="">Select shift type…</option>
+                            <option value="Morning">Morning Shift</option>
+                            <option value="Afternoon">Afternoon Shift</option>
+                            <option value="Evening">Evening Shift</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="atm-field">
+                    <label class="atm-label" for="atm-shift-time">Shift Time</label>
+                    <div class="atm-select-wrap">
+                        <select id="atm-shift-time" class="atm-select" disabled>
+                            <option value="">Select shift type first…</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="atm-field">
+                    <label class="atm-label" for="atm-route">Route</label>
+                    <div class="atm-select-wrap">
+                        <select id="atm-route" class="atm-select">
+                            <option value="">Loading routes…</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vehicle Details -->
+            <div class="atm-section-label">Vehicle Details</div>
+            <div class="atm-section">
+                <div class="atm-field">
+                    <label class="atm-label" for="atm-vehicle-id">Vehicle ID</label>
+                    <div class="atm-select-wrap">
+                        <select id="atm-vehicle-id" class="atm-select">
+                            <option value="">Select shift first…</option>
+                        </select>
+                    </div>
+                    <span class="atm-hint" id="atm-vehicle-hint"></span>
+                </div>
+            </div>
+
+            <!-- Driver Details -->
+            <div class="atm-section-label">Driver Details</div>
+            <div class="atm-section atm-section--last">
+                <div class="atm-field">
+                    <label class="atm-label" for="atm-driver">Driver Name</label>
+                    <div class="atm-select-wrap">
+                        <select id="atm-driver" class="atm-select">
+                            <option value="">Select shift first…</option>
+                        </select>
+                    </div>
+                    <span class="atm-hint" id="atm-driver-hint"></span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div class="atm-footer">
+            <button class="atm-btn-cancel" onclick="closeAddTripModal()">Cancel</button>
+            <button class="atm-btn-create" id="atm-create-btn" onclick="submitAddTrip()">
+                <span id="atm-create-label">Create Trip</span>
+                <span id="atm-create-spinner" style="display:none;">
+                    <svg class="atm-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none"
+                         stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                    </svg>
+                    Creating…
+                </span>
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    .atm-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.45);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .atm-dialog {
+        background: #fff;
+        border-radius: 20px;
+        width: 100%;
+        max-width: 520px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 40px rgba(0,0,0,.18);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .atm-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 22px 28px 18px;
+        border-bottom: 1px solid #E8ECF0;
+        position: sticky;
+        top: 0;
+        background: #fff;
+        border-radius: 20px 20px 0 0;
+        z-index: 1;
+    }
+
+    .atm-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #1a2a4a;
+        margin: 0;
+    }
+
+    .atm-close {
+        background: none;
+        border: none;
+        font-size: 1.4rem;
+        color: #9AA5B4;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 6px;
+        line-height: 1;
+        transition: color 150ms, background 150ms;
+    }
+
+        .atm-close:hover {
+            color: #2D3748;
+            background: #F0F2F5;
+        }
+
+    .atm-body {
+        padding: 0;
+    }
+
+    .atm-section-label {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #9AA5B4;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        padding: 14px 28px 10px;
+        background: #F8F9FA;
+        border-top: 1px solid #E8ECF0;
+        border-bottom: 1px solid #E8ECF0;
+    }
+
+    .atm-section {
+        padding: 18px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        border-bottom: 1px solid #E8ECF0;
+    }
+
+    .atm-section--last {
+        border-bottom: none;
+    }
+
+    .atm-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .atm-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #4A5568;
+    }
+
+    .atm-select-wrap {
+        position: relative;
+    }
+
+        .atm-select-wrap::after {
+            content: '';
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid #9AA5B4;
+            pointer-events: none;
+        }
+
+    .atm-select {
+        width: 100%;
+        padding: 10px 36px 10px 14px;
+        border: 1.5px solid #E2E8F0;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: #2D3748;
+        background: #fff;
+        appearance: none;
+        cursor: pointer;
+        transition: border-color 150ms;
+        outline: none;
+    }
+
+        .atm-select:focus {
+            border-color: #4AADA8;
+        }
+
+        .atm-select:disabled {
+            background: #F8F9FA;
+            color: #9AA5B4;
+            cursor: not-allowed;
+        }
+
+    .atm-hint {
+        font-size: 0.75rem;
+        color: #E74C3C;
+        display: none;
+    }
+
+        .atm-hint.atm-hint--visible {
+            display: block;
+        }
+
+    .atm-footer {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 18px 28px;
+        border-top: 1px solid #E8ECF0;
+        position: sticky;
+        bottom: 0;
+        background: #fff;
+        border-radius: 0 0 20px 20px;
+    }
+
+    .atm-btn-cancel {
+        padding: 10px 22px;
+        background: transparent;
+        border: 1.5px solid #E2E8F0;
+        border-radius: 10px;
+        font-size: 0.88rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        color: #4A5568;
+        cursor: pointer;
+        transition: border-color 150ms, color 150ms;
+    }
+
+        .atm-btn-cancel:hover {
+            border-color: #CBD5E0;
+            color: #2D3748;
+        }
+
+    .atm-btn-create {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 24px;
+        background: #4AADA8;
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        font-size: 0.88rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 150ms;
+    }
+
+        .atm-btn-create:hover {
+            background: #3d9490;
+        }
+
+        .atm-btn-create:disabled {
+            background: #9AA5B4;
+            cursor: not-allowed;
+        }
+
+    @@keyframes atm-spin-anim {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .atm-spin {
+        animation: atm-spin-anim .7s linear infinite;
+    }
+</style>
+
+<script>
+    // ── Shift time map ────────────────────────────────────────────────
+    const SHIFT_TIMES = {
+        'Morning':   { label: '6:00 AM – 2:00 PM',   start: '06:00', end: '14:00' },
+        'Afternoon': { label: '2:00 PM – 10:00 PM',  start: '14:00', end: '22:00' },
+        'Evening':   { label: '10:00 PM – 6:00 AM',  start: '22:00', end: '06:00' },
+    };
+
+    // ── State ─────────────────────────────────────────────────────────
+    let _atmOptions = null;   // full options fetched once
+    let _atmShift   = null;   // currently selected shift type
+
+    // ── Open / Close ──────────────────────────────────────────────────
+    async function openAddTripModal() {
+        document.getElementById('addTripModal').style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        resetAddTripModal();
+        await fetchAddTripOptions();
+    }
+
+    function closeAddTripModal() {
+        document.getElementById('addTripModal').style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
+    document.getElementById('addTripModal').addEventListener('click', function(e) {
+        if (e.target === this) closeAddTripModal();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && document.getElementById('addTripModal').style.display === 'flex')
+            closeAddTripModal();
+    });
+
+    // ── Reset ─────────────────────────────────────────────────────────
+    function resetAddTripModal() {
+        document.getElementById('atm-shift-type').value = '';
+        setShiftTimeOptions([]);
+        document.getElementById('atm-shift-time').disabled = true;
+        document.getElementById('atm-route').innerHTML = '<option value="">Loading…</option>';
+        setVehicleOptions([]);
+        setDriverOptions([]);
+        hideHint('atm-vehicle-hint');
+        hideHint('atm-driver-hint');
+        _atmShift = null;
+    }
+
+    // ── Fetch options once ────────────────────────────────────────────
+    async function fetchAddTripOptions() {
+        try {
+            const res = await fetch('/Dispatch/GetAddTripOptions');
+            _atmOptions = await res.json();
+
+            // Populate routes
+            const routeSel = document.getElementById('atm-route');
+            routeSel.innerHTML = '<option value="">Select a route…</option>';
+            _atmOptions.routes.forEach(r => {
+                const o = document.createElement('option');
+                o.value = r.routeId;
+                o.textContent = r.routeName;
+                routeSel.appendChild(o);
+            });
+        } catch {
+            document.getElementById('atm-route').innerHTML = '<option value="">Failed to load</option>';
+        }
+    }
+
+    // ── Shift type change ─────────────────────────────────────────────
+    function onShiftChange() {
+        _atmShift = document.getElementById('atm-shift-type').value;
+        const timeSel = document.getElementById('atm-shift-time');
+
+        if (!_atmShift) {
+            setShiftTimeOptions([]);
+            timeSel.disabled = true;
+            setVehicleOptions([]);
+            setDriverOptions([]);
+            return;
+        }
+
+        const t = SHIFT_TIMES[_atmShift];
+        setShiftTimeOptions(t ? [{ label: t.label, start: t.start, end: t.end }] : []);
+        timeSel.disabled = false;
+        refreshVehicles();
+        refreshDrivers();
+    }
+
+    function setShiftTimeOptions(times) {
+        const sel = document.getElementById('atm-shift-time');
+        sel.innerHTML = times.length === 0
+            ? '<option value="">Select shift type first…</option>'
+            : times.map(t => `<option value="${t.start}|${t.end}">${t.label}</option>`).join('');
+    }
+
+   
+
+    // ── Populate vehicles: exclude those already booked for this shift ─
+    function refreshVehicles() {
+        if (!_atmOptions || !_atmShift) {
+            setVehicleOptions([]);
+            return;
+        }
+
+           const available = _atmOptions.vehicles.filter(v =>
+        !v.bookedShifts.includes(_atmShift)
+    );
+
+        setVehicleOptions(available);
+
+        const hint = document.getElementById('atm-vehicle-hint');
+        if (available.length === 0) {
+            hint.textContent = 'No vehicles available for this shift.';
+            hint.classList.add('atm-hint--visible');
+        } else {
+            hint.classList.remove('atm-hint--visible');
+        }
+    }
+
+    function setVehicleOptions(vehicles) {
+        const sel = document.getElementById('atm-vehicle-id');
+        if (vehicles.length === 0) {
+            sel.innerHTML = _atmShift
+                ? '<option value="">No vehicles available</option>'
+                : '<option value="">Select shift first…</option>';
+            return;
+        }
+        sel.innerHTML = '<option value="">Select a vehicle…</option>'
+            + vehicles.map(v =>
+                `<option value="${v.vehicleId}">${v.vehicleId} | ${v.plateNumber}</option>`
+            ).join('');
+    }
+
+    // ── Populate drivers: exclude those already booked for this shift ──
+    function refreshDrivers() {
+        if (!_atmOptions || !_atmShift) {
+            setDriverOptions([]);
+            return;
+        }
+
+        const available = _atmOptions.drivers.filter(d =>
+            !d.bookedShifts.includes(_atmShift)
+        );
+
+        setDriverOptions(available);
+
+        const hint = document.getElementById('atm-driver-hint');
+        if (available.length === 0) {
+            hint.textContent = 'No drivers available for this shift.';
+            hint.classList.add('atm-hint--visible');
+        } else {
+            hint.classList.remove('atm-hint--visible');
+        }
+    }
+
+    function setDriverOptions(drivers) {
+        const sel = document.getElementById('atm-driver');
+        if (drivers.length === 0) {
+            sel.innerHTML = _atmShift
+                ? '<option value="">No drivers available</option>'
+                : '<option value="">Select shift first…</option>';
+            return;
+        }
+        sel.innerHTML = '<option value="">Select a driver…</option>'
+            + drivers.map(d =>
+                `<option value="${d.driverId}">${d.driverName}</option>`
+            ).join('');
+    }
+
+    function hideHint(id) {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('atm-hint--visible');
+    }
+
+    // ── Submit ────────────────────────────────────────────────────────
+    async function submitAddTrip() {
+        const shiftType  = document.getElementById('atm-shift-type').value;
+        const shiftTime  = document.getElementById('atm-shift-time').value;   // "HH:mm|HH:mm"
+        const routeId    = parseInt(document.getElementById('atm-route').value);
+        const vehicleId  = document.getElementById('atm-vehicle-id').value;
+        const driverId   = parseInt(document.getElementById('atm-driver').value);
+
+        if (!shiftType || !shiftTime || !routeId || !vehicleId || !driverId) {
+            alert('Please fill in all fields before creating the trip.');
+            return;
+        }
+
+        const [startTime, endTime] = shiftTime.split('|');
+
+        const btn = document.getElementById('atm-create-btn');
+        btn.disabled = true;
+        document.getElementById('atm-create-label').style.display  = 'none';
+        document.getElementById('atm-create-spinner').style.display = 'inline-flex';
+
+        try {
+            const res = await fetch('/Dispatch/CreateTrip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shiftType, shiftStartTime: startTime, shiftEndTime: endTime, routeId, vehicleId, driverId })
+            });
+
+            if (!res.ok) {
+                const errText = await res.text();
+                alert('Failed to create trip: ' + errText);
+                return;
+            }
+
+            closeAddTripModal();
+            window.location.reload();
+        } catch (err) {
+            alert('Failed to create trip. Error: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            document.getElementById('atm-create-label').style.display  = 'inline';
+            document.getElementById('atm-create-spinner').style.display = 'none';
+        }
+    }
+</script>

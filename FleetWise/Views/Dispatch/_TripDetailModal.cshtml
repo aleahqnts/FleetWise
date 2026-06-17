@@ -1,0 +1,660 @@
+@* Views/Dispatch/_TripDetailModal.cshtml *@
+
+<div id="tripDetailModal" class="tdm-overlay" role="dialog" aria-modal="true" style="display:none;">
+    <div class="tdm-dialog">
+
+        <!-- Header -->
+        <div class="tdm-header">
+            <h2 class="tdm-title">TRIP <span id="tdm-trip-id">—</span></h2>
+            <button class="tdm-close" onclick="closeTripModal()">&times;</button>
+        </div>
+
+        <!-- Loading -->
+        <div id="tdm-loading" class="tdm-loading">
+            <div class="tdm-spinner"></div>
+            <span>Loading trip details…</span>
+        </div>
+
+        <!-- Content -->
+        <div id="tdm-content" style="display:none;">
+
+            <!-- Trip Information -->
+            <div class="tdm-section-header">
+                <span class="tdm-section-title">Trip Information</span>
+                <span id="tdm-status-badge" class="tdm-badge"></span>
+            </div>
+            <div class="tdm-section-body">
+                <div class="tdm-info-grid">
+                    <div class="tdm-info-item">
+                        <span class="tdm-label">Shift Type</span>
+                        <span class="tdm-value" id="tdm-shift-type">—</span>
+                    </div>
+                    <div class="tdm-info-item">
+                        <span class="tdm-label">Shift Time</span>
+                        <span class="tdm-value" id="tdm-shift-time">—</span>
+                    </div>
+                    <div class="tdm-info-item">
+                        <span class="tdm-label">Route</span>
+                        <span class="tdm-value" id="tdm-route">—</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Assignment Information -->
+            <div class="tdm-section-header">
+                <span class="tdm-section-title">Assignment Information</span>
+            </div>
+
+            <!-- Vehicle Details -->
+            <div class="tdm-subsection-header">Vehicle Details</div>
+            <div class="tdm-section-body">
+                <div class="tdm-info-grid">
+                    <div class="tdm-info-item">
+                        <span class="tdm-label">Vehicle ID</span>
+                        <span class="tdm-value" id="tdm-vehicle-id">—</span>
+                    </div>
+                    <div class="tdm-info-item">
+                        <span class="tdm-label">Plate Number</span>
+                        <span class="tdm-value" id="tdm-plate">—</span>
+                    </div>
+                    <div class="tdm-info-item">
+                        <span class="tdm-label">Status</span>
+                        <span class="tdm-value" id="tdm-vehicle-status">—</span>
+                    </div>
+                </div>
+
+                <!-- Inspection Log Accordion -->
+                <div class="tdm-accordion">
+                    <button class="tdm-accordion-btn" onclick="toggleInspectionLog()">
+                        <span>View Inspection Log</span>
+                        <svg class="tdm-accordion-chevron" id="tdm-chevron"
+                             xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+                             fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </button>
+                    <div class="tdm-accordion-body" id="tdm-inspection-body" style="display:none;">
+
+                        <div class="tdm-insp-card">
+                            <div class="tdm-insp-card-header">
+                                <span class="tdm-insp-card-title">Inspection Log</span>
+                                <span id="tdm-insp-badge" class="tdm-badge"></span>
+                            </div>
+                            <div class="tdm-insp-card-body">
+                                <div class="tdm-insp-row">
+                                    <span class="tdm-insp-row-label">Reported By:</span>
+                                    <span id="tdm-insp-reporter">—</span>
+                                </div>
+                                <div class="tdm-insp-row">
+                                    <span class="tdm-insp-row-label">Time of Report:</span>
+                                    <span id="tdm-insp-time">—</span>
+                                </div>
+                                <div class="tdm-insp-row" id="tdm-insp-issue-row" style="display:none;">
+                                    <span class="tdm-insp-row-label">Issue:</span>
+                                    <span id="tdm-insp-issue">—</span>
+                                </div>
+                                <div id="tdm-insp-remarks-wrap" style="display:none;">
+                                    <div class="tdm-insp-row-label" style="margin-bottom:6px;">Remarks:</div>
+                                    <div class="tdm-notes-box tdm-notes-box--highlight" id="tdm-insp-remarks"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- Driver Details -->
+            <div class="tdm-subsection-header">Driver Details</div>
+            <div class="tdm-section-body" style="border-bottom:none;">
+                <div class="tdm-info-grid">
+                    <div class="tdm-info-item">
+                        <span class="tdm-label">Driver Name</span>
+                        <span class="tdm-value" id="tdm-driver-name">—</span>
+                    </div>
+                    <div class="tdm-info-item">
+                        <span class="tdm-label">Driver ID</span>
+                        <span class="tdm-value" id="tdm-driver-id">—</span>
+                    </div>
+                    <div class="tdm-info-item">
+                        <span class="tdm-label">Status</span>
+                        <span class="tdm-value" id="tdm-driver-status">—</span>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /tdm-content -->
+        <!-- Error -->
+        <div id="tdm-error" class="tdm-error" style="display:none;">
+            <i class="ti ti-alert-circle"></i> Failed to load trip details. Please try again.
+        </div>
+
+    </div>
+</div>
+
+<style>
+    .tdm-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.45);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .tdm-dialog {
+        background: #fff;
+        border-radius: 16px;
+        width: 100%;
+        max-width: 580px;
+        max-height: 88vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 40px rgba(0,0,0,.18);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .tdm-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 22px 24px 16px;
+        border-bottom: 1px solid #E8ECF0;
+        position: sticky;
+        top: 0;
+        background: #fff;
+        border-radius: 16px 16px 0 0;
+        z-index: 1;
+    }
+
+    .tdm-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #1a2a4a;
+        letter-spacing: .04em;
+        margin: 0;
+    }
+
+    .tdm-close {
+        background: none;
+        border: none;
+        font-size: 1.4rem;
+        color: #9AA5B4;
+        cursor: pointer;
+        line-height: 1;
+        padding: 2px 6px;
+        border-radius: 6px;
+        transition: color 150ms, background 150ms;
+    }
+
+        .tdm-close:hover {
+            color: #2D3748;
+            background: #F0F2F5;
+        }
+
+    /* Badge */
+    .tdm-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+
+        .tdm-badge::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+    .tdm-badge--active {
+        background: #E8F8EE;
+        color: #27AE60;
+    }
+
+        .tdm-badge--active::before {
+            background: #27AE60;
+        }
+
+    .tdm-badge--issue {
+        background: #FEECEC;
+        color: #E74C3C;
+    }
+
+        .tdm-badge--issue::before {
+            background: #E74C3C;
+        }
+
+    .tdm-badge--not-started {
+        background: #EEF2FF;
+        color: #4F6AD8;
+    }
+
+        .tdm-badge--not-started::before {
+            background: #4F6AD8;
+        }
+
+    .tdm-badge--pending {
+        background: #FFF8E1;
+        color: #F59E0B;
+    }
+
+        .tdm-badge--pending::before {
+            background: #F59E0B;
+        }
+
+    .tdm-badge--completed {
+        background: #F0F2F5;
+        color: #6B7C93;
+    }
+
+        .tdm-badge--completed::before {
+            background: #9AA5B4;
+        }
+
+    .tdm-badge--passed {
+        background: #E8F8EE;
+        color: #27AE60;
+    }
+
+        .tdm-badge--passed::before {
+            background: #27AE60;
+        }
+
+    .tdm-badge--failed {
+        background: #FEECEC;
+        color: #E74C3C;
+    }
+
+        .tdm-badge--failed::before {
+            background: #E74C3C;
+        }
+
+    /* Sections */
+    .tdm-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 24px 10px;
+        background: #F8F9FA;
+        border-top: 1px solid #E8ECF0;
+        border-bottom: 1px solid #E8ECF0;
+    }
+
+    .tdm-section-title {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: #9AA5B4;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+
+    .tdm-subsection-header {
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: #2D3748;
+        padding: 14px 24px 4px;
+        border-top: 1px solid #E8ECF0;
+    }
+
+    .tdm-section-body {
+        padding: 14px 24px 18px;
+        border-bottom: 1px solid #E8ECF0;
+    }
+
+    /* Info grid */
+    .tdm-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill,minmax(150px,1fr));
+        gap: 14px 24px;
+    }
+
+    .tdm-info-item {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .tdm-label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: #9AA5B4;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+    }
+
+    .tdm-value {
+        font-size: 0.9rem;
+        color: #2D3748;
+        font-weight: 500;
+    }
+
+    /* Dots */
+    .tdm-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 5px;
+        vertical-align: middle;
+    }
+
+    .tdm-dot--green {
+        background: #27AE60;
+    }
+
+    .tdm-dot--blue {
+        background: #4AADA8;
+    }
+
+    .tdm-dot--red {
+        background: #E74C3C;
+    }
+
+    .tdm-dot--yellow {
+        background: #F59E0B;
+    }
+
+    .tdm-dot--gray {
+        background: #9AA5B4;
+    }
+
+    /* Accordion */
+    .tdm-accordion {
+        margin-top: 14px;
+        border: 1px solid #E8ECF0;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .tdm-accordion-btn {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 11px 16px;
+        background: #F8F9FA;
+        border: none;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #2D3748;
+        font-family: 'Segoe UI',sans-serif;
+        transition: background 150ms;
+    }
+
+        .tdm-accordion-btn:hover {
+            background: #EFF1F4;
+        }
+
+    .tdm-accordion-chevron {
+        transition: transform 200ms;
+        color: #9AA5B4;
+    }
+
+        .tdm-accordion-chevron.open {
+            transform: rotate(180deg);
+        }
+
+    .tdm-accordion-body {
+        padding: 16px;
+        border-top: 1px solid #E8ECF0;
+        background: #fff;
+    }
+
+    /* Inspection Log card */
+    .tdm-insp-card {
+        border: 1px solid #E8ECF0;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .tdm-insp-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        background: #F8F9FA;
+        border-bottom: 1px solid #E8ECF0;
+    }
+
+    .tdm-insp-card-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #6B7C93;
+    }
+
+    .tdm-insp-card-body {
+        padding: 14px 16px;
+    }
+
+    .tdm-insp-row {
+        display: flex;
+        gap: 6px;
+        font-size: 0.88rem;
+        color: #2D3748;
+        margin-bottom: 8px;
+    }
+
+        .tdm-insp-row:last-child {
+            margin-bottom: 0;
+        }
+
+    .tdm-insp-row-label {
+        font-weight: 600;
+        color: #2D3748;
+    }
+
+    .tdm-notes-box {
+        background: #F8F9FA;
+        border: 1px solid #E8ECF0;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 0.85rem;
+        color: #2D3748;
+        margin-top: 6px;
+    }
+
+    .tdm-notes-box--highlight {
+        background: #FEF9E7;
+        border-color: #FBEEC1;
+        margin-top: 0;
+    }
+
+
+    .tdm-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 48px 24px;
+        color: #9AA5B4;
+        font-size: 0.88rem;
+    }
+
+    .tdm-spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid #E8ECF0;
+        border-top-color: #4AADA8;
+        border-radius: 50%;
+        animation: tdm-spin .7s linear infinite;
+    }
+
+    @@keyframes tdm-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .tdm-error {
+        padding: 24px;
+        text-align: center;
+        color: #E74C3C;
+        font-size: 0.88rem;
+    }
+</style>
+
+<script>
+    function openTripModal(tripId) {
+        document.getElementById('tripDetailModal').style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        loadTripDetails(tripId);
+    }
+
+    function closeTripModal() {
+        document.getElementById('tripDetailModal').style.display = 'none';
+        document.body.style.overflow = '';
+        document.getElementById('tdm-inspection-body').style.display = 'none';
+        document.getElementById('tdm-chevron').classList.remove('open');
+    }
+
+    document.getElementById('tripDetailModal').addEventListener('click', function (e) {
+        if (e.target === this) closeTripModal();
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeTripModal();
+    });
+
+    function toggleInspectionLog() {
+        const body = document.getElementById('tdm-inspection-body');
+        const chevron = document.getElementById('tdm-chevron');
+        const isOpen = body.style.display !== 'none';
+        body.style.display = isOpen ? 'none' : 'block';
+        chevron.classList.toggle('open', !isOpen);
+    }
+
+    function applyStatusBadge(el, status) {
+        const map = {
+            'Active':           ['tdm-badge--active',     'Active'],
+            'Assignment Issue': ['tdm-badge--issue',      'Assignment Issue'],
+            'Not Yet Started':  ['tdm-badge--not-started','Not Yet Started'],
+            'Pending':          ['tdm-badge--pending',    'Pending'],
+            'Completed':        ['tdm-badge--completed',  'Completed'],
+        };
+        const [cls, label] = map[status] ?? ['tdm-badge--completed', status];
+        el.className = 'tdm-badge ' + cls;
+        el.textContent = label;
+    }
+
+    function statusDot(status) {
+        const map = {
+            'On Trip':         'tdm-dot--green',
+            'Available':       'tdm-dot--blue',
+            'Ready to Deploy': 'tdm-dot--blue',
+            'Flagged':         'tdm-dot--red',
+            'Unavailable':     'tdm-dot--red',
+            'Pending':         'tdm-dot--yellow',
+        };
+        return `<span class="tdm-dot ${map[status] ?? 'tdm-dot--gray'}"></span>${status}`;
+    }
+
+    function applyInspectionBadge(el, status) {
+        const map = {
+            'Passed':  ['tdm-badge--passed',  'Passed'],
+            'Failed':  ['tdm-badge--failed',  'Failed'],
+            'Pending': ['tdm-badge--pending', 'Pending'],
+        };
+        const [cls, label] = map[status] ?? ['tdm-badge--pending', 'Pending'];
+        el.className = 'tdm-badge ' + cls;
+        el.textContent = label;
+    }
+
+    function formatIssueKey(key) {
+        return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    async function loadTripDetails(tripId) {
+        document.getElementById('tdm-loading').style.display  = 'flex';
+        document.getElementById('tdm-content').style.display  = 'none';
+        document.getElementById('tdm-error').style.display    = 'none';
+
+        try {
+            const res = await fetch(`/Dispatch/GetTripDetails?id=${encodeURIComponent(tripId)}`);
+            if (!res.ok) throw new Error();
+            const d = await res.json();
+
+            // Header
+            document.getElementById('tdm-trip-id').textContent = d.tripId;
+            applyStatusBadge(document.getElementById('tdm-status-badge'), d.tripStatus);
+
+            // Trip info
+            document.getElementById('tdm-shift-type').textContent = d.shiftType ?? '—';
+            document.getElementById('tdm-shift-time').textContent =
+                (d.shiftStartTime && d.shiftEndTime) ? `${d.shiftStartTime} – ${d.shiftEndTime}` : '—';
+            document.getElementById('tdm-route').textContent = d.routeName ?? '—';
+
+            // Vehicle
+            document.getElementById('tdm-vehicle-id').textContent   = d.vehicleId   ?? '—';
+            document.getElementById('tdm-plate').textContent        = d.plateNumber  ?? '—';
+            document.getElementById('tdm-vehicle-status').innerHTML = statusDot(d.vehicleStatus);
+
+            // Driver
+            document.getElementById('tdm-driver-name').textContent   = d.driverName ?? '—';
+            document.getElementById('tdm-driver-id').textContent     = `DRV${String(d.driverId).padStart(3, '0')}`;
+            document.getElementById('tdm-driver-status').innerHTML   = statusDot(d.driverStatus);
+
+            // Inspection Log card
+            const inspBadge   = document.getElementById('tdm-insp-badge');
+            const inspReporter = document.getElementById('tdm-insp-reporter');
+            const inspTime    = document.getElementById('tdm-insp-time');
+            const inspIssueRow = document.getElementById('tdm-insp-issue-row');
+            const inspIssue   = document.getElementById('tdm-insp-issue');
+            const inspRemarksWrap = document.getElementById('tdm-insp-remarks-wrap');
+            const inspRemarks = document.getElementById('tdm-insp-remarks');
+
+            inspIssueRow.style.display     = 'none';
+            inspRemarksWrap.style.display  = 'none';
+
+            if (!d.checklist) {
+                // No checklist submitted yet → bus is still Pending
+                applyInspectionBadge(inspBadge, 'Pending');
+                inspReporter.textContent = '—';
+                inspTime.textContent     = '—';
+                inspRemarks.textContent  = 'No inspection log submitted for this trip yet.';
+                inspRemarksWrap.style.display = 'block';
+            } else {
+                const passed = d.checklist.checklistStatus?.toLowerCase() === 'passed';
+                applyInspectionBadge(inspBadge, passed ? 'Passed' : 'Failed');
+
+                inspReporter.textContent = d.driverName ?? '—';
+                inspTime.textContent = new Date(d.checklist.submittedAt).toLocaleString('en-PH',
+                    { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+                const remarks = [];
+                if (d.checklist.notes) remarks.push(d.checklist.notes);
+
+                if (!passed && d.maintenanceLogs?.length > 0) {
+                    // Issues = union of issue names across maintenance log entries
+                    const issueNames = d.maintenanceLogs.flatMap(l => l.issueDetails ?? []);
+                    if (issueNames.length > 0) {
+                        inspIssue.textContent = [...new Set(issueNames)].map(formatIssueKey).join(', ');
+                        inspIssueRow.style.display = 'flex';
+                    }
+                    d.maintenanceLogs.forEach(l => { if (l.remarks) remarks.push(l.remarks); });
+                }
+
+                if (remarks.length > 0) {
+                    inspRemarks.textContent = remarks.join(' ');
+                    inspRemarksWrap.style.display = 'block';
+                }
+            }
+
+            document.getElementById('tdm-loading').style.display = 'none';
+            document.getElementById('tdm-content').style.display = 'block';
+
+        } catch {
+            document.getElementById('tdm-loading').style.display = 'none';
+            document.getElementById('tdm-error').style.display   = 'block';
+        }
+    }
+</script>
