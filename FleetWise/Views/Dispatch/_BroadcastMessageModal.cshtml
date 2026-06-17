@@ -1,0 +1,573 @@
+@* Views/Dispatch/_BroadcastMessageModal.cshtml *@
+
+<div id="broadcastModal" class="bm-overlay" role="dialog" aria-modal="true" style="display:none;">
+    <div class="bm-dialog">
+
+        <!-- Header -->
+        <div class="bm-header">
+            <h2 class="bm-title" id="bm-modal-title">Broadcast Message</h2>
+            <button class="bm-close" onclick="closeBroadcastModal()">&times;</button>
+        </div>
+
+        <!-- Body -->
+        <div class="bm-body">
+
+            <!-- Recipients -->
+            <div class="bm-field">
+                <label class="bm-label">Recipients</label>
+                <div class="bm-recipient-card">
+                    <div class="bm-recipient-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none"
+                             stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                    </div>
+                    <div class="bm-recipient-info">
+                        <div class="bm-recipient-name" id="bm-recipient-name">All Drivers in All Routes</div>
+                        <div class="bm-recipient-sub" id="bm-recipient-sub"></div>
+                    </div>
+                </div>
+                <p class="bm-recipient-note" id="bm-recipient-note">This message will be sent to all active drivers in all routes.</p>
+            </div>
+
+            <!-- Subject -->
+            <div class="bm-field">
+                <label class="bm-label" for="bm-subject">
+                    Subject <span class="bm-optional">(Optional)</span>
+                </label>
+                <input type="text" id="bm-subject" class="bm-input" placeholder="Enter Subject" maxlength="120" />
+            </div>
+
+            <!-- Message -->
+            <div class="bm-field">
+                <label class="bm-label" for="bm-body">
+                    Message <span class="bm-required">*</span>
+                </label>
+                <textarea id="bm-body" class="bm-textarea" placeholder="Type your message here..." maxlength="1000" rows="5"></textarea>
+                <div class="bm-char-count"><span id="bm-char-used">0</span> / 1000</div>
+            </div>
+
+            <!-- Priority -->
+            <div class="bm-field bm-field--inline">
+                <label class="bm-label">Priority:</label>
+                <div class="bm-priority-wrap">
+                    <span class="bm-priority-dot" id="bm-priority-dot" style="background:#27AE60;"></span>
+                    <select id="bm-priority" class="bm-priority-select" onchange="onBmPriorityChange()">
+                        <option value="Normal">Normal</option>
+                        <option value="Urgent">Urgent</option>
+                    </select>
+                    <svg class="bm-select-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none"
+                         stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                        <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div class="bm-footer">
+            <button class="bm-btn-cancel" onclick="closeBroadcastModal()">Cancel</button>
+            <button class="bm-btn-send" id="bm-send-btn" onclick="submitBroadcast()">
+                <span id="bm-send-label">Send Message</span>
+                <span id="bm-send-spinner" style="display:none;">
+                    <svg class="bm-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none"
+                         stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                    </svg>
+                    Sending...
+                </span>
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<!-- Success toast -->
+<div id="bm-toast" class="bm-toast" style="display:none;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
+         stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <polyline points="20 6 9 17 4 12" />
+    </svg>
+    Message sent successfully!
+</div>
+
+<style>
+    .bm-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.45);
+        z-index: 1100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .bm-dialog {
+        background: #fff;
+        border-radius: 20px;
+        width: 100%;
+        max-width: 520px;
+        max-height: 92vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 40px rgba(0,0,0,.18);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .bm-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 22px 28px 18px;
+        border-bottom: 1px solid #E8ECF0;
+        position: sticky;
+        top: 0;
+        background: #fff;
+        border-radius: 20px 20px 0 0;
+        z-index: 1;
+    }
+
+    .bm-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #1a2a4a;
+        margin: 0;
+    }
+
+    .bm-close {
+        background: none;
+        border: none;
+        font-size: 1.4rem;
+        color: #9AA5B4;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 6px;
+        line-height: 1;
+        transition: color 150ms, background 150ms;
+    }
+
+        .bm-close:hover {
+            color: #2D3748;
+            background: #F0F2F5;
+        }
+
+    .bm-body {
+        padding: 22px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .bm-field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .bm-field--inline {
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .bm-label {
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: #2D3748;
+    }
+
+    .bm-optional {
+        font-weight: 400;
+        color: #9AA5B4;
+        font-size: 0.82rem;
+    }
+
+    .bm-required {
+        color: #E74C3C;
+    }
+
+    .bm-recipient-card {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 16px;
+        border: 1.5px solid #E8ECF0;
+        border-radius: 12px;
+        background: #F8F9FA;
+    }
+
+    .bm-recipient-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 10px;
+        background: #E8F6F5;
+        color: #4AADA8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .bm-recipient-name {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #2D3748;
+    }
+
+    .bm-recipient-sub {
+        font-size: 0.8rem;
+        color: #9AA5B4;
+        margin-top: 2px;
+    }
+
+    .bm-recipient-note {
+        font-size: 0.78rem;
+        color: #9AA5B4;
+        margin: 0;
+    }
+
+    .bm-input {
+        padding: 10px 14px;
+        border: 1.5px solid #E8ECF0;
+        border-radius: 10px;
+        font-size: 0.88rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: #2D3748;
+        outline: none;
+        transition: border-color 180ms;
+        background: #fff;
+    }
+
+        .bm-input:focus {
+            border-color: #4AADA8;
+        }
+
+    .bm-textarea {
+        padding: 10px 14px;
+        border: 1.5px solid #E8ECF0;
+        border-radius: 10px;
+        font-size: 0.88rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: #2D3748;
+        outline: none;
+        resize: vertical;
+        min-height: 110px;
+        transition: border-color 180ms;
+        background: #fff;
+    }
+
+        .bm-textarea:focus {
+            border-color: #4AADA8;
+        }
+
+    .bm-char-count {
+        font-size: 0.75rem;
+        color: #9AA5B4;
+        text-align: right;
+    }
+
+    .bm-priority-wrap {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border: 1.5px solid #E8ECF0;
+        border-radius: 20px;
+        padding: 5px 30px 5px 12px;
+        background: #fff;
+    }
+
+    .bm-priority-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        transition: background 180ms;
+    }
+
+    .bm-priority-select {
+        appearance: none;
+        border: none;
+        background: transparent;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 500;
+        color: #2D3748;
+        cursor: pointer;
+        outline: none;
+        padding: 0;
+    }
+
+    .bm-select-arrow {
+        position: absolute;
+        right: 10px;
+        pointer-events: none;
+        color: #9AA5B4;
+    }
+
+    .bm-footer {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 12px;
+        padding: 18px 28px;
+        border-top: 1px solid #E8ECF0;
+        background: #fff;
+        border-radius: 0 0 20px 20px;
+        position: sticky;
+        bottom: 0;
+    }
+
+    .bm-btn-cancel {
+        padding: 10px 24px;
+        border-radius: 10px;
+        border: 1.5px solid #E8ECF0;
+        background: #fff;
+        font-size: 0.88rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        color: #2D3748;
+        cursor: pointer;
+        transition: background 150ms;
+    }
+
+        .bm-btn-cancel:hover {
+            background: #F8F9FA;
+        }
+
+    .bm-btn-send {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 10px 24px;
+        border-radius: 10px;
+        border: none;
+        background: #4AADA8;
+        font-size: 0.88rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        color: #fff;
+        cursor: pointer;
+        transition: background 150ms;
+    }
+
+        .bm-btn-send:hover:not(:disabled) {
+            background: #3D938F;
+        }
+
+        .bm-btn-send:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+        }
+
+    .bm-toast {
+        position: fixed;
+        bottom: 28px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #27AE60;
+        color: #fff;
+        padding: 12px 22px;
+        border-radius: 10px;
+        font-size: 0.88rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 4px 16px rgba(0,0,0,.15);
+        z-index: 1200;
+        animation: bm-fadein 200ms ease;
+    }
+
+    @@keyframes bm-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .bm-spin {
+        animation: bm-spin .7s linear infinite;
+        display: inline-block;
+    }
+
+    @@keyframes bm-fadein {
+        from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(8px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+    }
+</style>
+
+<script>
+    (function () {
+        const overlay   = document.getElementById('broadcastModal');
+        const bodyInput = document.getElementById('bm-body');
+        const charUsed  = document.getElementById('bm-char-used');
+        const sendBtn   = document.getElementById('bm-send-btn');
+        const toast     = document.getElementById('bm-toast');
+        let toastTimer  = null;
+
+        let _bmMode    = 'broadcast';
+        let _bmRouteId = null;
+        let _bmTripId  = null;
+
+        function resetForm() {
+            document.getElementById('bm-subject').value = '';
+            bodyInput.value = '';
+            charUsed.textContent = '0';
+            document.getElementById('bm-priority').value = 'Normal';
+            document.getElementById('bm-priority-dot').style.background = '#27AE60';
+        }
+
+        function showModal() {
+            overlay.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        // Broadcast: all drivers, all routes
+        window.openBroadcastModal = async function () {
+            _bmMode = 'broadcast';
+            _bmRouteId = null;
+            _bmTripId  = null;
+            resetForm();
+            document.getElementById('bm-modal-title').textContent   = 'Broadcast Message';
+            document.getElementById('bm-recipient-name').textContent = 'All Drivers in All Routes';
+            document.getElementById('bm-recipient-sub').textContent  = 'Loading...';
+            document.getElementById('bm-recipient-note').textContent = 'This message will be sent to all active drivers in all routes.';
+            showModal();
+            try {
+                const res  = await fetch('/Dispatch/GetDriverCount');
+                const data = await res.json();
+                document.getElementById('bm-recipient-sub').textContent =
+                    data.count + ' recipient' + (data.count !== 1 ? 's' : '');
+            } catch {
+                document.getElementById('bm-recipient-sub').textContent = 'All active drivers';
+            }
+        };
+
+        // Route message: all drivers on a specific route
+        window.openRouteMessageModal = async function (routeId, routeName) {
+            _bmMode    = 'route';
+            _bmRouteId = routeId;
+            _bmTripId  = null;
+            resetForm();
+            document.getElementById('bm-modal-title').textContent   = routeName + ' - Message';
+            document.getElementById('bm-recipient-name').textContent = 'All Drivers in ' + routeName;
+            document.getElementById('bm-recipient-sub').textContent  = 'Loading...';
+            document.getElementById('bm-recipient-note').textContent = 'This message will be sent to all active drivers in this route.';
+            showModal();
+            try {
+                const res  = await fetch('/Dispatch/GetDriverCount?routeId=' + routeId);
+                const data = await res.json();
+                document.getElementById('bm-recipient-sub').textContent =
+                    data.count + ' recipient' + (data.count !== 1 ? 's' : '');
+            } catch {
+                document.getElementById('bm-recipient-sub').textContent = 'Drivers in this route';
+            }
+        };
+
+        // Trip message: single driver on a trip
+        window.openTripMessageModal = function (tripId, vehicleId, driverName) {
+            _bmMode    = 'trip';
+            _bmTripId  = tripId;
+            _bmRouteId = null;
+            resetForm();
+            document.getElementById('bm-modal-title').textContent   = vehicleId + ' - Message';
+            document.getElementById('bm-recipient-name').textContent = vehicleId;
+            document.getElementById('bm-recipient-sub').textContent  = 'Driver: ' + driverName;
+            document.getElementById('bm-recipient-note').textContent = 'This message will be sent to this driver.';
+            showModal();
+        };
+
+        window.closeBroadcastModal = function () {
+            overlay.style.display = 'none';
+            document.body.style.overflow = '';
+        };
+
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) closeBroadcastModal();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && overlay.style.display === 'flex') closeBroadcastModal();
+        });
+
+        bodyInput.addEventListener('input', function() {
+            charUsed.textContent = bodyInput.value.length;
+        });
+
+        window.onBmPriorityChange = function () {
+            var val = document.getElementById('bm-priority').value;
+            document.getElementById('bm-priority-dot').style.background =
+                val === 'Urgent' ? '#E74C3C' : '#27AE60';
+        };
+
+        window.submitBroadcast = async function () {
+            var subject  = document.getElementById('bm-subject').value.trim();
+            var body     = bodyInput.value.trim();
+            var priority = document.getElementById('bm-priority').value;
+
+            if (!body) {
+                bodyInput.focus();
+                bodyInput.style.borderColor = '#E74C3C';
+                setTimeout(function() { bodyInput.style.borderColor = ''; }, 1800);
+                return;
+            }
+
+            sendBtn.disabled = true;
+            document.getElementById('bm-send-label').style.display  = 'none';
+            document.getElementById('bm-send-spinner').style.display = 'inline-flex';
+
+            try {
+                var payload = { subject: subject, body: body, priority: priority };
+                var url;
+
+                if (_bmMode === 'trip') {
+                    url = '/Dispatch/SendTripMessage';
+                    payload.tripId = _bmTripId;
+                } else if (_bmMode === 'route') {
+                    url = '/Dispatch/SendRouteMessage';
+                    payload.routeId = parseInt(_bmRouteId);
+                } else {
+                    url = '/Dispatch/BroadcastMessage';
+                }
+
+                var res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) throw new Error();
+                closeBroadcastModal();
+                showToast();
+
+            } catch(e) {
+                alert('Failed to send message. Please try again.');
+            } finally {
+                sendBtn.disabled = false;
+                document.getElementById('bm-send-label').style.display  = 'inline';
+                document.getElementById('bm-send-spinner').style.display = 'none';
+            }
+        };
+
+        function showToast() {
+            clearTimeout(toastTimer);
+            toast.style.display = 'flex';
+            toastTimer = setTimeout(function() { toast.style.display = 'none'; }, 3500);
+        }
+
+    })();
+</script>
