@@ -68,7 +68,7 @@ else
 
             @if (assignment is not null)
             {
-                <h2 class="section">Current Assignment</h2>
+                <h2 class="section">@(assignment.Date.Date == DateTime.Today ? "Current Assignment" : "Upcoming Assignment")</h2>
                 <div class="assign-card">
                     <div class="line">
                         <span class="i cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></svg></span>
@@ -97,7 +97,11 @@ else
                         </div>
                     </div>
 
-                    @if (checklist is not null)
+                    @if (!CanStart)
+                    {
+                        <div class="upcoming-note">@LockLabel</div>
+                    }
+                    else if (checklist is not null)
                     {
                         <div class="checklist-done">
                             <div>
@@ -121,7 +125,7 @@ else
                     }
                 </div>
 
-                @if (checklist is null)
+                @if (!CanStart || checklist is null)
                 {
                     <div class="prompt-card">
                         <div>
@@ -159,6 +163,35 @@ else
             }
         }
     </div>
+
+    @if (showUnavailModal)
+    {
+        <div class="overlay">
+            <div class="ua-modal">
+                <h2>Go unavailable?</h2>
+                <p class="ua-sub">You have an assigned shift. This flags it for your dispatcher.</p>
+
+                <p class="ua-label">Reason</p>
+                <div class="chips">
+                    @foreach (var r in reasons)
+                    {
+                        <button class="chip @(reasonChoice == r ? "on" : "")" @onclick="@(() => reasonChoice = r)">@r</button>
+                    }
+                </div>
+                <input class="ua-note" placeholder="Add a note (optional)" @bind="reasonNote" @bind:event="oninput" />
+
+                <div class="ua-actions">
+                    <button class="btn-cancel" @onclick="@(() => showUnavailModal = false)" disabled="@toggling">Cancel</button>
+                    <button class="btn-confirm" @onclick="ConfirmUnavailable" disabled="@(toggling || !ReasonReady)">Confirm</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (toggling)
+    {
+        <div class="busy-overlay"><span class="spinner"></span></div>
+    }
 }
 
 @code {
@@ -166,11 +199,18 @@ else
     private bool toggling;
     private string? statusMsg;
     private string availability = "Unavailable";
+    private bool isUpcoming;
     private Trip? assignment;
     private BusRoute? route;
     private Vehicle? vehicle;
     private BusChecklist? checklist;
     private Trip? lastTrip;
+
+    private bool showUnavailModal;
+    private string? reasonChoice;
+    private string reasonNote = "";
+    private readonly string[] reasons = { "Emergency", "Sick", "Vehicle problem", "Personal", "Other" };
+    private bool ReasonReady => reasonChoice is not null || !string.IsNullOrWhiteSpace(reasonNote);
 
     private bool IsAvailable => availability == "Available";
 
@@ -194,6 +234,27 @@ else
         }
     }
 
+    private const int LeadHours = 2; // checklist/start opens this many hours before shift
+
+    private DateTime ShiftStart => assignment is null
+        ? DateTime.MinValue
+        : assignment.Date.Date + assignment.ShiftStartTime;
+
+    // Unlock window: from LeadHours before shift start onward.
+    private bool CanStart => assignment is not null && PhTime.Now >= ShiftStart - TimeSpan.FromHours(LeadHours);
+
+    private string LockLabel
+    {
+        get
+        {
+            if (assignment is null) return "";
+            var unlock = ShiftStart - TimeSpan.FromHours(LeadHours);
+            if (unlock.Date == DateTime.Today) return $"Checklist opens at {unlock:h:mm tt}";
+            if (unlock.Date == DateTime.Today.AddDays(1)) return $"Checklist opens tomorrow, {unlock:h:mm tt}";
+            return $"Checklist opens {unlock:MMM d, h:mm tt}";
+        }
+    }
+
     private string TimeRange => assignment is null ? "" :
         $"{DateTime.Today.Add(assignment.ShiftStartTime):h:mm tt} to {DateTime.Today.Add(assignment.ShiftEndTime):h:mm tt}";
 
@@ -211,13 +272,20 @@ else
             var uid = Session.CurrentUser!.UserId;
 
             availability = await Data.GetAvailabilityAsync(uid);
+
             assignment = await Data.GetTodayAssignmentAsync(uid);
+            isUpcoming = false;
+            if (assignment is null)
+            {
+                assignment = await Data.GetUpcomingAssignmentAsync(uid);
+                isUpcoming = assignment is not null;
+            }
 
             if (assignment is not null)
             {
                 route = await Data.GetRouteAsync(assignment.RouteId);
                 vehicle = await Data.GetVehicleAsync(assignment.VehicleId);
-                checklist = await Data.GetChecklistAsync(assignment.TripId);
+                checklist = isUpcoming ? null : await Data.GetChecklistAsync(assignment.TripId);
             }
             else
             {
@@ -240,12 +308,39 @@ else
     private async Task ToggleAvailability()
     {
         if (toggling) return;
+
+        if (IsAvailable)
+        {
+            // Going Unavailable while holding a shift -> warn + capture reason.
+            if (assignment is not null)
+            {
+                reasonChoice = null;
+                reasonNote = "";
+                showUnavailModal = true;
+                return;
+            }
+            await ApplyAvailability("Unavailable", null);
+        }
+        else
+        {
+            await ApplyAvailability("Available", null);
+        }
+    }
+
+    private async Task ConfirmUnavailable()
+    {
+        var reason = !string.IsNullOrWhiteSpace(reasonNote) ? reasonNote.Trim() : reasonChoice;
+        showUnavailModal = false;
+        await ApplyAvailability("Unavailable", reason);
+    }
+
+    private async Task ApplyAvailability(string status, string? reason)
+    {
         toggling = true;
         statusMsg = null;
         try
         {
-            var next = IsAvailable ? "Unavailable" : "Available";
-            await Data.SetAvailabilityAsync(Session.CurrentUser!.UserId, next);
+            await Data.SetAvailabilityAsync(Session.CurrentUser!.UserId, status, reason);
             await Load();
         }
         catch (Exception ex)
