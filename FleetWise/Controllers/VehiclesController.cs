@@ -17,6 +17,11 @@ namespace FleetWise.Controllers
         private static readonly string[] ConditionFilterOptions =
             { "No Issues", "Needs Attention", "Under Repair" };
 
+        // The Edit modal's "Change Status" dropdown — exactly the maintenance_status_enum
+        // labels (§2.8). Selecting "No Issues" is the resolve action.
+        private static readonly string[] MaintenanceStatusOptions =
+            { "Needs Attention", "Under Repair", "No Issues" };
+
         private readonly Supabase.Client _supabase;
 
         public VehiclesController(Supabase.Client supabase) => _supabase = supabase;
@@ -177,6 +182,79 @@ namespace FleetWise.Controllers
             return PartialView("_VehicleDetails", vm);
         }
 
+        // Fetch-partial for the Edit Vehicle modal: the editable profile + the latest
+        // maintenance log, fetched fresh per vehicle (same approach as Details).
+        [HttpGet]
+        public async Task<IActionResult> EditForm(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+                return NotFound();
+
+            var vm = await BuildEditViewModelAsync(id, posted: null);
+            if (vm is null)
+                return NotFound();
+
+            return PartialView("_EditVehicleForm", vm);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(EditVehicleViewModel model)
+        {
+            if (!ModelState.IsValid)
+                return await ReRenderIndexForEditAsync(model);
+
+            var vehicleResp = await _supabase.From<Vehicle>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, model.VehicleId)
+                .Get();
+            var vehicle = vehicleResp.Models.FirstOrDefault();
+            if (vehicle is null)
+            {
+                TempData["Error"] = "Vehicle not found.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // "Resolve" = the operator set the maintenance status to "No Issues" (§2.8 / Step 17.4).
+            var resolving = string.Equals(model.MaintenanceStatus?.Trim(), "No Issues", OIC);
+
+            // Update the maintenance log the modal was editing (a vehicle may have none).
+            if (model.LogId is int logId && logId > 0 && !string.IsNullOrWhiteSpace(model.MaintenanceStatus))
+            {
+                var logResp = await _supabase.From<MaintenanceLog>()
+                    .Filter("log_id", Postgrest.Constants.Operator.Equals, logId)
+                    .Get();
+                var log = logResp.Models.FirstOrDefault();
+                if (log != null)
+                {
+                    log.MaintenanceStatus = model.MaintenanceStatus.Trim();
+                    log.VerifiedBy = string.IsNullOrWhiteSpace(model.VerifiedBy) ? null : model.VerifiedBy.Trim();
+                    if (resolving && log.ResolvedAt == null)
+                        log.ResolvedAt = DateTime.UtcNow;
+                    await _supabase.From<MaintenanceLog>().Update(log);
+                }
+            }
+
+            // Update the Vehicle Profile.
+            vehicle.PlateNumber = model.PlateNumber.Trim();
+            vehicle.VehicleType = model.VehicleType.Trim();
+            vehicle.RouteId = model.RouteId;
+            vehicle.UpdatedAt = DateTime.UtcNow;
+
+            if (resolving)
+            {
+                // "Update the Last Maintenance Date when a bus returns from the shop" (Step 17.4),
+                // and clear a Flagged badge so the registry reflects the fix.
+                vehicle.LastMaintenanceDate = DateTime.UtcNow;
+                if (string.Equals(vehicle.VehicleStatus?.Trim(), "Flagged", OIC))
+                    vehicle.VehicleStatus = "Ready to Deploy";
+            }
+
+            await _supabase.From<Vehicle>().Update(vehicle);
+
+            TempData["Success"] = $"Vehicle \"{model.VehicleId}\" was updated successfully.";
+            return RedirectToAction(nameof(Index));
+        }
+
         // ── Data loading & projection ────────────────────────────────────────
 
         private async Task<(List<Vehicle> Vehicles, List<BusRoute> Routes, Dictionary<string, string> Maintenance)> LoadVehicleDataAsync()
@@ -273,6 +351,104 @@ namespace FleetWise.Controllers
             SetModalViewData(vm, addModel, openModal: "AddVehicle");
             return View("Index", vm);
         }
+
+        // Builds the Edit Vehicle modal's view model: the vehicle profile, the maintenance log
+        // it edits (latest unresolved, else latest overall), and self-contained dropdown data.
+        // `posted` preserves the operator's input when re-rendering after a failed POST.
+        private async Task<EditVehicleViewModel?> BuildEditViewModelAsync(string id, EditVehicleViewModel? posted)
+        {
+            var vehicleResp = await _supabase.From<Vehicle>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, id)
+                .Get();
+            var vehicle = vehicleResp.Models.FirstOrDefault();
+            if (vehicle is null)
+                return null;
+
+            var routes = (await _supabase.From<BusRoute>()
+                .Order("route_name", Postgrest.Constants.Ordering.Ascending)
+                .Get()).Models;
+            var vehicles = (await _supabase.From<Vehicle>().Get()).Models;
+
+            var logs = (await _supabase.From<MaintenanceLog>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, id)
+                .Order("created_at", Postgrest.Constants.Ordering.Descending)
+                .Get()).Models;
+            // Edit the open issue if there is one, otherwise the most recent log.
+            var log = logs.FirstOrDefault(l => l.ResolvedAt == null) ?? logs.FirstOrDefault();
+
+            var vm = new EditVehicleViewModel
+            {
+                VehicleId = vehicle.VehicleId,
+                PlateNumber = posted?.PlateNumber ?? vehicle.PlateNumber ?? "",
+                VehicleType = posted?.VehicleType ?? vehicle.VehicleType ?? "",
+                RouteId = posted?.RouteId ?? vehicle.RouteId ?? 0,
+                RouteOptions = BuildRouteOptions(routes),
+                TypeOptions = BuildTypeOptions(vehicles),
+                StatusOptions = MaintenanceStatusOptions.ToList(),
+                CurrentStatus = DeriveMaintenance(logs),
+            };
+
+            if (log != null)
+            {
+                vm.HasMaintenance = true;
+                vm.LogId = log.LogId;
+                vm.DateReported = log.CreatedAt.ToString("MM/dd/yy hh:mm tt");
+                vm.IssueSummary = DeriveIssueSummary(log);
+                vm.MaintenanceStatus = posted?.MaintenanceStatus ?? NormalizeMaintenance(log.MaintenanceStatus);
+                vm.VerifiedBy = posted?.VerifiedBy ?? log.VerifiedBy;
+            }
+            else
+            {
+                vm.LogId = posted?.LogId;
+                vm.MaintenanceStatus = posted?.MaintenanceStatus;
+                vm.VerifiedBy = posted?.VerifiedBy;
+            }
+
+            return vm;
+        }
+
+        // Re-render the registry with the Edit modal re-opened and its validation errors shown
+        // (PRG can't carry ModelState — mirrors ReRenderIndexAsync for Add).
+        private async Task<IActionResult> ReRenderIndexForEditAsync(EditVehicleViewModel editModel)
+        {
+            var (vehicles, routes, maintenance) = await LoadVehicleDataAsync();
+
+            var vm = new VehiclesIndexViewModel
+            {
+                Rows = new List<VehicleListItemViewModel>(),
+                TotalVehicles = vehicles.Count,
+                FlaggedVehicles = vehicles.Count(v => DisplayStatus(v.VehicleStatus) == "Flagged"),
+                ScheduledMaintenance = vehicles.Count(v =>
+                    maintenance.TryGetValue(v.VehicleId, out var m) && m == "Under Repair"),
+                RouteOptions = BuildRouteOptions(routes),
+                TypeOptions = vehicles
+                    .Select(v => v.VehicleType)
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(t => t)
+                    .ToList(),
+                StatusOptions = StatusFilterOptions.ToList(),
+                ConditionOptions = ConditionFilterOptions.ToList(),
+            };
+
+            SetModalViewData(vm, new AddVehicleViewModel(), openModal: "EditVehicle");
+            ViewBag.EditVehicleModel = await BuildEditViewModelAsync(editModel.VehicleId, editModel);
+            return View("Index", vm);
+        }
+
+        private static List<SelectListItem> BuildRouteOptions(IEnumerable<BusRoute> routes) =>
+            routes
+                .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
+                .ToList();
+
+        // Vehicle Type dropdown: the mockup's Bus/Van plus any existing distinct types.
+        private static List<SelectListItem> BuildTypeOptions(IEnumerable<Vehicle> vehicles) =>
+            new[] { "Bus", "Van" }
+                .Concat(vehicles.Select(v => v.VehicleType).Where(t => !string.IsNullOrWhiteSpace(t)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(t => t)
+                .Select(t => new SelectListItem { Value = t, Text = t })
+                .ToList();
 
         // Supplies the Add Vehicle modal with its bound model, dropdown data, and reopen flag.
         private void SetModalViewData(VehiclesIndexViewModel vm, AddVehicleViewModel addModel, string? openModal)
