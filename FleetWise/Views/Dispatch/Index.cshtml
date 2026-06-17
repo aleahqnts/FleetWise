@@ -179,8 +179,8 @@
                                     </td>
                                     <td>
                                         <div class="dp-actions-cell">
-                                            <button class="rp-btn-view">View</button>
-                                            <button class="dp-btn-reassign">Reassign</button>
+                                            <button class="rp-btn-view" onclick="openTripModal('@trip.TripId')">View</button>
+                                            <button class="dp-btn-reassign" disabled="@(trip.TripStatus == "Active" ? "disabled" : null)">Reassign</button>
                                             <button class="dp-btn-msg" title="Message"><i class="ti ti-message"></i></button>
                                         </div>
                                     </td>
@@ -747,6 +747,16 @@
             background: #3D938F;
         }
 
+        .dp-btn-reassign:disabled {
+            background: var(--rp-border);
+            color: var(--rp-muted);
+            cursor: not-allowed;
+        }
+
+            .dp-btn-reassign:disabled:hover {
+                background: var(--rp-border);
+            }
+
     .dp-btn-msg {
         background: transparent;
         border: none;
@@ -938,3 +948,6 @@
     document.getElementById('routeFilter').addEventListener('change', applyFilters);
     document.getElementById('statusFilter').addEventListener('change', applyFilters);
 </script>
+
+@* ── Trip Detail Modal ──────────────────────────────────────── *@
+@await Html.PartialAsync("_TripDetailModal")
