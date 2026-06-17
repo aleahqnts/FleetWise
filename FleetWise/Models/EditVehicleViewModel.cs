@@ -16,10 +16,6 @@ namespace FleetWise.Models
         [Display(Name = "Plate Number")]
         public string PlateNumber { get; set; } = string.Empty;
 
-        [Required, StringLength(50)]
-        [Display(Name = "Vehicle Type")]
-        public string VehicleType { get; set; } = string.Empty;
-
         [Required, Range(1, int.MaxValue, ErrorMessage = "Please select a route.")]
         [Display(Name = "Route")]
         public int RouteId { get; set; }
@@ -43,7 +39,6 @@ namespace FleetWise.Models
 
         // ── Dropdown data ──
         public List<SelectListItem> RouteOptions { get; set; } = new();
-        public List<SelectListItem> TypeOptions { get; set; } = new();
         public List<string> StatusOptions { get; set; } = new();
     }
 }

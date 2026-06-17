@@ -66,7 +66,6 @@
 
     <form method="get" class="vh-search-form">
         <input type="hidden" name="route" value="@Model.SelectedRoute" />
-        <input type="hidden" name="type" value="@Model.SelectedType" />
         <input type="hidden" name="status" value="@Model.SelectedStatus" />
         <input type="hidden" name="condition" value="@Model.SelectedCondition" />
         <div class="vh-search-wrap">
@@ -101,7 +100,6 @@
             <thead>
                 <tr>
                     <th>Vehicle ID</th>
-                    <th>Vehicle Type</th>
                     <th>Route</th>
                     <th>Status</th>
                     <th>Maintenance</th>
@@ -110,7 +108,7 @@
             </thead>
             <tbody id="vehiclesTableBody">
                 <tr>
-                    <td colspan="6" class="vh-table-loading">
+                    <td colspan="5" class="vh-table-loading">
                         <div class="vh-spinner"></div>
                     </td>
                 </tr>
@@ -202,21 +200,6 @@
                     @foreach (var r in Model.RouteOptions)
                     {
                         <option value="@r.Value" selected="@(r.Value == Model.SelectedRoute)">@r.Text</option>
-                    }
-                </select>
-                <span class="vh-select-arrow">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
-                </span>
-            </div>
-        </div>
-        <div class="vh-filter">
-            <label class="vh-filter-label">Type:</label>
-            <div class="vh-select-wrap">
-                <select name="type" class="vh-select" onchange="this.form.submit()">
-                    <option value="">All</option>
-                    @foreach (var t in Model.TypeOptions)
-                    {
-                        <option value="@t" selected="@(t == Model.SelectedType)">@t</option>
                     }
                 </select>
                 <span class="vh-select-arrow">

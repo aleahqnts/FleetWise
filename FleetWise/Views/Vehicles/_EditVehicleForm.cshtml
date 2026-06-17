@@ -35,19 +35,6 @@
                 <span asp-validation-for="PlateNumber" class="vh-field-error"></span>
             </div>
             <div class="vh-form-row">
-                <label asp-for="VehicleType">Vehicle Type:</label>
-                <div class="vh-select-wrap" style="width:100%;">
-                    <select asp-for="VehicleType" class="vh-form-input" style="appearance:none;"
-                            asp-items="Model.TypeOptions">
-                        <option value="">Select type…</option>
-                    </select>
-                    <span class="vh-select-arrow">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
-                    </span>
-                </div>
-                <span asp-validation-for="VehicleType" class="vh-field-error"></span>
-            </div>
-            <div class="vh-form-row">
                 <label asp-for="RouteId">Route:</label>
                 <div class="vh-select-wrap" style="width:100%;">
                     <select asp-for="RouteId" class="vh-form-input" style="appearance:none;"

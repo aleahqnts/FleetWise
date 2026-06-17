@@ -6,8 +6,6 @@ namespace FleetWise.Models
 
         public string PlateNumber { get; set; } = string.Empty;
 
-        public string VehicleType { get; set; } = string.Empty;
-
         public string RouteName { get; set; } = string.Empty;
 
         /// <summary>Display label: Ready to Deploy / On Trip / Pending / Flagged.</summary>
