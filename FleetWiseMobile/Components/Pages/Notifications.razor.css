@@ -1,0 +1,96 @@
+.page-loading {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8a93a2;
+}
+
+.muted { color: #8a93a2; }
+
+.notif {
+    padding: 52px 22px 28px;
+}
+
+.ntitle {
+    margin: 0 0 18px;
+    font-size: 22px;
+    font-weight: 800;
+    color: #1b2a56;
+}
+
+.ngroup {
+    margin: 18px 0 10px;
+    font-size: 16px;
+    font-weight: 800;
+    color: #1b2a56;
+}
+
+.ncard {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid #e6e8ee;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    cursor: pointer;
+}
+
+.np.full {
+    white-space: normal;
+    overflow: visible;
+    line-height: 1.4;
+}
+
+.ntime {
+    margin: 8px 0 0;
+    color: #9aa3b2;
+    font-size: 12px;
+}
+
+.nicon {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    flex: 0 0 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nicon svg { width: 22px; height: 22px; }
+
+.nicon.completed { background: #e3f7ea; color: #3aaf5d; }
+.nicon.assigned { background: #e4f0fb; color: #3b82c4; }
+.nicon.message { background: #efeaff; color: #7a5cf0; }
+.nicon.alert { background: #fff0e0; color: #e8902a; }
+
+.ncard.unread { background: #f6fbfa; border-color: #cdeede; }
+
+.ndot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #2e9e8f;
+    flex: 0 0 9px;
+    margin-left: auto;
+}
+
+.nbody { min-width: 0; flex: 1; }
+
+.nt {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 800;
+    color: #1b2a56;
+}
+
+.np {
+    margin: 2px 0 0;
+    font-size: 13px;
+    color: #8a93a2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

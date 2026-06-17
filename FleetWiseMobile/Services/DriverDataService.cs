@@ -1,3 +1,6 @@
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
 using FleetWiseMobile.Models;
 using static Postgrest.Constants;
 
@@ -11,6 +14,20 @@ public class DriverDataService
 
     public DriverDataService(Supabase.Client supabase) => _supabase = supabase;
 
+    private static readonly HttpClient _http = new();
+
+    // Raw Supabase REST PATCH. Avoids postgrest-csharp expression Update (breaks on
+    // Android) AND full-model Upsert (round-trips/corrupts the `date` column).
+    private static async Task PatchAsync(string pathWithFilter, object body)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Patch, $"{FleetWiseMobile.SupabaseConfig.Url}/rest/v1/{pathWithFilter}");
+        req.Headers.TryAddWithoutValidation("apikey", FleetWiseMobile.SupabaseConfig.Key);
+        req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {FleetWiseMobile.SupabaseConfig.Key}");
+        req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+        var res = await _http.SendAsync(req);
+        res.EnsureSuccessStatusCode();
+    }
+
     public async Task<string> GetAvailabilityAsync(int userId)
     {
         var r = await _supabase.From<DriverAvailability>()
@@ -19,7 +36,7 @@ public class DriverDataService
         return r.Models.FirstOrDefault()?.AvailabilityStatus ?? "Unavailable";
     }
 
-    public async Task SetAvailabilityAsync(int userId, string status)
+    public async Task SetAvailabilityAsync(int userId, string status, string? reason = null)
     {
         var existing = await _supabase.From<DriverAvailability>()
             .Filter("user_id", Operator.Equals, userId.ToString())
@@ -29,6 +46,7 @@ public class DriverDataService
         if (row is not null)
         {
             row.AvailabilityStatus = status;
+            row.Reason = reason;
             row.UpdatedAt = PhTime.Now;
             await _supabase.From<DriverAvailability>().Upsert(row);
         }
@@ -38,6 +56,7 @@ public class DriverDataService
             {
                 UserId = userId,
                 AvailabilityStatus = status,
+                Reason = reason,
                 UpdatedAt = PhTime.Now
             });
         }
@@ -55,6 +74,22 @@ public class DriverDataService
         return r.Models
             .Where(t => t.TripStatus != "Completed")
             .OrderBy(t => t.ShiftStartTime)
+            .FirstOrDefault();
+    }
+
+    // Nearest future (date > today) non-completed trip, for the Home preview.
+    public async Task<Trip?> GetUpcomingAssignmentAsync(int userId)
+    {
+        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        var r = await _supabase.From<Trip>()
+            .Filter("driver_id", Operator.Equals, userId.ToString())
+            .Filter("date", Operator.GreaterThan, today)
+            .Order("date", Ordering.Ascending)
+            .Get();
+
+        return r.Models
+            .Where(t => t.TripStatus != "Completed")
+            .OrderBy(t => t.Date).ThenBy(t => t.ShiftStartTime)
             .FirstOrDefault();
     }
 
@@ -104,10 +139,56 @@ public class DriverDataService
     {
         var r = await _supabase.From<Trip>()
             .Filter("driver_id", Operator.Equals, userId.ToString())
+            .Filter("trip_status", Operator.Equals, "Completed")
             .Order("date", Ordering.Descending)
             .Get();
         return r.Models;
     }
+
+    public async Task<List<NotificationModel>> GetNotificationsAsync(int userId)
+    {
+        var r = await _supabase.From<NotificationModel>()
+            .Filter("user_id", Operator.Equals, userId.ToString())
+            .Order("created_at", Ordering.Descending)
+            .Get();
+        return r.Models;
+    }
+
+    public async Task MarkNotificationReadAsync(long id)
+        => await PatchAsync($"notifications?notification_id=eq.{id}", new { is_read = true });
+
+    public async Task<UserModel?> GetUserAsync(int userId)
+    {
+        var r = await _supabase.From<UserModel>()
+            .Filter("user_id", Operator.Equals, userId.ToString())
+            .Get();
+        return r.Models.FirstOrDefault();
+    }
+
+    public async Task<UserModel?> GetDriverByEmailAsync(string email)
+    {
+        var r = await _supabase.From<UserModel>()
+            .Filter("email_address", Operator.Equals, email)
+            .Get();
+        var u = r.Models.FirstOrDefault();
+        return (u is not null && u.RoleId == 2 && u.AccountStatus == "Activated") ? u : null;
+    }
+
+    public async Task StampLoginAsync(int userId)
+        => await PatchAsync($"users?user_id=eq.{userId}", new { last_login = PhTime.Now });
+
+    public async Task UpdateProfileAsync(int userId, string? contact, string? address, string? emName, string? emNumber)
+        => await PatchAsync($"users?user_id=eq.{userId}", new
+        {
+            contact_number = contact,
+            address = address,
+            emergency_contact_name = emName,
+            emergency_contact_number = emNumber,
+            updated_at = PhTime.Now
+        });
+
+    public async Task UpdatePasswordAsync(int userId, string newHash)
+        => await PatchAsync($"users?user_id=eq.{userId}", new { password_hash = newHash, updated_at = PhTime.Now });
 
     public async Task SubmitChecklistAsync(BusChecklist checklist)
     {
@@ -116,11 +197,8 @@ public class DriverDataService
 
     public async Task UpdateVehicleStatusAsync(string vehicleId, string status)
     {
-        await _supabase.From<Vehicle>()
-            .Where(x => x.VehicleId == vehicleId)
-            .Set(x => x.VehicleStatus, status)
-            .Set(x => x.UpdatedAt, (DateTime?)PhTime.Now)
-            .Update();
+        await PatchAsync($"vehicles?vehicle_id=eq.{Uri.EscapeDataString(vehicleId)}",
+            new { vehicle_status = status, updated_at = PhTime.Now });
     }
 
     public async Task<decimal> GetFareAsync()
@@ -131,41 +209,36 @@ public class DriverDataService
         return r.Models.FirstOrDefault()?.StandardFare ?? 0m;
     }
 
-    // All trip writes are COLUMN-TARGETED (Set) so we never rewrite untouched
-    // columns like `date` (full-model .Update round-trips the date and corrupts it).
+    // Trip writes via raw REST PATCH (column-targeted, no `date` clobber, Android-safe).
     public async Task StartTripAsync(string tripId)
     {
         var t = await GetTripAsync(tripId);
         if (t is null) return;
 
-        var q = _supabase.From<Trip>()
-            .Where(x => x.TripId == tripId)
-            .Set(x => x.TripStatus, "Active");
-
-        // Fresh start stamps PH-now; resume keeps the original.
+        object body;
         if (t.TripStatus != "Active")
-            q = q.Set(x => x.ActualStartTime, (DateTime?)PhTime.Now);
+            body = new { trip_status = "Active", actual_start_time = PhTime.Now }; // fresh start
+        else
+            body = new { trip_status = "Active" }; // resume keeps original start
 
-        await q.Update();
+        await PatchAsync($"trips?trip_id=eq.{Uri.EscapeDataString(tripId)}", body);
     }
 
     public async Task UpdateTripProgressAsync(string tripId, int totalBoarded, decimal revenue)
     {
-        await _supabase.From<Trip>()
-            .Where(x => x.TripId == tripId)
-            .Set(x => x.TotalBoarded, totalBoarded)
-            .Set(x => x.EstimatedRevenue, revenue)
-            .Update();
+        await PatchAsync($"trips?trip_id=eq.{Uri.EscapeDataString(tripId)}",
+            new { total_boarded = totalBoarded, estimated_revenue = revenue });
     }
 
     public async Task EndTripAsync(string tripId, int totalBoarded, decimal revenue)
     {
-        await _supabase.From<Trip>()
-            .Where(x => x.TripId == tripId)
-            .Set(x => x.TripStatus, "Completed")
-            .Set(x => x.TotalBoarded, totalBoarded)
-            .Set(x => x.EstimatedRevenue, revenue)
-            .Set(x => x.ActualEndTime, (DateTime?)PhTime.Now)
-            .Update();
+        await PatchAsync($"trips?trip_id=eq.{Uri.EscapeDataString(tripId)}",
+            new
+            {
+                trip_status = "Completed",
+                total_boarded = totalBoarded,
+                estimated_revenue = revenue,
+                actual_end_time = PhTime.Now
+            });
     }
 }

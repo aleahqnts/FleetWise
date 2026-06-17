@@ -13,6 +13,9 @@ public class DriverAvailability : BaseModel
     [Column("availability_status")]
     public string AvailabilityStatus { get; set; }
 
+    [Column("reason")]
+    public string Reason { get; set; }
+
     [Column("updated_at")]
     public DateTime? UpdatedAt { get; set; }
 }

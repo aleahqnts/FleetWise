@@ -5,7 +5,7 @@
 
 @if (loading)
 {
-    <div class="rep"><p class="muted">Loading...</p></div>
+    <div class="page-loading">Loading...</div>
 }
 else if (trip is null)
 {
@@ -32,19 +32,19 @@ else
             <p class="date">Date: @trip.Date.ToString("MMMM d, yyyy")</p>
 
             <p class="sec">Assignment Details</p>
-            <p class="row"><span class="k">Trip ID:</span> @trip.TripId</p>
-            <p class="row"><span class="k">Route:</span> @(route?.RouteName ?? $"Route {trip.RouteId}")</p>
-            <p class="row"><span class="k">Shift Type:</span> @trip.ShiftType Shift</p>
-            <p class="row"><span class="k">Shift Time:</span> @ShiftRange</p>
-            <p class="row"><span class="k">Bus ID:</span> @(vehicle?.VehicleId ?? trip.VehicleId)</p>
-            <p class="row"><span class="k">Plate Number:</span> @(vehicle?.PlateNumber ?? "—")</p>
-            <p class="row"><span class="k">Driver:</span> @Session.DisplayName</p>
+            <div class="row"><span class="k">Trip ID</span><span class="v">@trip.TripId</span></div>
+            <div class="row"><span class="k">Route</span><span class="v">@(route?.RouteName ?? $"Route {trip.RouteId}")</span></div>
+            <div class="row"><span class="k">Shift Type</span><span class="v">@trip.ShiftType Shift</span></div>
+            <div class="row"><span class="k">Shift Time</span><span class="v">@ShiftRange</span></div>
+            <div class="row"><span class="k">Bus ID</span><span class="v">@(vehicle?.VehicleId ?? trip.VehicleId)</span></div>
+            <div class="row"><span class="k">Plate Number</span><span class="v">@(vehicle?.PlateNumber ?? "—")</span></div>
+            <div class="row"><span class="k">Driver</span><span class="v">@Session.DisplayName</span></div>
 
             <p class="sec">Trip Details</p>
-            <p class="row"><span class="k">Start Time:</span> @TimeOrDash(trip.ActualStartTime)</p>
-            <p class="row"><span class="k">End Time:</span> @TimeOrDash(trip.ActualEndTime)</p>
-            <p class="row"><span class="k">Total Passengers:</span> @trip.TotalBoarded</p>
-            <p class="row"><span class="k">Estimated Revenue:</span> &#8369;@trip.EstimatedRevenue.ToString("N2")</p>
+            <div class="row"><span class="k">Start Time</span><span class="v">@TimeOrDash(trip.ActualStartTime)</span></div>
+            <div class="row"><span class="k">End Time</span><span class="v">@TimeOrDash(trip.ActualEndTime)</span></div>
+            <div class="row"><span class="k">Total Passengers</span><span class="v">@trip.TotalBoarded</span></div>
+            <div class="row"><span class="k">Estimated Revenue</span><span class="v">&#8369;@trip.EstimatedRevenue.ToString("N2")</span></div>
         </div>
     </div>
 }

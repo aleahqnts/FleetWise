@@ -30,6 +30,18 @@ public class UserModel : BaseModel
     [Column("account_status")]
     public string? AccountStatus { get; set; }
 
+    [Column("contact_number")]
+    public string? ContactNumber { get; set; }
+
+    [Column("address")]
+    public string? Address { get; set; }
+
+    [Column("emergency_contact_name")]
+    public string? EmergencyContactName { get; set; }
+
+    [Column("emergency_contact_number")]
+    public string? EmergencyContactNumber { get; set; }
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; }
 
