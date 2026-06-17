@@ -23,9 +23,6 @@ namespace FleetWise.Controllers
         private static readonly string[] MaintenanceStatusOptions =
             { "Needs Attention", "Under Repair", "No Issues" };
 
-        // Every vehicle is a bus, so vehicle_type isn't shown or chosen; new units default to this.
-        private const string DefaultVehicleType = "Bus";
-
         private readonly Supabase.Client _supabase;
 
         public VehiclesController(Supabase.Client supabase) => _supabase = supabase;
@@ -88,7 +85,6 @@ namespace FleetWise.Controllers
             {
                 VehicleId = model.VehicleId.Trim(),
                 PlateNumber = model.PlateNumber.Trim(),
-                VehicleType = DefaultVehicleType,      // every vehicle is a bus (type not shown)
                 RouteId = model.RouteId,
                 Capacity = 50,                         // sensible default — not captured by the form
                 VehicleStatus = "Ready to Deploy",     // new units start deployable (vehicle_status_enum label)
