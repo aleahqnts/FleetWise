@@ -1,6 +1,8 @@
 .cl-loading {
-    padding: 40px;
-    text-align: center;
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: #8a93a2;
 }
 
@@ -8,7 +10,7 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    padding: 18px 18px 24px;
+    padding: 52px 18px 24px;
 }
 
 .cl-header {

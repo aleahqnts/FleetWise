@@ -1,4 +1,12 @@
-.trips { padding: 24px 22px 28px; }
+.trips { padding: 52px 22px 28px; }
+
+.page-loading {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8a93a2;
+}
 
 .trips-title {
     margin: 0 0 18px;

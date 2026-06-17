@@ -1,4 +1,12 @@
-.rep { padding: 18px 22px 28px; }
+.rep { padding: 52px 22px 28px; }
+
+.page-loading {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8a93a2;
+}
 
 .rep-header {
     display: flex;
@@ -55,12 +63,21 @@
 }
 
 .row {
-    margin: 6px 0;
-    color: #1b2a56;
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    margin: 7px 0;
     font-size: 15px;
 }
 
 .row .k {
+    flex: 0 0 130px;
+    color: #7a8494;
+    font-weight: 600;
+}
+
+.row .v {
+    flex: 1;
+    color: #1b2a56;
     font-weight: 700;
-    margin-right: 4px;
 }

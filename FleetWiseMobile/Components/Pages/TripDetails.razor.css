@@ -1,6 +1,12 @@
-.td-loading { padding: 40px; text-align: center; color: #8a93a2; }
+.td-loading {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8a93a2;
+}
 
-.td { padding: 18px 22px 28px; }
+.td { padding: 52px 22px 28px; }
 
 .td-header {
     display: flex;
