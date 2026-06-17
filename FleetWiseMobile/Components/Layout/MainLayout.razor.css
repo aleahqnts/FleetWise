@@ -10,12 +10,39 @@
     overflow-y: auto;
 }
 
+#ptr-ind {
+    height: 0;
+    opacity: 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: height 0.15s ease;
+}
+
+.ptr-spin {
+    width: 22px;
+    height: 22px;
+    border: 2.5px solid #cdeede;
+    border-top-color: #2e9e8f;
+    border-radius: 50%;
+}
+
+#ptr-ind.spin .ptr-spin {
+    animation: ptr-rot 0.7s linear infinite;
+}
+
+@keyframes ptr-rot {
+    to { transform: rotate(360deg); }
+}
+
 .tabbar {
     display: flex;
     align-items: center;
     border-top: 0.5px solid #ababab;
     background: #ffffff;
-    padding: 12px 0 14px;
+    /* extra bottom padding = the Android 3-button nav bar height when shown */
+    padding: 12px 0 calc(14px + env(safe-area-inset-bottom));
 }
 
 .tabbar ::deep .tab {

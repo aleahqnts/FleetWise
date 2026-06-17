@@ -7,7 +7,7 @@
 }
 
 .log {
-    padding: 0 22px 28px;
+    padding: 0 22px calc(28px + env(safe-area-inset-bottom));
 }
 
 .log-header {

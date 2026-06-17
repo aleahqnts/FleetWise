@@ -1,4 +1,4 @@
-.rep { padding: 52px 22px 28px; }
+.rep { padding: 52px 22px calc(28px + env(safe-area-inset-bottom)); }
 
 .page-loading {
     min-height: 80vh;

@@ -10,7 +10,8 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    padding: 52px 18px 24px;
+    padding: 52px 18px calc(24px + env(safe-area-inset-bottom));
+    box-sizing: border-box;
 }
 
 .cl-header {
@@ -147,8 +148,10 @@
 }
 
 .mark.check.on {
-    background: #e3f7ea;
-    border-color: #3aaf5d;
+    background: #16a34a;
+    border-color: #16a34a;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(22, 163, 74, 0.4);
 }
 
 .mark.minus {
@@ -157,8 +160,10 @@
 }
 
 .mark.minus.on {
-    background: #fce8e8;
-    border-color: #d0494b;
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
 }
 
 .cl-msg {

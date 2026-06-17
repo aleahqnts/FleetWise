@@ -51,7 +51,7 @@ namespace FleetWise.Controllers
             var telemetryResp = await _supabase.From<TelemetryData>().Get();
             var latestPassengersByTrip = telemetryResp.Models
                 .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().CurrentPassengers);
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().TotalPassengers);
 
             int Passengers(Trip t) => latestPassengersByTrip.TryGetValue(t.TripId, out var p) ? p : 0;
 
@@ -313,14 +313,13 @@ namespace FleetWise.Controllers
                 shiftStart = DateTime.Today.Add(tripResponse.ShiftStartTime).ToString("hh:mm tt"),
                 shiftEnd = DateTime.Today.Add(tripResponse.ShiftEndTime).ToString("hh:mm tt"),
                 routeName = routeResponse?.RouteName ?? "N/A",
-                vehicleType = vehicleResponse?.VehicleType ?? "N/A",
                 vehicleId = vehicleResponse?.VehicleId ?? "N/A",
                 plateNumber = vehicleResponse?.PlateNumber ?? "N/A",
                 driverName = driverResponse != null
                     ? $"{driverResponse.FirstName} {driverResponse.LastName}"
                     : "N/A",
                 driverId = tripResponse.DriverId,
-                totalPassengers = latestTelemetry?.CurrentPassengers ?? 0,
+                totalPassengers = latestTelemetry?.TotalPassengers ?? 0,
                 estimatedRevenue = tripResponse.EstimatedRevenue,
                 tripStatus = tripResponse.TripStatus,
                 date = tripResponse.Date.ToString("MMMM dd, yyyy")
@@ -406,7 +405,7 @@ namespace FleetWise.Controllers
             var telemetryResp = await _supabase.From<TelemetryData>().Get();
             var latestPassengersByTrip = telemetryResp.Models
                 .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().CurrentPassengers);
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().TotalPassengers);
 
             int Passengers(Trip t) => latestPassengersByTrip.TryGetValue(t.TripId, out var p) ? p : 0;
 
@@ -539,7 +538,7 @@ namespace FleetWise.Controllers
             var telemetryResp = await _supabase.From<TelemetryData>().Get();
             var latestPassengersByTrip = telemetryResp.Models
                 .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().CurrentPassengers);
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().TotalPassengers);
 
             int Passengers(Trip t) => latestPassengersByTrip.TryGetValue(t.TripId, out var p) ? p : 0;
 
@@ -767,7 +766,7 @@ namespace FleetWise.Controllers
             var telemetryResp = await _supabase.From<TelemetryData>().Get();
             var latestPassengersByTrip = telemetryResp.Models
                 .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().CurrentPassengers);
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().TotalPassengers);
 
             int Passengers(Trip t) => latestPassengersByTrip.TryGetValue(t.TripId, out var p) ? p : 0;
 

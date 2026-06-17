@@ -3,7 +3,10 @@
 @implements IDisposable
 @inject SessionService Session
 @inject DriverDataService Data
+@inject ITripTracker Tracker
+@inject TelemetryQueue Queue
 @inject NavigationManager Nav
+@using System.Text.Json
 
 @if (loading)
 {
@@ -125,10 +128,12 @@ else
     private DateTime now = PhTime.Now;
 
     private string CountKey => $"trip_count_{TripId}";
+    private string CacheKey => $"trip_cache_{TripId}";
+    private const string ActiveKey = "fw_active_trip";
     private decimal Revenue => total * fare;
 
     private string StartLabel => trip?.ActualStartTime is not null
-        ? trip.ActualStartTime.Value.ToString("h:mm tt")
+        ? PhTime.Raw(trip.ActualStartTime.Value).ToString("h:mm tt")
         : (trip is null ? "" : DateTime.Today.Add(trip.ShiftStartTime).ToString("h:mm tt"));
 
     private int ProgressPct
@@ -161,22 +166,75 @@ else
     {
         if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
 
-        trip = await Data.GetTripAsync(TripId);
+        // Try the network first; fall back to the locally cached trip when offline
+        // so the counter keeps working through dead zones / app restarts.
+        try
+        {
+            trip = await Data.GetTripAsync(TripId);
+            if (trip is not null)
+            {
+                route = await Data.GetRouteAsync(trip.RouteId);
+                vehicle = await Data.GetVehicleAsync(trip.VehicleId);
+                fare = await Data.GetFareAsync();
+                await SaveCacheAsync();
+            }
+        }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[TripActive.Load] {ex}"); }
+
+        if (trip is null) await LoadCacheAsync();
+
         if (trip is not null)
         {
-            route = await Data.GetRouteAsync(trip.RouteId);
-            vehicle = await Data.GetVehicleAsync(trip.VehicleId);
-            fare = await Data.GetFareAsync();
-
             // Crash-safety: prefer the locally-saved running count if present.
             var saved = await SecureStorage.Default.GetAsync(CountKey);
             total = int.TryParse(saved, out var s) ? s : trip.TotalBoarded;
+            // Seed the mirror so the tracker has a count to log from the first fix.
+            await SecureStorage.Default.SetAsync(CountKey, total.ToString());
+
+            // Keep this as the resume target + (re)start background tracking.
+            await SecureStorage.Default.SetAsync(ActiveKey, TripId);
+            Tracker.Start(TripId);
+
+            // Back online? Drain any queued telemetry / trip finalizes.
+            _ = Queue.FlushAsync();
         }
         loading = false;
 
         // 1s tick for progress; flush to DB every 15s.
         timer = new System.Threading.Timer(_ => OnTick(), null, 1000, 1000);
     }
+
+    private async Task SaveCacheAsync()
+    {
+        if (trip is null) return;
+        var c = new TripCache(trip.TripId, vehicle?.VehicleId ?? trip.VehicleId,
+            vehicle?.PlateNumber ?? "—", trip.RouteId, route?.RouteName ?? $"Route {trip.RouteId}",
+            trip.ShiftStartTime.Ticks, trip.ShiftEndTime.Ticks, trip.Date.Ticks,
+            trip.TotalBoarded, fare, trip.TripStatus, trip.ActualStartTime?.Ticks);
+        await SecureStorage.Default.SetAsync(CacheKey, JsonSerializer.Serialize(c));
+    }
+
+    private async Task LoadCacheAsync()
+    {
+        var json = await SecureStorage.Default.GetAsync(CacheKey);
+        if (string.IsNullOrEmpty(json)) return;
+        var c = JsonSerializer.Deserialize<TripCache>(json);
+        if (c is null) return;
+        trip = new Trip
+        {
+            TripId = c.TripId, VehicleId = c.VehicleId, RouteId = c.RouteId,
+            ShiftStartTime = TimeSpan.FromTicks(c.StartTicks), ShiftEndTime = TimeSpan.FromTicks(c.EndTicks),
+            Date = new DateTime(c.DateTicks), TotalBoarded = c.TotalBoarded, TripStatus = c.Status,
+            ActualStartTime = c.ActualStartTicks is null ? null : new DateTime(c.ActualStartTicks.Value)
+        };
+        route = new BusRoute { RouteName = c.RouteName };
+        vehicle = new Vehicle { VehicleId = c.VehicleId, PlateNumber = c.Plate };
+        fare = c.Fare;
+    }
+
+    private record TripCache(string TripId, string VehicleId, string Plate, int RouteId,
+        string RouteName, long StartTicks, long EndTicks, long DateTicks, int TotalBoarded,
+        decimal Fare, string Status, long? ActualStartTicks);
 
     private void OnTick()
     {
@@ -210,14 +268,35 @@ else
         msg = null;
         try
         {
-            await Data.EndTripAsync(TripId, total, Revenue);
-            SecureStorage.Default.Remove(CountKey);
+            // Audit accuracy: use the freshest count (memory vs the per-tap mirror),
+            // never a stale in-memory value.
+            var saved = await SecureStorage.Default.GetAsync(CountKey);
+            var finalTotal = Math.Max(total, int.TryParse(saved, out var s) ? s : 0);
+            var finalRevenue = finalTotal * fare;
+
+            // Durable finalize: enqueue first (survives offline). The PATCH is the
+            // single authoritative write of trips.total_boarded.
+            await Queue.EnqueueFinalizeAsync(new FleetWiseMobile.Models.PendingTripFinalize
+            {
+                TripId = TripId,
+                TotalBoarded = finalTotal,
+                Revenue = finalRevenue,
+                EndTime = PhTime.Now
+            });
+
+            // Stop tracking BEFORE clearing the count key so no stray tick logs a 0.
+            Tracker.Stop();
             timer?.Dispose();
+            SecureStorage.Default.Remove(CountKey);
+            SecureStorage.Default.Remove(CacheKey);
+            SecureStorage.Default.Remove(ActiveKey);
+
+            await Queue.FlushAsync(); // completes immediately when online; queued if offline
             Nav.NavigateTo("/home");
         }
         catch (Exception ex)
         {
-            msg = "Couldn't end trip. Check your connection.";
+            msg = "Couldn't end trip. Try again.";
             System.Diagnostics.Debug.WriteLine($"[TripActive.End] {ex}");
             ending = false;
         }

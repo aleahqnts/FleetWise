@@ -57,7 +57,13 @@
     protected override async Task OnInitializedAsync()
     {
         if (await Session.RestoreAsync())
-            Nav.NavigateTo("/home");
+        {
+            // Mid-trip? Go straight back to the counter, not Home (survives
+            // WebView reboots on suspend / network change).
+            var active = await SecureStorage.Default.GetAsync("fw_active_trip");
+            if (!string.IsNullOrEmpty(active)) Nav.NavigateTo($"/trip-active/{active}");
+            else Nav.NavigateTo("/home");
+        }
     }
 
     private async Task SignIn()

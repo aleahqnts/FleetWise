@@ -1,6 +1,8 @@
 @page "/trips"
+@implements IDisposable
 @inject SessionService Session
 @inject DriverDataService Data
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 
 @if (loading)
@@ -40,7 +42,9 @@ else
     private bool loading = true;
     private List<Trip> trips = new();
 
-    private IEnumerable<IGrouping<string, Trip>> Grouped => trips.GroupBy(t => Label(t.Date));
+    private IEnumerable<IGrouping<string, Trip>> Grouped =>
+        trips.OrderByDescending(t => t.Date).ThenByDescending(t => t.TripId)
+             .GroupBy(t => Label(t.Date));
 
     private static string Label(DateTime d)
     {
@@ -56,4 +60,20 @@ else
         trips = await Data.GetTripsForDriverAsync(Session.CurrentUser!.UserId);
         loading = false;
     }
+
+    private DotNetObjectReference<Trips>? _ptrRef;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _ptrRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("ptr.set", _ptrRef);
+        }
+    }
+    [JSInvokable] public async Task Refresh()
+    {
+        trips = await Data.GetTripsForDriverAsync(Session.CurrentUser!.UserId);
+        StateHasChanged();
+    }
+    public void Dispose() => _ptrRef?.Dispose();
 }

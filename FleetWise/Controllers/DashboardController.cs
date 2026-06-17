@@ -69,12 +69,12 @@ namespace FleetWise.Controllers
             var todayPassengers = telemetryResponse.Models
                 .Where(t => todayTripIds.Contains(t.TripId))
                 .GroupBy(t => t.TripId)
-                .Sum(g => g.OrderByDescending(t => t.Timestamp).First().CurrentPassengers);
+                .Sum(g => g.OrderByDescending(t => t.Timestamp).First().TotalPassengers);
 
             var yesterdayPassengers = telemetryResponse.Models
                 .Where(t => yesterdayTripIds.Contains(t.TripId))
                 .GroupBy(t => t.TripId)
-                .Sum(g => g.OrderByDescending(t => t.Timestamp).First().CurrentPassengers);
+                .Sum(g => g.OrderByDescending(t => t.Timestamp).First().TotalPassengers);
 
             // ── Passenger Demand Chart (hourly buckets) ───────────────
             // Covers all three shifts: 06:00–14:00, 14:00–22:00, 22:00–06:00
@@ -99,7 +99,7 @@ namespace FleetWise.Controllers
                 return todayTelemetry
                     .Where(t => DateTime.SpecifyKind(t.Timestamp, DateTimeKind.Utc).Add(phtOffset).Hour == h)
                     .GroupBy(t => t.TripId)
-                    .Sum(g => g.OrderByDescending(t => t.Timestamp).First().CurrentPassengers);
+                    .Sum(g => g.OrderByDescending(t => t.Timestamp).First().TotalPassengers);
             }).ToList();
 
             int yMax = data.Any(d => d > 0) ? (int)(Math.Ceiling((data.Max() + 50) / 100.0) * 100) : 400;

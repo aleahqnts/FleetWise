@@ -60,7 +60,7 @@ else
     private string ShiftRange => trip is null ? "" :
         $"{DateTime.Today.Add(trip.ShiftStartTime):h:mm tt} to {DateTime.Today.Add(trip.ShiftEndTime):h:mm tt}";
 
-    private static string TimeOrDash(DateTime? dt) => dt?.ToString("h:mm tt") ?? "—";
+    private static string TimeOrDash(DateTime? dt) => dt is null ? "—" : PhTime.Raw(dt.Value).ToString("h:mm tt");
 
     protected override async Task OnInitializedAsync()
     {
