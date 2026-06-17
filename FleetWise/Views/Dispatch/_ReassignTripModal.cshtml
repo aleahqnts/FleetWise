@@ -1,0 +1,555 @@
+@* Views/Dispatch/_ReassignTripModal.cshtml *@
+
+<div id="reassignModal" class="rtm-overlay" role="dialog" aria-modal="true" style="display:none;">
+    <div class="rtm-dialog">
+
+        <!-- Header -->
+        <div class="rtm-header">
+            <h2 class="rtm-title">Reassign Trip</h2>
+            <button class="rtm-close" onclick="closeReassignModal()">&times;</button>
+        </div>
+
+        <!-- Loading state -->
+        <div id="rtm-loading" class="rtm-loading">
+            <svg class="rtm-spin" xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none"
+                 stroke="#4AADA8" stroke-width="2.5" viewBox="0 0 24 24">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+            </svg>
+            <span>Loading trip details…</span>
+        </div>
+
+        <!-- Body (hidden until loaded) -->
+        <div id="rtm-body" class="rtm-body" style="display:none;">
+
+            <!-- Trip Information -->
+            <div class="rtm-section-label">
+                Trip Information
+                <span id="rtm-status-badge" class="rtm-status-badge rtm-badge--issue" style="display:none;">
+                    <span class="rtm-badge-dot"></span>
+                    <span id="rtm-status-text">Assignment Issue</span>
+                </span>
+            </div>
+            <div class="rtm-section">
+                <div class="rtm-info-row">
+                    <span class="rtm-info-label">Shift Type:</span>
+                    <span class="rtm-info-value" id="rtm-shift-type">—</span>
+                </div>
+                <div class="rtm-info-row">
+                    <span class="rtm-info-label">Shift Time:</span>
+                    <span class="rtm-info-value" id="rtm-shift-time">—</span>
+                </div>
+                <div class="rtm-info-row">
+                    <span class="rtm-info-label">Route:</span>
+                    <span class="rtm-info-value" id="rtm-route">—</span>
+                </div>
+            </div>
+
+            <!-- Vehicle Details -->
+            <div class="rtm-section-label">Vehicle Details</div>
+            <div class="rtm-section">
+                <div class="rtm-field">
+                    <label class="rtm-label" for="rtm-vehicle-type">Vehicle Type</label>
+                    <div class="rtm-select-wrap">
+                        <select id="rtm-vehicle-type" class="rtm-select" onchange="onRtmVehicleTypeChange()">
+                            <option value="">All types</option>
+                            <option value="Bus">Bus</option>
+                            <option value="Minibus">Minibus</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="rtm-field">
+                    <label class="rtm-label" for="rtm-vehicle-id">Vehicle ID</label>
+                    <div class="rtm-select-wrap">
+                        <select id="rtm-vehicle-id" class="rtm-select">
+                            <option value="">Loading…</option>
+                        </select>
+                    </div>
+                    <span class="rtm-hint" id="rtm-vehicle-hint"></span>
+                </div>
+            </div>
+
+            <!-- Driver Details -->
+            <div class="rtm-section-label">Driver Details</div>
+            <div class="rtm-section rtm-section--last">
+                <div class="rtm-field">
+                    <label class="rtm-label" for="rtm-driver">Driver Name</label>
+                    <div class="rtm-select-wrap">
+                        <select id="rtm-driver" class="rtm-select">
+                            <option value="">Loading…</option>
+                        </select>
+                    </div>
+                    <span class="rtm-hint" id="rtm-driver-hint"></span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div class="rtm-footer">
+            <button class="rtm-btn-cancel" onclick="closeReassignModal()">Cancel</button>
+            <button class="rtm-btn-save" id="rtm-save-btn" onclick="submitReassign()">
+                <span id="rtm-save-label">Save Changes</span>
+                <span id="rtm-save-spinner" style="display:none;">
+                    <svg class="rtm-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none"
+                         stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                    </svg>
+                    Saving…
+                </span>
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    /* ── Overlay & dialog ───────────────────────────────────── */
+    .rtm-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.45);
+        z-index: 1100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .rtm-dialog {
+        background: #fff;
+        border-radius: 20px;
+        width: 100%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 40px rgba(0,0,0,.18);
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    .rtm-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 22px 28px 18px;
+        border-bottom: 1px solid #E8ECF0;
+        position: sticky;
+        top: 0;
+        background: #fff;
+        border-radius: 20px 20px 0 0;
+        z-index: 1;
+    }
+
+    .rtm-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #1a2a4a;
+        margin: 0;
+    }
+
+    .rtm-close {
+        background: none;
+        border: none;
+        font-size: 1.4rem;
+        color: #9AA5B4;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 6px;
+        line-height: 1;
+        transition: color 150ms, background 150ms;
+    }
+
+        .rtm-close:hover {
+            color: #2D3748;
+            background: #F0F2F5;
+        }
+
+    /* ── Loading ─────────────────────────────────────────────── */
+    .rtm-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 48px 28px;
+        font-size: 0.9rem;
+        color: #9AA5B4;
+    }
+
+    /* ── Section labels ──────────────────────────────────────── */
+    .rtm-section-label {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #9AA5B4;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        padding: 12px 28px;
+        background: #F8F9FA;
+        border-top: 1px solid #E8ECF0;
+        border-bottom: 1px solid #E8ECF0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    /* ── Status badge ────────────────────────────────────────── */
+    .rtm-status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+
+    .rtm-badge--issue {
+        background: #FEECEC;
+        color: #E74C3C;
+    }
+
+    .rtm-badge--pending {
+        background: #FFF8E1;
+        color: #F59E0B;
+    }
+
+    .rtm-badge-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        flex-shrink: 0;
+    }
+
+    /* ── Info rows (Trip Information) ────────────────────────── */
+    .rtm-section {
+        padding: 16px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        border-bottom: 1px solid #E8ECF0;
+    }
+
+    .rtm-section--last {
+        border-bottom: none;
+    }
+
+    .rtm-info-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.9rem;
+    }
+
+    .rtm-info-label {
+        font-weight: 600;
+        color: #2D3748;
+        min-width: 90px;
+    }
+
+    .rtm-info-value {
+        color: #2D3748;
+    }
+
+    /* ── Form fields ─────────────────────────────────────────── */
+    .rtm-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .rtm-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #4A5568;
+    }
+
+    .rtm-select-wrap {
+        position: relative;
+    }
+
+        .rtm-select-wrap::after {
+            content: '';
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid #9AA5B4;
+            pointer-events: none;
+        }
+
+    .rtm-select {
+        width: 100%;
+        padding: 10px 36px 10px 14px;
+        border: 1.5px solid #E8ECF0;
+        border-radius: 10px;
+        font-size: 0.88rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: #2D3748;
+        background: #fff;
+        appearance: none;
+        cursor: pointer;
+        outline: none;
+        transition: border-color 180ms;
+    }
+
+        .rtm-select:focus {
+            border-color: #4AADA8;
+        }
+
+    .rtm-hint {
+        font-size: 0.78rem;
+        color: #E74C3C;
+        display: none;
+    }
+
+    .rtm-hint--visible {
+        display: block;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────── */
+    .rtm-footer {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 12px;
+        padding: 18px 28px;
+        border-top: 1px solid #E8ECF0;
+        background: #fff;
+        border-radius: 0 0 20px 20px;
+        position: sticky;
+        bottom: 0;
+    }
+
+    .rtm-btn-cancel {
+        padding: 10px 24px;
+        border-radius: 10px;
+        border: 1.5px solid #E8ECF0;
+        background: #fff;
+        font-size: 0.88rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        color: #2D3748;
+        cursor: pointer;
+        transition: background 150ms;
+    }
+
+        .rtm-btn-cancel:hover {
+            background: #F8F9FA;
+        }
+
+    .rtm-btn-save {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 10px 24px;
+        border-radius: 10px;
+        border: none;
+        background: #4AADA8;
+        font-size: 0.88rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        color: #fff;
+        cursor: pointer;
+        transition: background 150ms;
+    }
+
+        .rtm-btn-save:hover:not(:disabled) {
+            background: #3D938F;
+        }
+
+        .rtm-btn-save:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+        }
+
+    /* ── Spinner animation ───────────────────────────────────── */
+    @@keyframes rtm-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .rtm-spin {
+        animation: rtm-spin .7s linear infinite;
+        display: inline-block;
+    }
+</style>
+
+<script>
+    /* ═══════════════════════════════════════════════════════
+       Reassign Trip Modal
+    ═══════════════════════════════════════════════════════ */
+    (function () {
+        let _rtmOptions  = null;   // full options from server
+        let _rtmTripId   = null;   // trip being reassigned
+
+        // ── DOM refs ──────────────────────────────────────────
+        const overlay     = document.getElementById('reassignModal');
+        const loadingEl   = document.getElementById('rtm-loading');
+        const bodyEl      = document.getElementById('rtm-body');
+        const statusBadge = document.getElementById('rtm-status-badge');
+        const statusText  = document.getElementById('rtm-status-text');
+        const shiftTypeEl = document.getElementById('rtm-shift-type');
+        const shiftTimeEl = document.getElementById('rtm-shift-time');
+        const routeEl     = document.getElementById('rtm-route');
+        const vehicleType = document.getElementById('rtm-vehicle-type');
+        const vehicleSel  = document.getElementById('rtm-vehicle-id');
+        const vehicleHint = document.getElementById('rtm-vehicle-hint');
+        const driverSel   = document.getElementById('rtm-driver');
+        const driverHint  = document.getElementById('rtm-driver-hint');
+        const saveBtn     = document.getElementById('rtm-save-btn');
+
+        // ── Open ──────────────────────────────────────────────
+        window.openReassignModal = async function (tripId) {
+            _rtmTripId  = tripId;
+            _rtmOptions = null;
+
+            // Reset UI
+            loadingEl.style.display = 'flex';
+            bodyEl.style.display    = 'none';
+            vehicleType.value       = '';
+            statusBadge.style.display = 'none';
+            overlay.style.display   = 'flex';
+            document.body.style.overflow = 'hidden';
+
+            try {
+                const res  = await fetch(`/Dispatch/GetReassignOptions?tripId=${encodeURIComponent(tripId)}`);
+                if (!res.ok) throw new Error();
+                _rtmOptions = await res.json();
+
+                // Populate trip info
+                const info = _rtmOptions.tripInfo;
+                shiftTypeEl.textContent = info.shiftType ? info.shiftType + ' Shift' : '—';
+                shiftTimeEl.textContent = `${info.shiftStart} – ${info.shiftEnd}`;
+                routeEl.textContent     = info.routeName;
+
+                // Status badge
+                if (info.tripStatus === 'Assignment Issue' || info.tripStatus === 'Pending') {
+                    statusText.textContent = info.tripStatus;
+                    statusBadge.className  = 'rtm-status-badge ' +
+                        (info.tripStatus === 'Assignment Issue' ? 'rtm-badge--issue' : 'rtm-badge--pending');
+                    statusBadge.style.display = 'inline-flex';
+                } else {
+                    statusBadge.style.display = 'none';
+                }
+
+                // Populate dropdowns — pre-select current assignments
+                refreshRtmVehicles(_rtmOptions.tripInfo.currentVehicleId);
+                refreshRtmDrivers(_rtmOptions.tripInfo.currentDriverId);
+
+                loadingEl.style.display = 'none';
+                bodyEl.style.display    = 'block';
+
+            } catch {
+                loadingEl.innerHTML = '<span style="color:#E74C3C;">Failed to load trip details. Please try again.</span>';
+            }
+        };
+
+        // ── Close ─────────────────────────────────────────────
+        window.closeReassignModal = function () {
+            overlay.style.display = 'none';
+            document.body.style.overflow = '';
+        };
+
+        overlay.addEventListener('click', e => {
+            if (e.target === overlay) closeReassignModal();
+        });
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && overlay.style.display === 'flex') closeReassignModal();
+        });
+
+        // ── Vehicle type filter ───────────────────────────────
+        window.onRtmVehicleTypeChange = function () {
+            refreshRtmVehicles(vehicleSel.value || _rtmOptions?.tripInfo?.currentVehicleId);
+        };
+
+        function refreshRtmVehicles(selectedId) {
+            if (!_rtmOptions) return;
+
+            const typeFilter = vehicleType.value;
+            const list = _rtmOptions.vehicles.filter(v =>
+                !typeFilter || v.vehicleType === typeFilter
+            );
+
+            vehicleSel.innerHTML = list.length === 0
+                ? '<option value="">No vehicles available for this shift</option>'
+                : '<option value="">Select a vehicle…</option>'
+                  + list.map(v =>
+                      `<option value="${v.vehicleId}" ${v.vehicleId === selectedId ? 'selected' : ''}>${v.vehicleId} | ${v.plateNumber} (${v.vehicleType})</option>`
+                  ).join('');
+
+            vehicleHint.textContent = list.length === 0
+                ? 'No non-flagged vehicles are free for this shift.'
+                : '';
+            vehicleHint.classList.toggle('rtm-hint--visible', list.length === 0);
+        }
+
+        function refreshRtmDrivers(selectedId) {
+            if (!_rtmOptions) return;
+
+            const list = _rtmOptions.drivers;
+
+            driverSel.innerHTML = list.length === 0
+                ? '<option value="">No drivers available for this shift</option>'
+                : '<option value="">Select a driver…</option>'
+                  + list.map(d =>
+                      `<option value="${d.driverId}" ${d.driverId === selectedId ? 'selected' : ''}>${d.driverName}</option>`
+                  ).join('');
+
+            driverHint.textContent = list.length === 0
+                ? 'No available drivers are free for this shift.'
+                : '';
+            driverHint.classList.toggle('rtm-hint--visible', list.length === 0);
+        }
+
+        // ── Submit ────────────────────────────────────────────
+        window.submitReassign = async function () {
+            // Use selected value, falling back to the current assignment
+            const vehicleId = vehicleSel.value || _rtmOptions.tripInfo.currentVehicleId;
+            const driverId  = parseInt(driverSel.value) || _rtmOptions.tripInfo.currentDriverId;
+
+            if (!vehicleId && !driverId) {
+                alert('Please select a vehicle and/or driver to reassign.');
+                return;
+            }
+
+            saveBtn.disabled = true;
+            document.getElementById('rtm-save-label').style.display  = 'none';
+            document.getElementById('rtm-save-spinner').style.display = 'inline-flex';
+
+            try {
+                const res = await fetch('/Dispatch/ReassignTrip', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tripId:    _rtmTripId,
+                        vehicleId: vehicleId || null,
+                        driverId:  driverId
+                    })
+                });
+
+                if (!res.ok) throw new Error();
+
+                closeReassignModal();
+                window.location.reload();
+
+            } catch {
+                alert('Failed to reassign trip. Please try again.');
+            } finally {
+                saveBtn.disabled = false;
+                document.getElementById('rtm-save-label').style.display  = 'inline';
+                document.getElementById('rtm-save-spinner').style.display = 'none';
+            }
+        };
+
+    })();
+</script>
