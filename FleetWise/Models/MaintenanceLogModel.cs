@@ -10,8 +10,10 @@ public class MaintenanceLog : BaseModel
     [PrimaryKey("log_id")]
     public int LogId { get; set; }
 
+    // Nullable: a maintenance log can be opened without an originating bus_checklist
+    // (the DB column is nullable), so a non-nullable int throws on deserialize.
     [Column("checklist_id")]
-    public int ChecklistId { get; set; }
+    public int? ChecklistId { get; set; }
 
     [Column("vehicle_id")]
     public string VehicleId { get; set; }

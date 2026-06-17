@@ -119,14 +119,22 @@
     </div>
 </div>
 
-@await Html.PartialAsync("_AddVehicleModal")
+@await Html.PartialAsync("_AddVehicleModal", (AddVehicleViewModel)ViewBag.AddVehicleModel)
 @await Html.PartialAsync("_ViewVehicleModal")
 @await Html.PartialAsync("_EditVehicleModal")
 
 <script>
     // Load the vehicle table rows in the background so the page itself renders instantly
     // (still server-rendered HTML over fetch, not a SPA — §2.6).
-    document.addEventListener('DOMContentLoaded', loadVehicleRows);
+    document.addEventListener('DOMContentLoaded', function () {
+        loadVehicleRows();
+
+        // Auto-reopen the Add Vehicle modal after a failed POST (validation errors preserved).
+        const openModal = '@(ViewBag.OpenModal ?? "")';
+        if (openModal === 'AddVehicle') {
+            new bootstrap.Modal(document.getElementById('addVehicleModal')).show();
+        }
+    });
 
     function loadVehicleRows() {
         const tbody = document.getElementById('vehiclesTableBody');
@@ -613,6 +621,15 @@
         color: var(--vh-muted);
         cursor: not-allowed;
     }
+
+    .vh-field-error {
+        grid-column: 2;
+        font-size: 0.78rem;
+        color: #E53E3E;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .vh-field-error:empty { display: none; }
 
     /* ── Detail rows (View modal) ───────────────────────────── */
     .vh-detail-row {
