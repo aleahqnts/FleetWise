@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using FleetWise.Models;
+using FleetWise.Services;
 
 namespace FleetWise.Controllers
 {
@@ -74,7 +75,7 @@ namespace FleetWise.Controllers
                 EmailAddress = model.Email.Trim(),
                 RoleId = model.RoleId,
                 AccountStatus = "Activated",
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = PhClock.Now,
             };
             var hasher = new PasswordHasher<UserModel>();
             user.PasswordHash = hasher.HashPassword(user, model.InitialPassword);
@@ -124,7 +125,7 @@ namespace FleetWise.Controllers
             user.EmailAddress = model.Email.Trim();
             user.RoleId = model.RoleId;
             user.AccountStatus = model.AccountStatus;
-            user.UpdatedAt = DateTime.UtcNow;
+            user.UpdatedAt = PhClock.Now;
 
             await _supabase.From<UserModel>().Update(user);
 

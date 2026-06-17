@@ -7,7 +7,10 @@ namespace FleetWise.Models;
 [Table("vehicles")]
 public class Vehicle : BaseModel
 {
-    [PrimaryKey("vehicle_id")]
+    // shouldInsert: true — unlike the serial PKs (user_id/role_id), vehicle_id is a
+    // user-entered varchar with no DB default, so it must be included on Insert.
+    // (PrimaryKey defaults to shouldInsert:false, which silently sent null → 23502.)
+    [PrimaryKey("vehicle_id", true)]
     public string VehicleId { get; set; }
 
     [Column("plate_number")]
