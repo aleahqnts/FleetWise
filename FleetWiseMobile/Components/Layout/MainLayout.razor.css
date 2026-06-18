@@ -15,7 +15,7 @@
     opacity: 0;
     overflow: hidden;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     transition: height 0.15s ease;
 }
@@ -26,6 +26,8 @@
     border: 2.5px solid #cdeede;
     border-top-color: #2e9e8f;
     border-radius: 50%;
+    /* drop below the status bar / notch so spinner stays visible */
+    margin-top: calc(env(safe-area-inset-top) + 14px);
 }
 
 #ptr-ind.spin .ptr-spin {
@@ -65,4 +67,28 @@
 .tabbar ::deep .tab svg {
     height: 25px;
     width: auto;
+}
+
+.tabbar ::deep .tab-ico-wrap {
+    position: relative;
+    display: inline-flex;
+    line-height: 0;
+}
+
+.tabbar ::deep .tab-badge {
+    position: absolute;
+    top: -6px;
+    right: -9px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: #e23b3b;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 16px;
+    text-align: center;
+    box-shadow: 0 0 0 2px #fff;
 }

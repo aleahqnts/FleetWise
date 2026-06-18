@@ -54,15 +54,23 @@
             <div class="bm-field bm-field--inline">
                 <label class="bm-label">Priority:</label>
                 <div class="bm-priority-wrap">
-                    <span class="bm-priority-dot" id="bm-priority-dot" style="background:#27AE60;"></span>
-                    <select id="bm-priority" class="bm-priority-select" onchange="onBmPriorityChange()">
-                        <option value="Normal">Normal</option>
-                        <option value="Urgent">Urgent</option>
-                    </select>
-                    <svg class="bm-select-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none"
-                         stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                        <polyline points="6 9 12 15 18 9" />
-                    </svg>
+                    <input type="hidden" id="bm-priority" value="Normal" />
+                    <button type="button" class="bm-priority-btn" onclick="bmTogglePriority(event)">
+                        <span class="bm-priority-dot" id="bm-priority-dot" style="background:#27AE60;"></span>
+                        <span id="bm-priority-text">Normal</span>
+                        <svg class="bm-select-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none"
+                             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </button>
+                    <div class="bm-priority-menu" id="bm-priority-menu">
+                        <div class="bm-priority-opt" onclick="bmPickPriority('Normal')">
+                            <span class="bm-priority-dot" style="background:#27AE60;"></span> Normal
+                        </div>
+                        <div class="bm-priority-opt" onclick="bmPickPriority('High')">
+                            <span class="bm-priority-dot" style="background:#E74C3C;"></span> High
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -274,42 +282,65 @@
 
     .bm-priority-wrap {
         position: relative;
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        border: 1.5px solid #E8ECF0;
-        border-radius: 20px;
-        padding: 5px 30px 5px 12px;
-        background: #fff;
+        display: inline-block;
     }
 
     .bm-priority-dot {
+        display: inline-block;
         width: 9px;
         height: 9px;
         border-radius: 50%;
         flex-shrink: 0;
-        transition: background 180ms;
     }
 
-    .bm-priority-select {
-        appearance: none;
-        border: none;
-        background: transparent;
+    .bm-priority-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1.5px solid #E8ECF0;
+        border-radius: 20px;
+        padding: 8px 14px;
+        background: #fff;
         font-size: 0.85rem;
         font-family: 'Segoe UI', sans-serif;
-        font-weight: 500;
+        font-weight: 600;
         color: #2D3748;
         cursor: pointer;
-        outline: none;
-        padding: 0;
+        min-width: 120px;
+        transition: border-color 150ms;
     }
+    .bm-priority-btn:hover { border-color: #CBD5E0; }
 
-    .bm-select-arrow {
+    .bm-select-arrow { margin-left: auto; color: #9AA5B4; transition: transform 180ms; }
+    .bm-priority-wrap.open .bm-select-arrow { transform: rotate(180deg); }
+
+    .bm-priority-menu {
         position: absolute;
-        right: 10px;
-        pointer-events: none;
-        color: #9AA5B4;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        background: #fff;
+        border: 1px solid #E8ECF0;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,.14);
+        padding: 5px;
+        z-index: 20;
+        display: none;
     }
+    .bm-priority-wrap.open .bm-priority-menu { display: block; }
+
+    .bm-priority-opt {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px 12px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #2D3748;
+        cursor: pointer;
+    }
+    .bm-priority-opt:hover { background: #F2FAF9; }
 
     .bm-footer {
         display: flex;
@@ -428,7 +459,9 @@
             bodyInput.value = '';
             charUsed.textContent = '0';
             document.getElementById('bm-priority').value = 'Normal';
+            document.getElementById('bm-priority-text').textContent = 'Normal';
             document.getElementById('bm-priority-dot').style.background = '#27AE60';
+            document.querySelector('.bm-priority-wrap').classList.remove('open');
         }
 
         function showModal() {
@@ -508,11 +541,21 @@
             charUsed.textContent = bodyInput.value.length;
         });
 
-        window.onBmPriorityChange = function () {
-            var val = document.getElementById('bm-priority').value;
-            document.getElementById('bm-priority-dot').style.background =
-                val === 'Urgent' ? '#E74C3C' : '#27AE60';
+        window.bmTogglePriority = function (e) {
+            e.stopPropagation();
+            document.querySelector('.bm-priority-wrap').classList.toggle('open');
         };
+        window.bmPickPriority = function (val) {
+            document.getElementById('bm-priority').value = val;
+            document.getElementById('bm-priority-text').textContent = val;
+            document.getElementById('bm-priority-dot').style.background = val === 'High' ? '#E74C3C' : '#27AE60';
+            document.querySelector('.bm-priority-wrap').classList.remove('open');
+        };
+        // close menu on outside click
+        document.addEventListener('click', function () {
+            var w = document.querySelector('.bm-priority-wrap');
+            if (w) w.classList.remove('open');
+        });
 
         window.submitBroadcast = async function () {
             var subject  = document.getElementById('bm-subject').value.trim();
