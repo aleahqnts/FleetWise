@@ -1,0 +1,44 @@
+using Android.App;
+using Android.Content;
+using Android.OS;
+using AndroidX.Core.App;
+using FleetWiseMobile.Services;
+
+namespace FleetWiseMobile.Platforms.Android;
+
+// System-tray notification for new in-app messages. Separate channel from the
+// trip-tracking foreground service so the user can manage them independently.
+public class AndroidLocalNotifier : ILocalNotifier
+{
+    private const string ChannelId = "routesync_messages";
+
+    public void Show(int id, string title, string body)
+    {
+        var ctx = global::Android.App.Application.Context;
+
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
+        {
+            var mgr = (NotificationManager)ctx.GetSystemService(Context.NotificationService)!;
+            var channel = new NotificationChannel(ChannelId, "Messages", NotificationImportance.High);
+            mgr.CreateNotificationChannel(channel);
+        }
+
+        // tapping opens the app (main activity)
+        var launch = ctx.PackageManager?.GetLaunchIntentForPackage(ctx.PackageName!);
+        launch?.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
+        var pending = PendingIntent.GetActivity(ctx, 0, launch,
+            PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
+
+        var notif = new NotificationCompat.Builder(ctx, ChannelId)
+            .SetContentTitle(title)
+            .SetContentText(body)
+            .SetStyle(new NotificationCompat.BigTextStyle().BigText(body))
+            .SetSmallIcon(Resource.Mipmap.appicon)
+            .SetPriority(NotificationCompat.PriorityHigh)
+            .SetAutoCancel(true)
+            .SetContentIntent(pending)
+            .Build();
+
+        NotificationManagerCompat.From(ctx).Notify(id, notif);
+    }
+}

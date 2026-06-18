@@ -18,6 +18,7 @@ else if (trip is null)
 }
 else
 {
+    <MessageAlert />
     <div class="ta">
         <div class="ta-head">
             <h1>Active Trip</h1>
@@ -30,6 +31,7 @@ else
             <div>
                 <p class="bus-name">@(vehicle?.VehicleId ?? trip.VehicleId) <span class="plate">(@(vehicle?.PlateNumber ?? "—"))</span></p>
                 <p class="route">@(route?.RouteName ?? $"Route {trip.RouteId}")</p>
+                <p class="trip-id">Trip ID: @trip.TripId</p>
             </div>
         </div>
 
@@ -136,16 +138,21 @@ else
         ? PhTime.Raw(trip.ActualStartTime.Value).ToString("h:mm tt")
         : (trip is null ? "" : DateTime.Today.Add(trip.ShiftStartTime).ToString("h:mm tt"));
 
+    // Shift window anchored to the trip's own date. Overnight shifts (end <= start,
+    // e.g. 10pm -> 6am) roll the end to the next day so the bar fill and the
+    // remaining countdown span the same real window.
+    private DateTime ShiftStart => trip is null ? DateTime.MinValue : trip.Date.Date + trip.ShiftStartTime;
+    private DateTime ShiftEnd => trip is null ? DateTime.MinValue
+        : trip.Date.Date + trip.ShiftEndTime + (trip.ShiftEndTime <= trip.ShiftStartTime ? TimeSpan.FromDays(1) : TimeSpan.Zero);
+
     private int ProgressPct
     {
         get
         {
             if (trip is null) return 0;
-            var start = DateTime.Today.Add(trip.ShiftStartTime);
-            var end = DateTime.Today.Add(trip.ShiftEndTime);
-            if (now <= start) return 0;
-            if (now >= end) return 100;
-            var pct = (now - start).TotalSeconds / (end - start).TotalSeconds * 100;
+            if (now <= ShiftStart) return 0;
+            if (now >= ShiftEnd) return 100;
+            var pct = (now - ShiftStart).TotalSeconds / (ShiftEnd - ShiftStart).TotalSeconds * 100;
             return (int)Math.Clamp(pct, 0, 100);
         }
     }
@@ -155,8 +162,7 @@ else
         get
         {
             if (trip is null) return "";
-            var end = DateTime.Today.Add(trip.ShiftEndTime);
-            var left = end - now;
+            var left = ShiftEnd - now;
             if (left <= TimeSpan.Zero) return "Shift ended";
             return $"{(int)left.TotalHours}h {left.Minutes}m remaining";
         }
@@ -193,6 +199,10 @@ else
 
             // Keep this as the resume target + (re)start background tracking.
             await SecureStorage.Default.SetAsync(ActiveKey, TripId);
+            // Always confirm location access here — this page is the one screen both
+            // "Start Trip" and "Resume Trip" land on, so the prompt fires even when the
+            // user resumes (which skips TripDetails) or revoked the grant earlier.
+            await EnsureLocationPermissionAsync();
             Tracker.Start(TripId);
 
             // Back online? Drain any queued telemetry / trip finalizes.
@@ -202,6 +212,23 @@ else
 
         // 1s tick for progress; flush to DB every 15s.
         timer = new System.Threading.Timer(_ => OnTick(), null, 1000, 1000);
+    }
+
+    // Foreground location first, then background. Asks every time the grant isn't
+    // already held so the driver is prompted in-app instead of digging into Settings.
+    private static async Task EnsureLocationPermissionAsync()
+    {
+        try
+        {
+            var s = await Permissions.CheckStatusAsync<Permissions.LocationWhenInUse>();
+            if (s != PermissionStatus.Granted)
+                await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
+
+            var bg = await Permissions.CheckStatusAsync<Permissions.LocationAlways>();
+            if (bg != PermissionStatus.Granted)
+                await Permissions.RequestAsync<Permissions.LocationAlways>();
+        }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[TripActive.Perm] {ex}"); }
     }
 
     private async Task SaveCacheAsync()

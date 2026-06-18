@@ -5,10 +5,28 @@
 }
 
 <!-- PAGE TITLE -->
-<h2 class="rp-title">Dispatch</h2>
+<div class="dp-title-row">
+    <h2 class="rp-title">Dispatch</h2>
+    <div class="dp-date-nav">
+        <a class="dp-date-arrow" href="@Url.Action("Index", new { date = Model.PrevDate })" title="Previous day">
+            <i class="ti ti-chevron-left"></i>
+        </a>
+        <span class="dp-date-badge">
+            <i class="ti ti-calendar-event"></i>
+            @Model.ScheduleDate.ToString("dddd, MMMM d, yyyy")
+        </span>
+        <a class="dp-date-arrow" href="@Url.Action("Index", new { date = Model.NextDate })" title="Next day">
+            <i class="ti ti-chevron-right"></i>
+        </a>
+        @if (!Model.IsToday)
+        {
+            <a class="dp-date-today" href="@Url.Action("Index")">Today</a>
+        }
+    </div>
+</div>
 
 <!-- STAT CARDS -->
-<div class="dp-stat-grid">
+<div class="dp-stat-grid" id="dpStats">
 
     <div class="rp-stat-card">
         <div class="rp-stat-header">
@@ -32,23 +50,28 @@
         <div class="rp-stat-sub">Awaiting departure</div>
     </div>
 
-    <div class="rp-stat-card">
+    <div class="rp-stat-card @(Model.UnassignedTrips > 0 ? "dp-card-click" : "")"
+         @(Model.UnassignedTrips > 0 ? "onclick=dpHighlightIssues()" : "")>
         <div class="rp-stat-header">
             <span class="rp-stat-icon rp-stat-icon--red">
                 <i class="ti ti-alert-circle"></i>
             </span>
-            <span class="rp-stat-label">Unassigned Trips</span>
+            <span class="rp-stat-label">Assignment Issues</span>
         </div>
         <div class="rp-stat-value">@Model.UnassignedTrips</div>
-        <div class="rp-stat-sub">Needs attention</div>
+        <div class="rp-stat-sub">@(Model.UnassignedTrips > 0 ? "Tap to view affected trips" : "Flagged bus or unavailable driver")</div>
     </div>
 
     <div class="rp-stat-card dp-side-card">
         <div class="dp-side-row">
-            <div>
+            <a class="dp-side-link" href="/Vehicles?status=Flagged" title="View flagged vehicles">
                 <div class="rp-stat-label">Flagged Vehicles</div>
                 <div class="rp-stat-value dp-side-value--red">@Model.FlaggedVehicles</div>
-            </div>
+                @if (Model.FlaggedVehicles > 0)
+                {
+                    <div class="dp-side-view">View &#8250;</div>
+                }
+            </a>
             <div>
                 <div class="rp-stat-label">Unavailable Drivers</div>
                 <div class="rp-stat-value dp-side-value--red">@Model.UnavailableDrivers</div>
@@ -64,13 +87,22 @@
         <i class="ti ti-plus"></i> Add Trip
     </button>
     <button class="dp-btn-secondary" onclick="openBroadcastModal()"><i class="ti ti-speakerphone"></i> Broadcast Message</button>
+    <a class="dp-btn-secondary" href="/Schedule" style="text-decoration:none;"><i class="ti ti-calendar-week"></i> Edit Schedule</a>
     <div class="dp-search-wrap">
         <i class="ti ti-search dp-search-icon"></i>
         <input type="text" id="searchInput" class="dp-search-input" placeholder="Search…" oninput="filterRows()" />
     </div>
+    <button class="dp-btn-refresh" id="dpRefreshBtn" onclick="dpRefresh(true)" title="Refresh this page only">
+        <i class="ti ti-refresh"></i> Refresh
+    </button>
+    <label class="dp-auto-toggle" title="Auto refresh every 30 seconds">
+        <input type="checkbox" id="dpAutoChk" checked /> Auto
+    </label>
+    <span class="dp-updated" id="dpUpdated"></span>
 </div>
 
 <!-- ROUTE BLOCKS -->
+<div id="dpRoutes">
 @foreach (var route in Model.Routes)
 {
     <div class="rp-card rp-card--table dp-route-card" data-route-id="@route.RouteId">
@@ -201,6 +233,10 @@
         </div>
     </div>
 }
+</div><!-- /dpRoutes -->
+
+<!-- spacer so content above isn't hidden behind the fixed legend bar -->
+<div style="height:64px;"></div>
 
 <!-- LEGEND -->
 <div class="rp-card dp-legend-card">
@@ -212,6 +248,124 @@
         <span class="dp-legend-item"><span class="dp-status-dot dp-dot--red"></span> Bus: flagged &nbsp;|&nbsp; Driver: unavailable</span>
     </div>
 </div>
+
+<!-- Shared message popup (Add Trip / Reassign conflicts) -->
+<div id="dp-msg-modal" class="dp-msg-overlay" style="display:none;">
+    <div class="dp-msg-box">
+        <div class="dp-msg-head">
+            <span class="dp-msg-ico">&#9888;</span>
+            <h3 id="dp-msg-title">Schedule conflict</h3>
+        </div>
+        <ul id="dp-msg-list" class="dp-msg-list"></ul>
+        <button class="dp-msg-btn" onclick="dpCloseMsg()">Got it</button>
+    </div>
+</div>
+
+<script>
+    function dpShowMsg(messages, title) {
+        document.getElementById('dp-msg-title').textContent = title || 'Schedule conflict';
+        document.getElementById('dp-msg-list').innerHTML =
+            (Array.isArray(messages) ? messages : [messages]).map(m => `<li>${m}</li>`).join('');
+        document.getElementById('dp-msg-modal').style.display = 'flex';
+    }
+    function dpCloseMsg() { document.getElementById('dp-msg-modal').style.display = 'none'; }
+
+    function dpHighlightIssues() {
+        const rows = document.querySelectorAll('.dp-trip-row[data-trip-status="Assignment Issue"]');
+        document.querySelectorAll('.dp-row-flag').forEach(r => r.classList.remove('dp-row-flag'));
+        if (!rows.length) return;
+        rows.forEach(r => r.classList.add('dp-row-flag'));
+        rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // ── Live refresh ───────────────────────────────────────────
+    // Re-fetch THIS page (current date in the URL) and swap only the stats +
+    // route blocks. No full browser reload, no SignalR. Manual button always
+    // runs; the 30s auto-poll skips when a modal is open, the user is searching,
+    // or the tab is hidden so it never yanks the view mid-action.
+    let dpBusy = false;
+
+    function dpAnyModalOpen() {
+        return [...document.querySelectorAll('[class*="overlay"]')]
+            .some(el => getComputedStyle(el).display !== 'none');
+    }
+
+    function dpStamp() {
+        const el = document.getElementById('dpUpdated');
+        if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    async function dpRefresh(manual) {
+        if (dpBusy) return;
+        dpBusy = true;
+        const btn = document.getElementById('dpRefreshBtn');
+        if (manual && btn) btn.classList.add('spinning');
+        try {
+            const res = await fetch(window.location.href, { headers: { 'X-Requested-With': 'fetch' } });
+            const html = await res.text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            ['dpStats', 'dpRoutes'].forEach(id => {
+                const fresh = doc.getElementById(id);
+                const cur = document.getElementById(id);
+                if (fresh && cur) cur.innerHTML = fresh.innerHTML;
+            });
+            // Re-apply active search filter to the swapped rows.
+            const s = document.getElementById('searchInput');
+            if (s && s.value) filterRows();
+            dpStamp();
+        } catch (e) {
+            console.warn('dispatch refresh failed', e);
+        } finally {
+            dpBusy = false;
+            if (btn) btn.classList.remove('spinning');
+        }
+    }
+
+    setInterval(() => {
+        const chk = document.getElementById('dpAutoChk');
+        if (!chk || !chk.checked) return;
+        if (document.hidden) return;
+        if (dpAnyModalOpen()) return;
+        const s = document.getElementById('searchInput');
+        if (s && s.value) return;
+        dpRefresh(false);
+    }, 30000);
+
+    dpStamp();
+</script>
+
+<style>
+    .dp-card-click { cursor:pointer; transition:box-shadow .15s, transform .15s; }
+    .dp-card-click:hover { box-shadow:0 6px 20px rgba(231,76,60,.22); transform:translateY(-2px); }
+    .dp-trip-row.dp-row-flag > td { background:#FEECEC !important; }
+    .dp-trip-row.dp-row-flag { outline:2px solid #E74C3C; outline-offset:-2px; }
+
+    .dp-title-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+    .dp-date-badge { display:inline-flex; align-items:center; gap:8px; padding:8px 16px; border-radius:30px; background:#EAF7F5; color:#2e7d72; font-size:.86rem; font-weight:700; border:1px solid #CDE9E4; }
+    .dp-date-badge i { font-size:1rem; }
+    .dp-date-nav { display:inline-flex; align-items:center; gap:8px; }
+    .dp-date-arrow { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:50%; background:#EAF7F5; color:#2e7d72; border:1px solid #CDE9E4; text-decoration:none; font-size:1.1rem; transition:background .15s,transform .15s; }
+    .dp-date-arrow:hover { background:#2e7d72; color:#fff; transform:translateY(-1px); }
+    .dp-date-today { display:inline-flex; align-items:center; padding:7px 14px; border-radius:30px; background:#fff; color:#2e7d72; border:1px solid #CDE9E4; font-size:.82rem; font-weight:700; text-decoration:none; }
+    .dp-date-today:hover { background:#2e7d72; color:#fff; }
+
+    .dp-btn-refresh { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; background:#fff; color:#2e7d72; border:1px solid #CDE9E4; font-weight:700; font-size:.86rem; cursor:pointer; }
+    .dp-btn-refresh:hover { background:#EAF7F5; }
+    .dp-btn-refresh.spinning i { animation:dpSpin .7s linear infinite; }
+    @@keyframes dpSpin { to { transform:rotate(360deg); } }
+    .dp-auto-toggle { display:inline-flex; align-items:center; gap:6px; font-size:.84rem; color:#5a6b78; font-weight:600; cursor:pointer; user-select:none; }
+    .dp-updated { font-size:.78rem; color:#8a98a3; }
+
+    .dp-msg-overlay { position:fixed; inset:0; background:rgba(13,28,40,.5); z-index:3000; display:flex; align-items:center; justify-content:center; padding:24px; }
+    .dp-msg-box { background:#fff; border-radius:16px; width:100%; max-width:440px; padding:24px; box-shadow:0 14px 44px rgba(0,0,0,.28); font-family:'Segoe UI',sans-serif; }
+    .dp-msg-head { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+    .dp-msg-ico { font-size:1.4rem; color:#E74C3C; }
+    .dp-msg-head h3 { margin:0; font-size:1.1rem; color:#1a2a4a; font-weight:800; }
+    .dp-msg-list { margin:0 0 18px; padding-left:18px; display:flex; flex-direction:column; gap:7px; }
+    .dp-msg-list li { font-size:.85rem; color:#41505e; line-height:1.4; }
+    .dp-msg-btn { width:100%; border:none; border-radius:10px; padding:11px; font-size:.9rem; font-weight:800; color:#fff; background:#4AADA8; cursor:pointer; }
+    .dp-msg-btn:hover { background:#3d9490; }
+</style>
 
 <style>
     :root {
@@ -340,6 +494,7 @@
         color: var(--rp-text);
         font-family: 'Segoe UI', sans-serif;
         line-height: 1.1;
+        text-align: center;
     }
 
     .rp-stat-sub {
@@ -347,6 +502,7 @@
         color: var(--rp-muted);
         font-family: 'Segoe UI', sans-serif;
         margin-top: 4px;
+        text-align: center;
     }
 
     /* ── Side info card (flagged/unavailable) ──────────────── */
@@ -358,13 +514,40 @@
 
     .dp-side-row {
         display: flex;
-        align-items: flex-start;
+        align-items: stretch;
         justify-content: space-between;
         gap: 16px;
+        text-align: center;
+    }
+
+    .dp-side-row > * {
+        flex: 1;
     }
 
     .dp-side-value--red {
         color: #E74C3C;
+    }
+
+    /* clickable flagged column */
+    .dp-side-link {
+        text-decoration: none;
+        display: block;
+        border-radius: 10px;
+        padding: 4px 6px;
+        transition: background 150ms;
+    }
+
+    .dp-side-link:hover {
+        background: #FEECEC;
+    }
+
+    .dp-side-view {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: #E74C3C;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        margin-top: 2px;
     }
 
     /* ── Toolbar ────────────────────────────────────────────── */
@@ -783,15 +966,26 @@
 
     /* ── Legend ─────────────────────────────────────────────── */
     .dp-legend-card {
-        margin-bottom: 0;
-        padding: 14px 22px;
+        position: fixed;
+        left: 72px;   /* clear the collapsed sidebar */
+        right: 0;
+        bottom: 0;
+        z-index: 200;
+        margin: 0;
+        padding: 12px 22px;
+        box-shadow: 0 -4px 18px rgba(0,0,0,.10);
+        border: none;
+        border-top: 1px solid #E8ECF0;
+        border-radius: 0;
+        background: #fff;
     }
 
     .dp-legend-row {
         display: flex;
         flex-wrap: wrap;
-        gap: 18px;
+        gap: 14px 22px;
         align-items: center;
+        justify-content: center;
         font-family: 'Segoe UI', sans-serif;
     }
 
