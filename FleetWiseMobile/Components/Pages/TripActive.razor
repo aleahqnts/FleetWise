@@ -138,16 +138,21 @@ else
         ? PhTime.Raw(trip.ActualStartTime.Value).ToString("h:mm tt")
         : (trip is null ? "" : DateTime.Today.Add(trip.ShiftStartTime).ToString("h:mm tt"));
 
+    // Shift window anchored to the trip's own date. Overnight shifts (end <= start,
+    // e.g. 10pm -> 6am) roll the end to the next day so the bar fill and the
+    // remaining countdown span the same real window.
+    private DateTime ShiftStart => trip is null ? DateTime.MinValue : trip.Date.Date + trip.ShiftStartTime;
+    private DateTime ShiftEnd => trip is null ? DateTime.MinValue
+        : trip.Date.Date + trip.ShiftEndTime + (trip.ShiftEndTime <= trip.ShiftStartTime ? TimeSpan.FromDays(1) : TimeSpan.Zero);
+
     private int ProgressPct
     {
         get
         {
             if (trip is null) return 0;
-            var start = DateTime.Today.Add(trip.ShiftStartTime);
-            var end = DateTime.Today.Add(trip.ShiftEndTime);
-            if (now <= start) return 0;
-            if (now >= end) return 100;
-            var pct = (now - start).TotalSeconds / (end - start).TotalSeconds * 100;
+            if (now <= ShiftStart) return 0;
+            if (now >= ShiftEnd) return 100;
+            var pct = (now - ShiftStart).TotalSeconds / (ShiftEnd - ShiftStart).TotalSeconds * 100;
             return (int)Math.Clamp(pct, 0, 100);
         }
     }
@@ -157,8 +162,7 @@ else
         get
         {
             if (trip is null) return "";
-            var end = DateTime.Today.Add(trip.ShiftEndTime);
-            var left = end - now;
+            var left = ShiftEnd - now;
             if (left <= TimeSpan.Zero) return "Shift ended";
             return $"{(int)left.TotalHours}h {left.Minutes}m remaining";
         }
