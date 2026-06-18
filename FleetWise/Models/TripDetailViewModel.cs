@@ -23,6 +23,13 @@ namespace FleetWise.ViewModels
         public string DriverId { get; set; }
         public string DriverStatus { get; set; }
 
+        // Trip Outcome (only meaningful once the trip is Completed)
+        public bool IsCompleted { get; set; }
+        public int? TotalBoarded { get; set; }
+        public decimal? EstimatedRevenue { get; set; }
+        public string ActualStartTime { get; set; }
+        public string ActualEndTime { get; set; }
+
         // Inspection Log
         public TripChecklistViewModel Checklist { get; set; }
         public List<TripMaintenanceLogViewModel> MaintenanceLogs { get; set; } = new();
