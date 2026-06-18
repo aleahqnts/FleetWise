@@ -500,7 +500,7 @@
             const driverId  = parseInt(driverSel.value) || _rtmOptions.tripInfo.currentDriverId;
 
             if (!vehicleId && !driverId) {
-                alert('Please select a vehicle and/or driver to reassign.');
+                dpShowMsg(['Please select a vehicle and/or driver to reassign.'], 'Nothing to change');
                 return;
             }
 
@@ -519,13 +519,13 @@
                     })
                 });
 
-                if (!res.ok) throw new Error();
+                if (!res.ok) { closeReassignModal(); dpShowMsg([await res.text() || 'Failed to reassign trip. Please try again.']); return; }
 
                 closeReassignModal();
                 window.location.reload();
 
             } catch {
-                alert('Failed to reassign trip. Please try again.');
+                dpShowMsg(['Failed to reassign trip. Please try again.']);
             } finally {
                 saveBtn.disabled = false;
                 document.getElementById('rtm-save-label').style.display  = 'inline';
