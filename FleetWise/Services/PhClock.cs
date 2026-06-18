@@ -18,6 +18,12 @@ namespace FleetWise.Services
         // PH calendar date (for DATE columns like vehicles.last_maintenance_date).
         public static DateTime Today => Now.Date;
 
+        // One operating cycle runs 06:00 -> 05:59 the NEXT morning, so the 22:00–06:00
+        // night shift counts under its START date. Before 6 AM we're still inside
+        // yesterday's cycle. Use this (not Today) anywhere a "service day" is meant.
+        public static readonly TimeSpan DayStartTime = TimeSpan.FromHours(6);
+        public static DateTime OperationalDay => Now.TimeOfDay < DayStartTime ? Today.AddDays(-1) : Today;
+
         private static TimeZoneInfo ResolveTz()
         {
             // IANA id works cross-platform on .NET 6+; Windows id is the fallback; a fixed

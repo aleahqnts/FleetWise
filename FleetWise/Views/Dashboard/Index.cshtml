@@ -8,8 +8,23 @@
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-<!-- PAGE TITLE -->
-<h2 class="db-title">Dashboard</h2>
+<!-- PAGE TITLE + REFRESH -->
+<div class="db-title-row">
+    <h2 class="db-title">Dashboard</h2>
+    <div class="db-title-tools">
+        <span class="db-date-badge">@Model.Today.ToString("ddd, dd MMM yyyy")</span>
+        <button class="db-btn-refresh" id="dbRefreshBtn" onclick="dbRefresh(true)" title="Refresh this page only">
+            <span class="db-refresh-ico">&#x21bb;</span> Refresh
+        </button>
+        <span class="db-updated" id="dbUpdated" title="Auto-refreshes every 30 seconds"></span>
+    </div>
+</div>
+
+<!-- LIVE REGION (swapped by AJAX refresh) -->
+<div id="dbStats">
+
+<!-- chart data carried here so refresh can update the chart without reloading the page -->
+<script type="application/json" id="dbChartData">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ChartData))</script>
 
 <!-- STAT CARDS -->
 <div class="db-stat-grid">
@@ -44,7 +59,7 @@
         <div class="db-stat-value">@Model.FlaggedVehicles</div>
     </div>
 
-    <div class="db-stat-card">
+    <div class="db-stat-card db-stat-card--click" onclick="dbToggleBreakdown()" title="Click for per-trip breakdown">
         <div class="db-stat-header">
             <span class="db-stat-icon db-stat-icon--blue">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none"
@@ -52,7 +67,8 @@
                     <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                 </svg>
             </span>
-            <span class="db-stat-label">Total Passengers</span>
+            <span class="db-stat-label">Total Boarded</span>
+            <span class="db-stat-chevron" id="dbPaxChevron">&#9656;</span>
         </div>
         <div class="db-stat-value">@Model.TotalPassengers</div>
         @if (Model.PassengerDelta != 0)
@@ -87,6 +103,48 @@
 
 </div>
 
+<!-- TOTAL PASSENGERS MODAL (opened by the card) -->
+<div class="db-modal-overlay" id="dbBreakdown" style="display:none;" onclick="if(event.target===this)dbCloseModal()">
+    <div class="db-modal">
+        <div class="db-modal-head">
+            <div>
+                <div class="db-modal-title">Total Boarded Breakdown</div>
+                <div class="db-modal-sub">All trips this service day (@Model.ActiveTripBreakdown.Count) &bull; @Model.TotalPassengers boarded</div>
+            </div>
+            <button class="db-modal-close" onclick="dbCloseModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="db-modal-body">
+            @if (Model.ActiveTripBreakdown.Count == 0)
+            {
+                <div class="db-breakdown-empty">No trips this service day.</div>
+            }
+            else
+            {
+                <table class="db-breakdown-table">
+                    <thead>
+                        <tr><th>Trip</th><th>Route</th><th>Vehicle</th><th>Shift</th><th>Status</th><th class="db-num">Boarded</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.ActiveTripBreakdown)
+                        {
+                            <tr>
+                                <td>@row.TripId</td>
+                                <td>@row.RouteName</td>
+                                <td>@row.VehicleId</td>
+                                <td>@row.ShiftType</td>
+                                <td>@row.Status</td>
+                                <td class="db-num"><strong>@row.Passengers</strong></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+</div>
+
+</div><!-- /#dbStats -->
+
 <!-- MIDDLE ROW: Chart + Map -->
 <div class="db-mid-grid">
 
@@ -101,7 +159,7 @@
                     <line x1="6" y1="20" x2="6" y2="14" />
                 </svg>
             </span>
-            <span class="db-card-title">Passenger Count</span>
+            <span class="db-card-title">Passengers Boarded by Hour</span>
             <span class="db-badge db-badge--teal">@Model.SelectedRouteName</span>
             <div class="db-chart-legend">
                 <span class="db-legend-swatch" style="background:#4AADA8;"></span>
@@ -140,50 +198,163 @@
     <!-- Chart.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script>
-        // Data injected from the ViewModel — replace hardcoded arrays with server values
+        // Hour labels from the ViewModel; per-hour onboard counts read from the live
+        // region so an AJAX refresh can update the chart without a reload.
         const chartLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ChartLabels));
-        const chartData   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ChartData));
+        const chartDay1 = '@Model.Today.ToString("ddd, dd MMM")';
+        const chartDay2 = '@Model.Today.AddDays(1).ToString("ddd, dd MMM")';
+        // midnight = first "12:00 AM" -> start of the 2nd calendar day in this 6am->6am cycle
+        const dbMidnightIdx = chartLabels.indexOf('12:00 AM');
+
+        function dbReadHourly() {
+            try { return JSON.parse(document.getElementById('dbChartData').textContent) || []; }
+            catch (e) { return []; }
+        }
+
+        // Tints the 2nd day's region + draws a divider and day labels so it's obvious
+        // where one calendar day ends and the next begins inside the cycle.
+        const dbDayBandPlugin = {
+            id: 'dbDayBand',
+            beforeDraw(chart) {
+                if (dbMidnightIdx < 0) return;
+                const { ctx, chartArea: area, scales } = chart;
+                const xMid = scales.x.getPixelForValue(dbMidnightIdx);
+                ctx.save();
+                // shade day 2
+                ctx.fillStyle = 'rgba(59,130,246,0.05)';
+                ctx.fillRect(xMid, area.top, area.right - xMid, area.bottom - area.top);
+                // divider
+                ctx.strokeStyle = 'rgba(59,130,246,0.45)';
+                ctx.lineWidth = 1.2;
+                ctx.setLineDash([5, 4]);
+                ctx.beginPath();
+                ctx.moveTo(xMid, area.top);
+                ctx.lineTo(xMid, area.bottom);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                // day labels
+                ctx.font = '600 11px Segoe UI';
+                ctx.textBaseline = 'top';
+                ctx.fillStyle = '#9AA5B4';
+                ctx.textAlign = 'center';
+                ctx.fillText(chartDay1, (area.left + xMid) / 2, area.top + 2);
+                ctx.fillStyle = '#3B82F6';
+                ctx.fillText(chartDay2, (xMid + area.right) / 2, area.top + 2);
+                ctx.restore();
+            }
+        };
 
         const ctx = document.getElementById('demandChart').getContext('2d');
-        new Chart(ctx, {
+        window.demandChart = new Chart(ctx, {
         type: 'line',
+        plugins: [dbDayBandPlugin],
         data: {
         labels: chartLabels,
         datasets: [{
-        label: '@Model.SelectedRouteName',
-        data: chartData,
+        label: 'Passengers boarded',
+        data: dbReadHourly(),
         borderColor: '#4AADA8',
         backgroundColor: 'rgba(74,173,168,0.08)',
         borderWidth: 2.2,
         pointBackgroundColor: '#4AADA8',
         pointRadius: 5,
-        pointHoverRadius: 7,
-        tension: 0,
+        pointHoverRadius: 9,
+        pointHitRadius: 25,
+        tension: 0.25,
         fill: true
         }]
         },
         options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
+        // wider grab zone: hover snaps to nearest point even without pixel-perfect aim
+        interaction: { mode: 'index', intersect: false, axis: 'x' },
+        plugins: {
+        legend: { display: false },
+        tooltip: {
+        callbacks: {
+        title: items => 'Hour: ' + items[0].label,
+        label: item => 'Boarded so far: ' + item.parsed.y
+        }
+        }
+        },
         scales: {
         x: {
+        title: { display: true, text: 'Hour of day (PHT)', color: '#9AA5B4', font: { size: 11, family: 'Segoe UI' } },
         grid: { color: '#F0F0F0' },
         ticks: { font: { size: 11, family: 'Segoe UI' }, color: '#9AA5B4' }
         },
         y: {
-        min: 0,
-        max: @Model.ChartYMax,
-        ticks: {
-        stepSize: @Model.ChartYStep,
-        font: { size: 11, family: 'Segoe UI' },
-        color: '#9AA5B4'
-        },
+        beginAtZero: true,
+        suggestedMax: dbYMax(dbReadHourly()),
+        title: { display: true, text: 'Passengers', color: '#9AA5B4', font: { size: 11, family: 'Segoe UI' } },
+        ticks: { precision: 0, font: { size: 11, family: 'Segoe UI' }, color: '#9AA5B4' },
         grid: { color: '#F0F0F0' }
         }
         }
         }
         });
+
+        // top of axis = peak + ~20% headroom (rounded to a nice 10), so the line never
+        // hugs the very top of the chart.
+        function dbYMax(data) {
+        const m = Math.max(0, ...data.filter(v => v != null));
+        return m <= 0 ? 10 : Math.ceil((m * 1.2) / 10) * 10;
+        }
+
+        function dbUpdateChart() {
+        const d = dbReadHourly();
+        window.demandChart.data.datasets[0].data = d;
+        window.demandChart.options.scales.y.suggestedMax = dbYMax(d);
+        window.demandChart.update();
+        }
+
+        // ── Total Passengers modal ────────────────────────────────────
+        function dbToggleBreakdown() {
+        const m = document.getElementById('dbBreakdown');
+        if (m) m.style.display = 'flex';
+        }
+        function dbCloseModal() {
+        const m = document.getElementById('dbBreakdown');
+        if (m) m.style.display = 'none';
+        }
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') dbCloseModal(); });
+
+        // ── AJAX refresh (manual button + silent 30s poll) ────────────
+        let dbBusy = false;
+        function dbStamp() {
+        const el = document.getElementById('dbUpdated');
+        if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+        async function dbRefresh(manual) {
+        if (dbBusy) return;
+        dbBusy = true;
+        const btn = document.getElementById('dbRefreshBtn');
+        if (manual && btn) btn.classList.add('spinning');
+        // keep the modal open across refreshes
+        const wasOpen = document.getElementById('dbBreakdown')?.style.display === 'flex';
+        try {
+        const res = await fetch(window.location.href, { headers: { 'X-Requested-With': 'fetch' } });
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const fresh = doc.getElementById('dbStats');
+        const cur = document.getElementById('dbStats');
+        if (fresh && cur) cur.innerHTML = fresh.innerHTML;
+        if (wasOpen) { const p = document.getElementById('dbBreakdown'); if (p) p.style.display = 'flex'; }
+        dbUpdateChart();
+        dbStamp();
+        } catch (e) {
+        console.warn('dashboard refresh failed', e);
+        } finally {
+        dbBusy = false;
+        if (btn) btn.classList.remove('spinning');
+        }
+        }
+        setInterval(() => {
+        if (document.hidden) return;
+        dbRefresh(false);
+        }, 30000);
+        dbStamp();
 
         // ── Filter form helper ────────────────────────────────────────
         // Re-submits the filter form whenever the route dropdown changes.
@@ -272,6 +443,137 @@
         font-family: 'Segoe UI', sans-serif;
         margin-bottom: 20px;
         }
+
+        /* ── Title row + refresh + date ─────────────────────────── */
+        .db-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 20px;
+        }
+
+        .db-title-row .db-title { margin-bottom: 0; }
+
+        .db-title-tools {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        }
+
+        .db-date-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        border-radius: 30px;
+        background: var(--db-teal-light);
+        color: var(--db-teal);
+        font-size: .82rem;
+        font-weight: 700;
+        font-family: 'Segoe UI', sans-serif;
+        border: 1px solid #CDE9E4;
+        }
+
+        .db-btn-refresh {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        border-radius: 8px;
+        background: #fff;
+        color: var(--db-teal);
+        border: 1px solid #CDE9E4;
+        font-weight: 700;
+        font-size: .84rem;
+        font-family: 'Segoe UI', sans-serif;
+        cursor: pointer;
+        }
+
+        .db-btn-refresh:hover { background: var(--db-teal-light); }
+        .db-btn-refresh.spinning .db-refresh-ico { display:inline-block; animation: dbSpin .7s linear infinite; }
+        .db-refresh-ico { font-size: 1rem; line-height: 1; }
+        @@keyframes dbSpin { to { transform: rotate(360deg); } }
+        .db-updated { font-size: .78rem; color: var(--db-muted); font-family: 'Segoe UI', sans-serif; }
+
+        /* ── Clickable Total Passengers card + breakdown ────────── */
+        .db-stat-card--click { cursor: pointer; transition: box-shadow .15s, transform .15s; }
+        .db-stat-card--click:hover { box-shadow: 0 6px 18px rgba(59,130,246,.18); transform: translateY(-2px); }
+        .db-stat-chevron { margin-left: auto; color: var(--db-muted); font-size: .8rem; }
+
+        .db-modal-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 3000;
+        background: rgba(13,28,40,.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        }
+
+        .db-modal {
+        background: var(--db-white);
+        border-radius: 16px;
+        width: 100%;
+        max-width: 720px;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 14px 44px rgba(0,0,0,.28);
+        font-family: 'Segoe UI', sans-serif;
+        }
+
+        .db-modal-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--db-border);
+        }
+
+        .db-modal-title { font-size: 1.05rem; font-weight: 800; color: var(--db-text); }
+        .db-modal-sub { font-size: .8rem; color: var(--db-muted); margin-top: 3px; }
+
+        .db-modal-close {
+        border: none;
+        background: transparent;
+        font-size: 1.6rem;
+        line-height: 1;
+        color: var(--db-muted);
+        cursor: pointer;
+        padding: 0 4px;
+        }
+        .db-modal-close:hover { color: var(--db-text); }
+
+        .db-modal-body { padding: 14px 22px 20px; overflow-y: auto; }
+
+        .db-breakdown-empty { font-size: .85rem; color: var(--db-muted); font-family: 'Segoe UI', sans-serif; }
+
+        .db-breakdown-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: .84rem;
+        }
+
+        .db-breakdown-table th {
+        text-align: left;
+        color: var(--db-muted);
+        font-weight: 600;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--db-border);
+        }
+
+        .db-breakdown-table td {
+        color: var(--db-text);
+        padding: 8px 10px;
+        border-bottom: 1px solid #F2F4F7;
+        }
+
+        .db-breakdown-table .db-num { text-align: right; }
 
         /* ── Stat grid ──────────────────────────────────────────── */
         .db-stat-grid {
