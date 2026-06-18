@@ -53,7 +53,15 @@ namespace FleetWise.Controllers
             decimal todayRevenue = todayTrips.Sum(t => t.EstimatedRevenue);
             decimal yesterdayRevenue = yesterdayTrips.Sum(t => t.EstimatedRevenue);
 
-            // ── Passenger Count (from telemetry_data) ─────────────────
+            // ── Passenger Count (from trips.total_boarded) ────────────
+            var todayTripIds = todayTrips.Select(t => t.TripId).ToHashSet();
+            var yesterdayTripIds = yesterdayTrips.Select(t => t.TripId).ToHashSet();
+
+            int todayPassengers = todayTrips.Sum(t => t.TotalBoarded);
+            int yesterdayPassengers = yesterdayTrips.Sum(t => t.TotalBoarded);
+
+            // ── Telemetry feed (hourly chart only — TotalBoarded has no intra-day
+            //    breakdown, so the demand chart still needs the raw telemetry stream) ──
             var telemetryResponse = await _supabase
                 .From<TelemetryData>()
                 .Filter("timestamp", Postgrest.Constants.Operator.GreaterThanOrEqual,
@@ -61,20 +69,6 @@ namespace FleetWise.Controllers
                 .Filter("timestamp", Postgrest.Constants.Operator.LessThan,
                         today.AddDays(1).ToString("yyyy-MM-dd"))
                 .Get();
-
-            var todayTripIds = todayTrips.Select(t => t.TripId).ToHashSet();
-            var yesterdayTripIds = yesterdayTrips.Select(t => t.TripId).ToHashSet();
-
-            // For each trip, take the most recent telemetry record's passenger count
-            var todayPassengers = telemetryResponse.Models
-                .Where(t => todayTripIds.Contains(t.TripId))
-                .GroupBy(t => t.TripId)
-                .Sum(g => g.OrderByDescending(t => t.Timestamp).First().TotalPassengers);
-
-            var yesterdayPassengers = telemetryResponse.Models
-                .Where(t => yesterdayTripIds.Contains(t.TripId))
-                .GroupBy(t => t.TripId)
-                .Sum(g => g.OrderByDescending(t => t.Timestamp).First().TotalPassengers);
 
             // ── Passenger Demand Chart (hourly buckets) ───────────────
             // Covers all three shifts: 06:00–14:00, 14:00–22:00, 22:00–06:00
