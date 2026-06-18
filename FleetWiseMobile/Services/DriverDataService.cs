@@ -256,6 +256,9 @@ public class DriverDataService
             body = new { trip_status = "Active" }; // resume keeps original start
 
         await PatchAsync($"trips?trip_id=eq.{Uri.EscapeDataString(tripId)}", body);
+
+        if (!string.IsNullOrEmpty(t.VehicleId))
+            await UpdateVehicleStatusAsync(t.VehicleId, "On Trip");
     }
 
     public async Task UpdateTripProgressAsync(string tripId, int totalBoarded, decimal revenue)
@@ -266,6 +269,8 @@ public class DriverDataService
 
     public async Task EndTripAsync(string tripId, int totalBoarded, decimal revenue)
     {
+        var t = await GetTripAsync(tripId);
+
         await PatchAsync($"trips?trip_id=eq.{Uri.EscapeDataString(tripId)}",
             new
             {
@@ -274,5 +279,8 @@ public class DriverDataService
                 estimated_revenue = revenue,
                 actual_end_time = PhTime.Now
             });
+
+        if (!string.IsNullOrEmpty(t?.VehicleId))
+            await UpdateVehicleStatusAsync(t.VehicleId, "Ready to Deploy");
     }
 }
