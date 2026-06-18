@@ -18,14 +18,20 @@ namespace FleetWise.Controllers
             _supabase = supabase;
         }
 
-        public async Task<IActionResult> Index()
+        public async Task<IActionResult> Index(string date)
         {
-            // --- Always scope dispatch to today's date ---
-            var today = PhClock.Today.ToString("yyyy-MM-dd");
+            // --- Scope dispatch to the selected date (default today). The arrows in
+            //     the header move this back/forward a day. ---
+            var selected = DateTime.TryParse(date, out var d) ? d.Date : PhClock.Today;
+            var selStr = selected.ToString("yyyy-MM-dd");
+            // Also pull the previous day so an overnight shift (end <= start, e.g.
+            // 10pm -> 6am) started yesterday still shows on today's board.
+            var prevStr = selected.AddDays(-1).ToString("yyyy-MM-dd");
 
             // --- Fetch all data in parallel ---
             var tripsTask = _supabase.From<Trip>()
-                                       .Filter("date", Operator.Equals, today)
+                                       .Filter("date", Operator.GreaterThanOrEqual, prevStr)
+                                       .Filter("date", Operator.LessThanOrEqual, selStr)
                                        .Get();
             var vehiclesTask = _supabase.From<Vehicle>().Get();
             var routesTask = _supabase.From<BusRoute>().Get();
@@ -38,7 +44,12 @@ namespace FleetWise.Controllers
 
             await Task.WhenAll(tripsTask, vehiclesTask, routesTask, driversTask, availabilityTask, checklistsTask);
 
-            var trips = tripsTask.Result.Models;
+            // Keep trips on the selected day, plus overnight shifts from the previous
+            // day (their end rolls past midnight into the selected day).
+            static bool Overnight(Trip t) => t.ShiftEndTime <= t.ShiftStartTime;
+            var trips = tripsTask.Result.Models
+                .Where(t => t.Date.Date == selected || (t.Date.Date == selected.AddDays(-1) && Overnight(t)))
+                .ToList();
             var vehicles = vehiclesTask.Result.Models;
             var routes = routesTask.Result.Models;
             var drivers = driversTask.Result.Models;
@@ -114,7 +125,10 @@ namespace FleetWise.Controllers
             // --- Group trips by route → shift ---
             var vm = new DispatchViewModel
             {
-                ScheduleDate = PhClock.Today,
+                ScheduleDate = selected,
+                PrevDate = selected.AddDays(-1).ToString("yyyy-MM-dd"),
+                NextDate = selected.AddDays(1).ToString("yyyy-MM-dd"),
+                IsToday = selected == PhClock.Today,
                 ActiveTrips = activeTrips,
                 TripsNotStarted = notStarted,
                 UnassignedTrips = unassigned,
