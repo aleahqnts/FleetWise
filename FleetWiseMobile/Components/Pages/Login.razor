@@ -3,6 +3,7 @@
 @inject AuthService Auth
 @inject SessionService Session
 @inject DriverDataService Data
+@inject MessageWatch Watch
 @inject NavigationManager Nav
 
 <div class="login-bg">
@@ -58,6 +59,7 @@
     {
         if (await Session.RestoreAsync())
         {
+            Watch.Start(Session.CurrentUser!.UserId);
             // Mid-trip? Go straight back to the counter, not Home (survives
             // WebView reboots on suspend / network change).
             var active = await SecureStorage.Default.GetAsync("fw_active_trip");
@@ -80,6 +82,7 @@
             }
 
             await Session.SetAsync(user);
+            Watch.Start(user.UserId);
             try { await Data.StampLoginAsync(user.UserId); } catch { /* non-blocking */ }
             Nav.NavigateTo("/home");
         }

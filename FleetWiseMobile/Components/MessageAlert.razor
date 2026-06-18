@@ -1,0 +1,95 @@
+@implements IDisposable
+@inject MessageWatch Watch
+@inject DriverDataService Data
+@using FleetWiseMobile.Models
+
+@if (current is not null)
+{
+    <div class="msg-pop-backdrop" @onclick="DismissIfAllowed">
+        <div class="msg-pop @(IsHigh(current) ? "high" : "")" @onclick:stopPropagation="true">
+            <div class="msg-pop-head">
+                <span class="msg-pop-scope">@ScopeLabel(current)</span>
+                @if (IsHigh(current))
+                {
+                    <span class="msg-pop-prio">High priority</span>
+                }
+            </div>
+            <p class="msg-pop-title">@current.Subject</p>
+            <p class="msg-pop-body">@current.Body</p>
+            <button class="msg-pop-btn" @onclick="Dismiss">
+                @(IsHigh(current) ? "Got it" : "Close")
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly Queue<MessageModel> _queue = new();
+    private MessageModel? current;
+    private System.Timers.Timer? _auto;
+
+    protected override void OnInitialized() => Watch.NewMessage += OnNew;
+
+    private void OnNew(MessageModel m)
+    {
+        _queue.Enqueue(m);
+        InvokeAsync(ShowNext);
+    }
+
+    private void ShowNext()
+    {
+        if (current is not null || _queue.Count == 0) return;
+        current = _queue.Dequeue();
+
+        _auto?.Dispose();
+        _auto = null;
+        // Normal msgs auto-close after 8s; high-priority must be tapped.
+        if (!IsHigh(current))
+        {
+            _auto = new System.Timers.Timer(8000) { AutoReset = false };
+            _auto.Elapsed += (_, _) => InvokeAsync(Dismiss);
+            _auto.Start();
+        }
+        StateHasChanged();
+    }
+
+    // Tapping the backdrop closes only non-high msgs (high needs explicit button).
+    private void DismissIfAllowed()
+    {
+        if (current is not null && !IsHigh(current)) _ = Dismiss();
+    }
+
+    private async Task Dismiss()
+    {
+        var m = current;
+        current = null;
+        _auto?.Dispose();
+        _auto = null;
+
+        if (m is not null && (m.TargetAudience ?? "").ToLowerInvariant() == "driver" && !m.IsRead)
+        {
+            m.IsRead = true;
+            try { await Data.MarkMessageReadAsync(m.MessageId); await Watch.RefreshNow(); }
+            catch { Watch.Recompute(); /* offline: badge refreshes on next poll */ }
+        }
+
+        StateHasChanged();
+        ShowNext();
+    }
+
+    private static bool IsHigh(MessageModel m) =>
+        string.Equals(m.Priority, "high", StringComparison.OrdinalIgnoreCase);
+
+    private static string ScopeLabel(MessageModel m) => (m.TargetAudience ?? "").ToLowerInvariant() switch
+    {
+        "all"   => "Broadcast · All drivers",
+        "route" => "Route message",
+        _       => "Direct message"
+    };
+
+    public void Dispose()
+    {
+        Watch.NewMessage -= OnNew;
+        _auto?.Dispose();
+    }
+}
