@@ -41,4 +41,10 @@ public class Trip : BaseModel
     // estimate so it never drops when passengers alight.
     [Column("total_boarded")]
     public int TotalBoarded { get; set; }
+
+    [Column("actual_start_time")]
+    public DateTime? ActualStartTime { get; set; }
+
+    [Column("actual_end_time")]
+    public DateTime? ActualEndTime { get; set; }
 }

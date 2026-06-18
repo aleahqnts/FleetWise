@@ -2,6 +2,7 @@
 {
     public class DispatchViewModel
     {
+        public DateTime ScheduleDate { get; set; }
         public int ActiveTrips { get; set; }
         public int TripsNotStarted { get; set; }
         public int UnassignedTrips { get; set; }
