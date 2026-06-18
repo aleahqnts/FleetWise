@@ -68,3 +68,27 @@
     height: 25px;
     width: auto;
 }
+
+.tabbar ::deep .tab-ico-wrap {
+    position: relative;
+    display: inline-flex;
+    line-height: 0;
+}
+
+.tabbar ::deep .tab-badge {
+    position: absolute;
+    top: -6px;
+    right: -9px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: #e23b3b;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 16px;
+    text-align: center;
+    box-shadow: 0 0 0 2px #fff;
+}

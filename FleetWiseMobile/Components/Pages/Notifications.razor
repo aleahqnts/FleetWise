@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject SessionService Session
 @inject DriverDataService Data
+@inject MessageWatch Watch
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 
@@ -120,6 +121,8 @@ else
         if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
         items = await Data.GetMessagesAsync(Session.CurrentUser!.UserId);
         loading = false;
+        await Watch.RefreshNow();   // sync Watch cache w/ DB (authoritative is_read)
+        Watch.MarkSeenNow();        // opening the tab clears broadcast/route from the badge
     }
 
     private long? expandedId;
@@ -130,7 +133,7 @@ else
         if (IsUnread(n))
         {
             n.IsRead = true;
-            try { await Data.MarkMessageReadAsync(n.MessageId); }
+            try { await Data.MarkMessageReadAsync(n.MessageId); await Watch.RefreshNow(); }
             catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Msg.Read] {ex}"); }
         }
     }
@@ -147,6 +150,7 @@ else
     [JSInvokable] public async Task Refresh()
     {
         items = await Data.GetMessagesAsync(Session.CurrentUser!.UserId);
+        Watch.MarkSeenNow();
         StateHasChanged();
     }
     public void Dispose() => _ptrRef?.Dispose();

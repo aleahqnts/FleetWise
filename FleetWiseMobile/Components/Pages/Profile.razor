@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Identity
 @inject SessionService Session
 @inject DriverDataService Data
+@inject MessageWatch Watch
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 
@@ -206,6 +207,7 @@ else
 
     private void Logout()
     {
+        Watch.Stop();
         Session.Logout();
         Nav.NavigateTo("/");
     }
