@@ -76,12 +76,13 @@ public class MessageWatch
             var msgs = await _data.GetMessagesAsync(_userId);
             _msgs = msgs;
 
+            bool firstPass = !_seeded;
             foreach (var m in msgs)
             {
                 if (_known.Contains(m.MessageId)) continue;
                 _known.Add(m.MessageId);
 
-                // First poll just seeds what already exists — don't alert for history.
+                // First poll just seeds what already exists — don't alert per-row for history.
                 if (_seeded)
                 {
                     NewMessage?.Invoke(m);
@@ -90,6 +91,16 @@ public class MessageWatch
                 }
             }
             _seeded = true;
+
+            // On app launch (first poll), surface the newest UNREAD direct message that
+            // arrived while the app was closed — one popup, not a per-message storm.
+            if (firstPass)
+            {
+                var latestUnread = msgs.FirstOrDefault(m =>
+                    (m.TargetAudience ?? "").ToLowerInvariant() == "driver" && !m.IsRead);
+                if (latestUnread is not null) NewMessage?.Invoke(latestUnread);
+            }
+
             Recompute();
         }
         catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Watch.Poll] {ex}"); }
