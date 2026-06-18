@@ -49,12 +49,7 @@ namespace FleetWise.Controllers
             var tripsResp = await _supabase.From<Trip>().Get();
             var allTrips = tripsResp.Models;
 
-            var telemetryResp = await _supabase.From<TelemetryData>().Get();
-            var latestPassengersByTrip = telemetryResp.Models
-                .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().TotalPassengers);
-
-            int Passengers(Trip t) => latestPassengersByTrip.TryGetValue(t.TripId, out var p) ? p : 0;
+            int Passengers(Trip t) => t.TotalBoarded;
 
             bool MatchesGlobalFilters(Trip t) =>
                 (!routeId.HasValue || routeId.Value == 0 || t.RouteId == routeId.Value) &&
@@ -404,12 +399,7 @@ namespace FleetWise.Controllers
             var tripsResp = await _supabase.From<Trip>().Get();
             var allTrips = tripsResp.Models;
 
-            var telemetryResp = await _supabase.From<TelemetryData>().Get();
-            var latestPassengersByTrip = telemetryResp.Models
-                .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().TotalPassengers);
-
-            int Passengers(Trip t) => latestPassengersByTrip.TryGetValue(t.TripId, out var p) ? p : 0;
+            int Passengers(Trip t) => t.TotalBoarded;
 
             // ── Apply filters ─────────────────────────────────────────
             var filtered = allTrips
@@ -537,12 +527,7 @@ namespace FleetWise.Controllers
 
             var tripsResp = await _supabase.From<Trip>().Get();
 
-            var telemetryResp = await _supabase.From<TelemetryData>().Get();
-            var latestPassengersByTrip = telemetryResp.Models
-                .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().TotalPassengers);
-
-            int Passengers(Trip t) => latestPassengersByTrip.TryGetValue(t.TripId, out var p) ? p : 0;
+            int Passengers(Trip t) => t.TotalBoarded;
 
             var filtered = tripsResp.Models
                 .Where(t => t.Date.Date == anchor)
@@ -765,12 +750,7 @@ namespace FleetWise.Controllers
 
             var tripsResp = await _supabase.From<Trip>().Get();
 
-            var telemetryResp = await _supabase.From<TelemetryData>().Get();
-            var latestPassengersByTrip = telemetryResp.Models
-                .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().TotalPassengers);
-
-            int Passengers(Trip t) => latestPassengersByTrip.TryGetValue(t.TripId, out var p) ? p : 0;
+            int Passengers(Trip t) => t.TotalBoarded;
 
             var filtered = tripsResp.Models
                 .Where(t => t.Date.Date == anchor)
