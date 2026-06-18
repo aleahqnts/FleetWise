@@ -6,6 +6,7 @@ window.ptr = (function () {
     let current = null;
     let wired = false;
     const THRESHOLD = 70;
+    const MAX_H = 96; // indicator height when spinning (room for status-bar offset)
 
     function indicator() {
         let el = document.getElementById('ptr-ind');
@@ -28,7 +29,7 @@ window.ptr = (function () {
             if (!pulling || busy) return;
             dist = e.touches[0].clientY - startY;
             if (dist > 0 && el.scrollTop <= 0 && ind) {
-                ind.style.height = Math.min(dist * 0.5, THRESHOLD) + 'px';
+                ind.style.height = Math.min(dist * 0.6, MAX_H) + 'px';
                 ind.style.opacity = Math.min(dist / THRESHOLD, 1);
             }
         }, { passive: true });
@@ -39,7 +40,7 @@ window.ptr = (function () {
             const trigger = dist > THRESHOLD;
             if (trigger && current && !busy) {
                 busy = true;
-                if (ind) { ind.style.height = THRESHOLD + 'px'; ind.classList.add('spin'); }
+                if (ind) { ind.style.height = MAX_H + 'px'; ind.classList.add('spin'); }
                 try { await current.invokeMethodAsync('Refresh'); } catch (e) { }
                 busy = false;
             }

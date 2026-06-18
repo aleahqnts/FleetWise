@@ -1,6 +1,8 @@
 ﻿using Android.App;
 using Android.Content.PM;
 using Android.OS;
+using AndroidX.Core.App;
+using AndroidX.Core.Content;
 
 namespace FleetWiseMobile;
 
@@ -8,6 +10,20 @@ namespace FleetWiseMobile;
 public class MainActivity : MauiAppCompatActivity
 {
     private ConfirmExitCallback? _backCallback;
+
+    protected override void OnCreate(Bundle? savedInstanceState)
+    {
+        base.OnCreate(savedInstanceState);
+
+        // Android 13+ requires a runtime grant before notifications can show.
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu &&
+            ContextCompat.CheckSelfPermission(this, Android.Manifest.Permission.PostNotifications)
+                != Permission.Granted)
+        {
+            ActivityCompat.RequestPermissions(this,
+                new[] { Android.Manifest.Permission.PostNotifications }, 9100);
+        }
+    }
 
     protected override void OnResume()
     {
