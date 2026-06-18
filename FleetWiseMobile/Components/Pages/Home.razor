@@ -71,7 +71,7 @@ else
 
             @if (assignment is not null)
             {
-                <h2 class="section">@(assignment.Date.Date == DateTime.Today ? "Current Assignment" : "Upcoming Assignment")</h2>
+                <h2 class="section">@(PhTime.Now >= ShiftStart ? "Current Assignment" : "Upcoming Assignment")</h2>
                 <div class="assign-card">
                     <div class="line">
                         <span class="i cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></svg></span>

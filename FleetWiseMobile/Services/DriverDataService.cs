@@ -65,17 +65,29 @@ public class DriverDataService
     // Today's assignment for this driver (anything not yet completed).
     public async Task<Trip?> GetTodayAssignmentAsync(int userId)
     {
-        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        // Include yesterday so an overnight shift (e.g. 10pm -> 6am) started on the
+        // previous calendar day is still picked up after midnight.
+        var yesterday = DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd");
         var r = await _supabase.From<Trip>()
             .Filter("driver_id", Operator.Equals, userId.ToString())
-            .Filter("date", Operator.Equals, today)
+            .Filter("date", Operator.GreaterThanOrEqual, yesterday)
+            .Filter("date", Operator.LessThanOrEqual, DateTime.Today.ToString("yyyy-MM-dd"))
             .Get();
 
+        // Drop missed shifts: once shift end passes and the trip was never started,
+        // it disappears. An Active trip running past its end stays (driver still on
+        // it). Completed already excluded.
+        var now = PhTime.Now;
         return r.Models
             .Where(t => t.TripStatus != "Completed")
-            .OrderBy(t => t.ShiftStartTime)
+            .Where(t => t.TripStatus == "Active" || now < ShiftEnd(t))
+            .OrderBy(t => t.Date).ThenBy(t => t.ShiftStartTime)
             .FirstOrDefault();
     }
+
+    // Wall-clock end of the shift. Overnight shifts (end <= start) roll to next day.
+    private static DateTime ShiftEnd(Trip t)
+        => t.Date.Date + t.ShiftEndTime + (t.ShiftEndTime <= t.ShiftStartTime ? TimeSpan.FromDays(1) : TimeSpan.Zero);
 
     // Nearest future (date > today) non-completed trip, for the Home preview.
     public async Task<Trip?> GetUpcomingAssignmentAsync(int userId)
