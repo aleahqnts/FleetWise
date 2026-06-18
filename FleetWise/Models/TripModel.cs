@@ -41,4 +41,10 @@ public class Trip : BaseModel
     // estimate so it never drops when passengers alight.
     [Column("total_boarded")]
     public int TotalBoarded { get; set; }
+
+    // Set by the driver app when a real trip starts. The telemetry simulator uses
+    // null vs not-null to tell its own demo trips apart from trips a real phone is
+    // driving, so it never overwrites live data.
+    [Column("actual_start_time")]
+    public DateTime? ActualStartTime { get; set; }
 }
