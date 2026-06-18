@@ -496,7 +496,7 @@
         const driverId   = parseInt(document.getElementById('atm-driver').value);
 
         if (!shiftType || !shiftTime || !routeId || !vehicleId || !driverId) {
-            alert('Please fill in all fields before creating the trip.');
+            dpShowMsg(['Please fill in all fields before creating the trip.'], 'Incomplete trip');
             return;
         }
 
@@ -515,15 +515,15 @@
             });
 
             if (!res.ok) {
-                const errText = await res.text();
-                alert('Failed to create trip: ' + errText);
+                closeAddTripModal();
+                dpShowMsg([await res.text() || 'Failed to create trip.']);
                 return;
             }
 
             closeAddTripModal();
             window.location.reload();
         } catch (err) {
-            alert('Failed to create trip. Error: ' + err.message);
+            dpShowMsg(['Failed to create trip. ' + err.message]);
         } finally {
             btn.disabled = false;
             document.getElementById('atm-create-label').style.display  = 'inline';
