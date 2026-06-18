@@ -76,7 +76,6 @@ namespace FleetWise.Controllers
             {
                 vehicleDict.TryGetValue(trip.VehicleId, out var vehicle);
                 driverDict.TryGetValue(trip.DriverId, out var driver);
-                checklistDict.TryGetValue(trip.TripId, out var checklist);
                 var driverAvail = availabilityDict.TryGetValue(trip.DriverId, out var avail) ? avail : "Available";
 
                 if (trip.TripStatus == "Active")
@@ -85,11 +84,7 @@ namespace FleetWise.Controllers
                 if (trip.TripStatus == "Completed")
                     return (vehicle, driver, "Ready to Deploy", "Available", "Completed");
 
-                var vehicleStatus = checklist == null
-                    ? "Pending"
-                    : string.Equals(checklist.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase)
-                        ? "Ready to Deploy"
-                        : "Flagged";
+                var vehicleStatus = string.IsNullOrEmpty(vehicle?.VehicleStatus) ? "Pending" : vehicle.VehicleStatus;
 
                 // Treat null/missing availability as Available
                 var driverStatus = driver == null
@@ -251,11 +246,7 @@ namespace FleetWise.Controllers
                 //   - checklist status == "Passed"   -> Ready to Deploy
                 //   - anything else (e.g. "Failed")  -> Flagged
                 // Match is case-insensitive, mirroring the JS check in the modal.
-                vehicleStatus = checklist == null
-                    ? "Pending"
-                    : string.Equals(checklist.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase)
-                        ? "Ready to Deploy"
-                        : "Flagged";
+                vehicleStatus = string.IsNullOrEmpty(vehicle?.VehicleStatus) ? "Pending" : vehicle.VehicleStatus;
 
                 driverStatus = driver == null
                     ? "Unavailable"
