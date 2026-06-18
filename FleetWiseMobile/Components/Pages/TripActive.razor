@@ -199,6 +199,10 @@ else
 
             // Keep this as the resume target + (re)start background tracking.
             await SecureStorage.Default.SetAsync(ActiveKey, TripId);
+            // Always confirm location access here — this page is the one screen both
+            // "Start Trip" and "Resume Trip" land on, so the prompt fires even when the
+            // user resumes (which skips TripDetails) or revoked the grant earlier.
+            await EnsureLocationPermissionAsync();
             Tracker.Start(TripId);
 
             // Back online? Drain any queued telemetry / trip finalizes.
@@ -208,6 +212,23 @@ else
 
         // 1s tick for progress; flush to DB every 15s.
         timer = new System.Threading.Timer(_ => OnTick(), null, 1000, 1000);
+    }
+
+    // Foreground location first, then background. Asks every time the grant isn't
+    // already held so the driver is prompted in-app instead of digging into Settings.
+    private static async Task EnsureLocationPermissionAsync()
+    {
+        try
+        {
+            var s = await Permissions.CheckStatusAsync<Permissions.LocationWhenInUse>();
+            if (s != PermissionStatus.Granted)
+                await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
+
+            var bg = await Permissions.CheckStatusAsync<Permissions.LocationAlways>();
+            if (bg != PermissionStatus.Granted)
+                await Permissions.RequestAsync<Permissions.LocationAlways>();
+        }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[TripActive.Perm] {ex}"); }
     }
 
     private async Task SaveCacheAsync()
