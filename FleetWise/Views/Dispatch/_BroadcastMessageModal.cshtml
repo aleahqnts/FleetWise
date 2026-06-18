@@ -57,7 +57,7 @@
                     <span class="bm-priority-dot" id="bm-priority-dot" style="background:#27AE60;"></span>
                     <select id="bm-priority" class="bm-priority-select" onchange="onBmPriorityChange()">
                         <option value="Normal">Normal</option>
-                        <option value="Urgent">Urgent</option>
+                        <option value="High">High</option>
                     </select>
                     <svg class="bm-select-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none"
                          stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
@@ -276,12 +276,15 @@
         position: relative;
         display: inline-flex;
         align-items: center;
-        gap: 7px;
+        gap: 8px;
         border: 1.5px solid #E8ECF0;
         border-radius: 20px;
-        padding: 5px 30px 5px 12px;
+        padding: 7px 32px 7px 14px;
         background: #fff;
+        min-height: 38px;
+        box-sizing: border-box;
     }
+    .bm-priority-wrap:focus-within { border-color: #4AADA8; }
 
     .bm-priority-dot {
         width: 9px;
@@ -293,15 +296,20 @@
 
     .bm-priority-select {
         appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
         border: none;
         background: transparent;
         font-size: 0.85rem;
         font-family: 'Segoe UI', sans-serif;
-        font-weight: 500;
+        font-weight: 600;
         color: #2D3748;
         cursor: pointer;
         outline: none;
         padding: 0;
+        margin: 0;
+        min-width: 64px;
+        line-height: 1.2;
     }
 
     .bm-select-arrow {
@@ -511,7 +519,7 @@
         window.onBmPriorityChange = function () {
             var val = document.getElementById('bm-priority').value;
             document.getElementById('bm-priority-dot').style.background =
-                val === 'Urgent' ? '#E74C3C' : '#27AE60';
+                val === 'High' ? '#E74C3C' : '#27AE60';
         };
 
         window.submitBroadcast = async function () {
