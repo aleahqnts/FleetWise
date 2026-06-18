@@ -30,9 +30,14 @@ public static class MauiProgram
 		builder.Services.AddSingleton<Services.TelemetryQueue>();
 #if ANDROID
 		builder.Services.AddSingleton<Services.ITripTracker, Platforms.Android.AndroidTripTracker>();
+		builder.Services.AddSingleton<Services.ILocalNotifier, Platforms.Android.AndroidLocalNotifier>();
 #else
 		builder.Services.AddSingleton<Services.ITripTracker, Services.NoopTripTracker>();
+		builder.Services.AddSingleton<Services.ILocalNotifier, Services.NoopLocalNotifier>();
 #endif
+
+		// New-message poller: badge + popup + OS notification.
+		builder.Services.AddSingleton<Services.MessageWatch>();
 
 #if DEBUG
 		builder.Services.AddBlazorWebViewDeveloperTools();
