@@ -10,6 +10,11 @@ namespace FleetWise.Services
         // UTC 'Z'/offset and Postgres stores the literal local time we intend.
         public static DateTime Now => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, Tz);
 
+        // For timestamptz columns the mobile app reads RAW (no convert): tag the PH
+        // wall-clock as Utc so postgrest serializes the exact digits ("12:58Z") instead
+        // of treating Unspecified as server-local and shifting it -8h on the way out.
+        public static DateTime NowForDb => DateTime.SpecifyKind(Now, DateTimeKind.Utc);
+
         // PH calendar date (for DATE columns like vehicles.last_maintenance_date).
         public static DateTime Today => Now.Date;
 

@@ -602,7 +602,7 @@ namespace FleetWise.Controllers
                 Subject = req.Subject?.Trim(),
                 Body = req.Body.Trim(),
                 Priority = req.Priority ?? "Normal",
-                CreatedAt = PhClock.Now
+                CreatedAt = PhClock.NowForDb
             });
 
             return Ok();
@@ -626,7 +626,7 @@ namespace FleetWise.Controllers
                 Subject = req.Subject?.Trim(),
                 Body = req.Body.Trim(),
                 Priority = req.Priority ?? "Normal",
-                CreatedAt = PhClock.Now
+                CreatedAt = PhClock.NowForDb
             });
 
             return Ok();
@@ -657,7 +657,7 @@ namespace FleetWise.Controllers
                 Subject = req.Subject?.Trim(),
                 Body = req.Body.Trim(),
                 Priority = req.Priority ?? "Normal",
-                CreatedAt = PhClock.Now
+                CreatedAt = PhClock.NowForDb
             });
 
             return Ok();
