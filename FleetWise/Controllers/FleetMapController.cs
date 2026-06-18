@@ -139,9 +139,6 @@ namespace FleetWise.Controllers
             if (routeId.HasValue)
                 activeTrips = activeTrips.Where(t => t.RouteId == routeId.Value).ToList();
 
-            if (activeTrips.Count == 0)
-                return Json(Array.Empty<BusPositionDto>());
-
             var activeTripIds = activeTrips.Select(t => t.TripId).ToHashSet();
 
             // Newest-first: Supabase caps a plain .Get() at 1000 rows and returns the
