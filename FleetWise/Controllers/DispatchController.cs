@@ -18,14 +18,20 @@ namespace FleetWise.Controllers
             _supabase = supabase;
         }
 
-        public async Task<IActionResult> Index()
+        public async Task<IActionResult> Index(string date)
         {
-            // --- Always scope dispatch to today's date ---
-            var today = PhClock.Today.ToString("yyyy-MM-dd");
+            // --- Scope dispatch to the selected date (default today). The arrows in
+            //     the header move this back/forward a day. ---
+            var selected = DateTime.TryParse(date, out var d) ? d.Date : PhClock.Today;
+            var selStr = selected.ToString("yyyy-MM-dd");
+            // Also pull the previous day so an overnight shift (end <= start, e.g.
+            // 10pm -> 6am) started yesterday still shows on today's board.
+            var prevStr = selected.AddDays(-1).ToString("yyyy-MM-dd");
 
             // --- Fetch all data in parallel ---
             var tripsTask = _supabase.From<Trip>()
-                                       .Filter("date", Operator.Equals, today)
+                                       .Filter("date", Operator.GreaterThanOrEqual, prevStr)
+                                       .Filter("date", Operator.LessThanOrEqual, selStr)
                                        .Get();
             var vehiclesTask = _supabase.From<Vehicle>().Get();
             var routesTask = _supabase.From<BusRoute>().Get();
@@ -38,7 +44,12 @@ namespace FleetWise.Controllers
 
             await Task.WhenAll(tripsTask, vehiclesTask, routesTask, driversTask, availabilityTask, checklistsTask);
 
-            var trips = tripsTask.Result.Models;
+            // Keep trips on the selected day, plus overnight shifts from the previous
+            // day (their end rolls past midnight into the selected day).
+            static bool Overnight(Trip t) => t.ShiftEndTime <= t.ShiftStartTime;
+            var trips = tripsTask.Result.Models
+                .Where(t => t.Date.Date == selected || (t.Date.Date == selected.AddDays(-1) && Overnight(t)))
+                .ToList();
             var vehicles = vehiclesTask.Result.Models;
             var routes = routesTask.Result.Models;
             var drivers = driversTask.Result.Models;
@@ -103,7 +114,10 @@ namespace FleetWise.Controllers
 
             // --- Stats ---
             int activeTrips = trips.Count(t => resolved[t.TripId].TripStatus == "Active");
-            int notStarted = trips.Count(t => resolved[t.TripId].TripStatus == "Not Yet Started");
+            // Everything scheduled today that hasn't started or finished (Not Yet
+            // Started + Pending checklist + Assignment Issue) = still awaiting departure.
+            int notStarted = trips.Count(t =>
+                resolved[t.TripId].TripStatus != "Active" && resolved[t.TripId].TripStatus != "Completed");
             int unassigned = trips.Count(t => resolved[t.TripId].TripStatus == "Assignment Issue");
             int flaggedVehicles = vehicles.Count(v => v.VehicleStatus == "Flagged");
             int unavailableDrivers = availability.Count(a => a.AvailabilityStatus == "Unavailable");
@@ -111,6 +125,10 @@ namespace FleetWise.Controllers
             // --- Group trips by route → shift ---
             var vm = new DispatchViewModel
             {
+                ScheduleDate = selected,
+                PrevDate = selected.AddDays(-1).ToString("yyyy-MM-dd"),
+                NextDate = selected.AddDays(1).ToString("yyyy-MM-dd"),
+                IsToday = selected == PhClock.Today,
                 ActiveTrips = activeTrips,
                 TripsNotStarted = notStarted,
                 UnassignedTrips = unassigned,
@@ -221,8 +239,8 @@ namespace FleetWise.Controllers
             }
             else if (trip.TripStatus == "Completed")
             {
-                vehicleStatus = "Ready to Deploy";
-                driverStatus = "Available";
+                vehicleStatus = "Trip Completed";
+                driverStatus = "Trip Completed";
                 resolvedTripStatus = "Completed";
             }
             else
@@ -266,6 +284,12 @@ namespace FleetWise.Controllers
                 DriverName = driver != null ? $"{driver.FirstName} {driver.LastName}" : "Unassigned",
                 DriverId = trip.DriverId.ToString(),
                 DriverStatus = driverStatus,
+
+                IsCompleted = trip.TripStatus == "Completed",
+                TotalBoarded = trip.TripStatus == "Completed" ? trip.TotalBoarded : null,
+                EstimatedRevenue = trip.TripStatus == "Completed" ? trip.EstimatedRevenue : null,
+                ActualStartTime = trip.ActualStartTime?.ToString("h:mm tt"),
+                ActualEndTime = trip.ActualEndTime?.ToString("h:mm tt"),
 
                 Checklist = checklist != null ? new TripChecklistViewModel
                 {
@@ -396,6 +420,9 @@ namespace FleetWise.Controllers
             if (!TimeSpan.TryParse(req.ShiftStartTime, out var startTime)
              || !TimeSpan.TryParse(req.ShiftEndTime, out var endTime))
                 return BadRequest("Invalid shift times.");
+
+            var conflict = await ValidateAssignmentAsync(PhClock.Today, req.ShiftType, req.VehicleId, req.DriverId, null);
+            if (conflict != null) return BadRequest(conflict);
 
             var newTrip = new Trip
             {
@@ -528,6 +555,9 @@ namespace FleetWise.Controllers
             if (req.DriverId.HasValue && req.DriverId.Value > 0)
                 trip.DriverId = req.DriverId.Value;
 
+            var conflict = await ValidateAssignmentAsync(trip.Date, trip.ShiftType, trip.VehicleId, trip.DriverId, trip.TripId);
+            if (conflict != null) return BadRequest(conflict);
+
             // Use Update with filter to avoid inserting a duplicate row
             await _supabase.From<Trip>()
                 .Filter("trip_id", Operator.Equals, req.TripId)
@@ -586,7 +616,7 @@ namespace FleetWise.Controllers
                 Subject = req.Subject?.Trim(),
                 Body = req.Body.Trim(),
                 Priority = req.Priority ?? "Normal",
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = PhClock.NowForDb
             });
 
             return Ok();
@@ -610,7 +640,7 @@ namespace FleetWise.Controllers
                 Subject = req.Subject?.Trim(),
                 Body = req.Body.Trim(),
                 Priority = req.Priority ?? "Normal",
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = PhClock.NowForDb
             });
 
             return Ok();
@@ -641,7 +671,7 @@ namespace FleetWise.Controllers
                 Subject = req.Subject?.Trim(),
                 Body = req.Body.Trim(),
                 Priority = req.Priority ?? "Normal",
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = PhClock.NowForDb
             });
 
             return Ok();
@@ -662,7 +692,7 @@ namespace FleetWise.Controllers
             if (existing != null)
             {
                 existing.AvailabilityStatus = status;
-                existing.UpdatedAt = DateTime.UtcNow;
+                existing.UpdatedAt = PhClock.Now;
                 await _supabase.From<DriverAvailability>().Upsert(existing);
                 await SyncTripStatuses();
             }
@@ -672,11 +702,65 @@ namespace FleetWise.Controllers
                 {
                     UserId = userId,
                     AvailabilityStatus = status,
-                    UpdatedAt = DateTime.UtcNow
+                    UpdatedAt = PhClock.Now
                 });
             }
 
             return Ok();
+        }
+
+        // Adjacent shift that immediately follows (back-to-back, same day).
+        private static readonly Dictionary<string, string> NextShift = new()
+        {
+            ["Morning"] = "Afternoon",
+            ["Afternoon"] = "Evening",
+        };
+
+        // Returns an error string if assigning (vehicle, driver) to this date/shift
+        // clashes with existing trips; null if clear. Mirrors the schedule planner rules:
+        //   - no driver/vehicle twice in the same shift+day
+        //   - no driver in back-to-back shifts (incl. Evening -> next-day Morning)
+        private async Task<string> ValidateAssignmentAsync(
+            DateTime date, string shift, string vehicleId, int driverId, string excludeTripId)
+        {
+            var prev = date.AddDays(-1).ToString("yyyy-MM-dd");
+            var next = date.AddDays(1).ToString("yyyy-MM-dd");
+
+            // All trips on the day before/of/after — enough to judge every rule.
+            var resp = await _supabase.From<Trip>()
+                .Filter("date", Operator.GreaterThanOrEqual, prev)
+                .Filter("date", Operator.LessThanOrEqual, next)
+                .Get();
+            var trips = resp.Models.Where(t => t.TripId != excludeTripId).ToList();
+
+            string Fmt(DateTime d) => d.ToString("MMMM d, yyyy");
+
+            // same shift + day: duplicate driver / vehicle
+            foreach (var t in trips.Where(t => t.Date.Date == date.Date && t.ShiftType == shift))
+            {
+                if (t.DriverId == driverId)
+                    return $"This driver is already booked for the {shift} shift on {Fmt(date)}.";
+                if (t.VehicleId == vehicleId)
+                    return $"This bus is already booked for the {shift} shift on {Fmt(date)}.";
+            }
+
+            // back-to-back for the driver (same day adjacency)
+            var driverTrips = trips.Where(t => t.DriverId == driverId).ToList();
+            foreach (var t in driverTrips.Where(t => t.Date.Date == date.Date))
+            {
+                if (NextShift.TryGetValue(shift, out var after) && t.ShiftType == after)
+                    return $"This driver is booked for {shift} and {after} back to back on {Fmt(date)}. Give them a break.";
+                if (NextShift.TryGetValue(t.ShiftType, out var after2) && after2 == shift)
+                    return $"This driver is booked for {t.ShiftType} and {shift} back to back on {Fmt(date)}. Give them a break.";
+            }
+
+            // Evening -> next-day Morning (both directions)
+            if (shift == "Evening" && driverTrips.Any(t => t.Date.Date == date.AddDays(1).Date && t.ShiftType == "Morning"))
+                return $"This driver ends with Evening on {Fmt(date)} and starts Morning the next day. They need rest.";
+            if (shift == "Morning" && driverTrips.Any(t => t.Date.Date == date.AddDays(-1).Date && t.ShiftType == "Evening"))
+                return $"This driver works Evening the day before then Morning on {Fmt(date)}. They need rest.";
+
+            return null;
         }
 
         private async Task SyncTripStatuses(string date = null)

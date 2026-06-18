@@ -47,4 +47,7 @@ public class Trip : BaseModel
     // driving, so it never overwrites live data.
     [Column("actual_start_time")]
     public DateTime? ActualStartTime { get; set; }
+
+    [Column("actual_end_time")]
+    public DateTime? ActualEndTime { get; set; }
 }
