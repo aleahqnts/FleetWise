@@ -27,5 +27,22 @@ namespace FleetWise.Models
         public string IssueSummary { get; set; } = string.Empty;
         /// <summary>Newest-first, each formatted "MM/dd/yy – ML-## – Status".</summary>
         public List<string> MaintenanceEntries { get; set; } = new();
+
+        // ── Flag review / actions ──
+        /// <summary>Admin road-safety gate: bus is grounded, dispatch can't assign it.</summary>
+        public bool OutOfService { get; set; }
+        /// <summary>The open (unresolved) incident to act on — resolve / note. Null = none open.</summary>
+        public int? OpenLogId { get; set; }
+        /// <summary>Audit thread for the open (or latest) incident, newest first.</summary>
+        public List<VehicleNoteViewModel> Notes { get; set; } = new();
+    }
+
+    // One audit-thread line for the View Vehicle modal.
+    public class VehicleNoteViewModel
+    {
+        public string Action { get; set; } = string.Empty;
+        public string Note { get; set; } = string.Empty;
+        public string AuthorName { get; set; } = string.Empty;
+        public string When { get; set; } = string.Empty;
     }
 }

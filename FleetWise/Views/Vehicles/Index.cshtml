@@ -123,6 +123,9 @@
 @await Html.PartialAsync("_ViewVehicleModal")
 @await Html.PartialAsync("_EditVehicleModal")
 
+@* Antiforgery token for the View-modal fetch POSTs (add note / resolve / out-of-service). *@
+@Html.AntiForgeryToken()
+
 <script>
     // Load the vehicle table rows in the background so the page itself renders instantly
     // (server-rendered HTML fetched into the table body).
@@ -153,6 +156,7 @@
     });
 
     function loadVehicleDetails(id) {
+        window.__vhCurrentVehicle = id;
         const content = document.getElementById('viewVehicleContent');
         content.innerHTML = '<div class="vh-modal-loading"><div class="vh-spinner"></div></div>';
         fetch('@Url.Action("Details", "Vehicles")?id=' + encodeURIComponent(id))
@@ -188,6 +192,52 @@
             .catch(function () {
                 tbody.innerHTML = '<tr><td colspan="6" class="vh-empty">Failed to load vehicles.</td></tr>';
             });
+    }
+
+    // ── Flag review actions (buttons live inside the fetched View-modal partial) ──
+    function vhToken() {
+        const el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+
+    async function vhPost(url, params) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'RequestVerificationToken': vhToken(), 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(params)
+        });
+        return res.ok;
+    }
+
+    function vhReloadModal() { loadVehicleDetails(window.__vhCurrentVehicle); }
+
+    async function vhAddNote(logId) {
+        const ta = document.getElementById('vhNoteInput');
+        const note = ta ? ta.value.trim() : '';
+        if (!note) { if (ta) ta.focus(); return; }
+        if (await vhPost('@Url.Action("AddNote", "Vehicles")', { logId: logId, note: note })) {
+            vhReloadModal();
+        } else { alert('Failed to add note.'); }
+    }
+
+    async function vhResolve(logId) {
+        if (!confirm('Resolve this incident and return the bus to Ready?')) return;
+        const note = (document.getElementById('vhNoteInput')?.value || '').trim();
+        if (await vhPost('@Url.Action("ResolveIncident", "Vehicles")', { logId: logId, note: note })) {
+            vhReloadModal(); loadVehicleRows();
+        } else { alert('Failed to resolve.'); }
+    }
+
+    async function vhSetService(vehicleId, outOfService, logId) {
+        const verb = outOfService ? 'take this bus OUT of service' : 'return this bus to service';
+        if (!confirm('Are you sure you want to ' + verb + '?')) return;
+        const note = (document.getElementById('vhNoteInput')?.value || '').trim();
+        const params = { vehicleId: vehicleId, outOfService: outOfService };
+        if (logId !== null && logId !== undefined) params.logId = logId;
+        if (note) params.note = note;
+        if (await vhPost('@Url.Action("SetServiceState", "Vehicles")', params)) {
+            vhReloadModal(); loadVehicleRows();
+        } else { alert('Failed to update service state.'); }
     }
 </script>
 
@@ -745,6 +795,46 @@
         border-radius: 50%;
         background: currentColor;
     }
+
+    /* ── Flag review (View modal) ───────────────────────────── */
+    .vh-badge--oos { background: #4B5563; color: #fff; }
+
+    .vh-oos-banner {
+        background: #FDECEC;
+        border: 1px solid #F5B5B5;
+        color: #9B2C2C;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 12px;
+    }
+
+    .vh-review-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+
+    .vh-btn--resolve { background: #27AE60; border-color: #27AE60; color: #fff; }
+    .vh-btn--resolve:hover { background: #229152; }
+    .vh-btn--danger { background: #E53E3E; border-color: #E53E3E; color: #fff; }
+    .vh-btn--danger:hover { background: #C53030; }
+
+    .vh-note-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+    .vh-note-form textarea { resize: vertical; }
+    .vh-note-form .vh-btn { align-self: flex-end; }
+
+    .vh-thread-label {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--vh-muted);
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        margin: 4px 0 8px;
+    }
+
+    .vh-thread { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+    .vh-thread li { border-left: 3px solid var(--vh-border); padding: 2px 0 2px 12px; }
+    .vh-thread-action { font-weight: 700; font-size: 0.78rem; color: var(--vh-navy); margin-right: 6px; }
+    .vh-thread-note { font-size: 0.85rem; color: var(--vh-text); }
+    .vh-thread-meta { display: block; font-size: 0.72rem; color: var(--vh-muted); margin-top: 2px; }
 
     /* ── Responsive ─────────────────────────────────────────── */
     @@media (max-width: 900px) {

@@ -80,4 +80,71 @@
         }
     </div>
 
+    <!-- Flag Review / Actions -->
+    @if (Model.OpenLogId.HasValue || Model.OutOfService || Model.Notes.Count > 0)
+    {
+        <div class="vh-section-header">
+            <span>Flag Review</span>
+            @if (Model.OutOfService)
+            {
+                <span class="vh-section-badge vh-badge--oos">Out of Service</span>
+            }
+            else if (Model.OpenLogId.HasValue)
+            {
+                <span class="vh-section-badge vh-badge--flagged">Flagged</span>
+            }
+        </div>
+        <div class="vh-section-body">
+            @if (Model.OutOfService)
+            {
+                <div class="vh-oos-banner">This bus is <strong>Out of Service</strong> — dispatch cannot assign it.</div>
+            }
+
+            <div class="vh-review-actions">
+                @if (Model.OpenLogId.HasValue)
+                {
+                    <button type="button" class="vh-btn vh-btn--resolve" onclick="vhResolve(@Model.OpenLogId)">Resolve &amp; Return to Ready</button>
+                }
+                @if (Model.OutOfService)
+                {
+                    <button type="button" class="vh-btn vh-btn--outline" onclick="vhSetService('@Model.VehicleId', false, @(Model.OpenLogId?.ToString() ?? "null"))">Return to Service</button>
+                }
+                else
+                {
+                    <button type="button" class="vh-btn vh-btn--danger" onclick="vhSetService('@Model.VehicleId', true, @(Model.OpenLogId?.ToString() ?? "null"))">Mark Out of Service</button>
+                }
+            </div>
+
+            @if (Model.OpenLogId.HasValue)
+            {
+                <div class="vh-note-form">
+                    <textarea id="vhNoteInput" class="vh-form-input" rows="2" placeholder="Add a comment or note about this issue…"></textarea>
+                    <button type="button" class="vh-btn vh-btn--primary" onclick="vhAddNote(@Model.OpenLogId)">Add Note</button>
+                </div>
+            }
+
+            @if (Model.Notes.Count > 0)
+            {
+                <div class="vh-thread-label">History</div>
+                <ul class="vh-thread">
+                    @foreach (var n in Model.Notes)
+                    {
+                        <li>
+                            <span class="vh-thread-action">@n.Action</span>
+                            @if (!string.IsNullOrWhiteSpace(n.Note))
+                            {
+                                <span class="vh-thread-note">@n.Note</span>
+                            }
+                            <span class="vh-thread-meta">@n.AuthorName · @n.When</span>
+                        </li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <div class="vh-detail-row vh-detail-empty">No actions or comments yet.</div>
+            }
+        </div>
+    }
+
 </div>

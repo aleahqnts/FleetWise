@@ -13,7 +13,7 @@ namespace FleetWise.Controllers
 
         // Fixed filter vocabularies for the Status and Issues dropdowns.
         private static readonly string[] StatusFilterOptions =
-            { "Ready to Deploy", "On Trip", "Pending", "Flagged" };
+            { "Ready to Deploy", "On Trip", "Pending", "Flagged", "Out of Service" };
 
         private static readonly string[] ConditionFilterOptions =
             { "No Issues", "Needs Attention", "Under Repair" };
@@ -170,6 +170,30 @@ namespace FleetWise.Controllers
                 vm.MaintenanceEntries = logs.Select(FormatMaintenanceEntry).ToList();
             }
 
+            // ── Flag review: out-of-service gate, the open incident to act on, and its
+            //    audit thread (comments + actions). The thread follows the open incident,
+            //    or the latest one when nothing is open. ──
+            vm.OutOfService = vehicle.OutOfService;
+            var openLog = logs.FirstOrDefault(l => l.ResolvedAt == null);
+            vm.OpenLogId = openLog?.LogId;
+
+            var threadLog = openLog ?? logs.FirstOrDefault();
+            if (threadLog != null)
+            {
+                var notesResp = await _supabase.From<MaintenanceNote>()
+                    .Filter("log_id", Postgrest.Constants.Operator.Equals, threadLog.LogId.ToString())
+                    .Order("created_at", Postgrest.Constants.Ordering.Descending)
+                    .Get();
+                vm.Notes = notesResp.Models.Select(n => new VehicleNoteViewModel
+                {
+                    Action = string.IsNullOrWhiteSpace(n.Action) ? "Comment" : n.Action,
+                    Note = n.Note ?? "",
+                    AuthorName = string.IsNullOrWhiteSpace(n.AuthorName) ? "—" : n.AuthorName,
+                    // Stored PH wall-clock digits tagged Utc -> postgrest reads +8; normalize back.
+                    When = n.CreatedAt.ToUniversalTime().ToString("MM/dd/yy hh:mm tt"),
+                }).ToList();
+            }
+
             return PartialView("_VehicleDetails", vm);
         }
 
@@ -245,6 +269,147 @@ namespace FleetWise.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+        // ── Flag review actions (from the View Vehicle modal) ─────────────────
+
+        // Add a comment to an incident's audit thread.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddNote(int logId, string note)
+        {
+            if (logId <= 0 || string.IsNullOrWhiteSpace(note))
+                return BadRequest("A note is required.");
+
+            var (uid, uname) = CurrentUser();
+            await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
+            {
+                LogId = logId,
+                AuthorId = uid,
+                AuthorName = uname,
+                Action = "Comment",
+                Note = note.Trim(),
+                CreatedAt = PhClock.NowForDb,
+            });
+            return Ok();
+        }
+
+        // Resolve the incident -> close the log, clear the flag + out-of-service, record it.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ResolveIncident(int logId, string? note)
+        {
+            if (logId <= 0) return BadRequest("Invalid incident.");
+
+            var logResp = await _supabase.From<MaintenanceLog>()
+                .Filter("log_id", Postgrest.Constants.Operator.Equals, logId.ToString())
+                .Get();
+            var log = logResp.Models.FirstOrDefault();
+            if (log is null) return NotFound();
+
+            var (uid, uname) = CurrentUser();
+
+            if (log.ResolvedAt is null)
+            {
+                log.ResolvedAt = PhClock.Now;
+                log.MaintenanceStatus = "No Issues";
+                if (string.IsNullOrWhiteSpace(log.VerifiedBy)) log.VerifiedBy = uname;
+                await _supabase.From<MaintenanceLog>().Update(log);
+            }
+
+            // Un-flag + un-ground the vehicle.
+            if (!string.IsNullOrEmpty(log.VehicleId))
+            {
+                var vResp = await _supabase.From<Vehicle>()
+                    .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, log.VehicleId)
+                    .Get();
+                var vehicle = vResp.Models.FirstOrDefault();
+                if (vehicle != null)
+                {
+                    vehicle.OutOfService = false;
+                    if (string.Equals(vehicle.VehicleStatus?.Trim(), "Flagged", OIC))
+                        vehicle.VehicleStatus = "Ready to Deploy";
+                    vehicle.LastMaintenanceDate = PhClock.Today;
+                    vehicle.UpdatedAt = PhClock.Now;
+                    await _supabase.From<Vehicle>().Update(vehicle);
+                }
+            }
+
+            await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
+            {
+                LogId = logId,
+                AuthorId = uid,
+                AuthorName = uname,
+                Action = "Resolved",
+                Note = string.IsNullOrWhiteSpace(note) ? "Incident resolved." : note.Trim(),
+                CreatedAt = PhClock.NowForDb,
+            });
+            return Ok();
+        }
+
+        // Ground a bus (out of service) so dispatch can't assign it, or return it to service.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SetServiceState(string vehicleId, bool outOfService, int? logId, string? note)
+        {
+            if (string.IsNullOrWhiteSpace(vehicleId)) return BadRequest("Vehicle required.");
+
+            var vResp = await _supabase.From<Vehicle>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
+                .Get();
+            var vehicle = vResp.Models.FirstOrDefault();
+            if (vehicle is null) return NotFound();
+
+            var (uid, uname) = CurrentUser();
+            int? effectiveLog = logId;
+
+            // Grounding a bus with no open incident still needs a record to hang the action
+            // and any later notes on -> open one.
+            if (outOfService && effectiveLog is null)
+            {
+                var insert = await _supabase.From<MaintenanceLog>().Insert(new MaintenanceLog
+                {
+                    VehicleId = vehicleId,
+                    MaintenanceStatus = "Under Repair",
+                    IssueDetails = new MaintenanceIssueDetails
+                    {
+                        Issues = new List<string>
+                        {
+                            string.IsNullOrWhiteSpace(note) ? "Taken out of service by dispatcher" : note.Trim()
+                        }
+                    },
+                    CreatedAt = PhClock.NowForDb,
+                });
+                effectiveLog = insert.Models.FirstOrDefault()?.LogId;
+            }
+
+            vehicle.OutOfService = outOfService;
+            vehicle.UpdatedAt = PhClock.Now;
+            await _supabase.From<Vehicle>().Update(vehicle);
+
+            if (effectiveLog is int lg)
+            {
+                await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
+                {
+                    LogId = lg,
+                    AuthorId = uid,
+                    AuthorName = uname,
+                    Action = outOfService ? "Out of Service" : "Returned to Service",
+                    Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
+                    CreatedAt = PhClock.NowForDb,
+                });
+            }
+            return Ok();
+        }
+
+        // Current signed-in operator, for stamping the audit thread.
+        private (int? Id, string Name) CurrentUser()
+        {
+            var idStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            int? id = int.TryParse(idStr, out var i) ? i : null;
+            var name = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value
+                       ?? User.Identity?.Name ?? "Admin";
+            return (id, name);
+        }
+
         // ── Data loading & projection ────────────────────────────────────────
 
         private async Task<(List<Vehicle> Vehicles, List<BusRoute> Routes, Dictionary<string, string> Maintenance)> LoadVehicleDataAsync()
@@ -281,9 +446,9 @@ namespace FleetWise.Controllers
             // status — and a stale vehicle_status of "Flagged" with no open incident is read
             // as Ready (the flag was resolved).
             string RoadStatus(Vehicle v) =>
-                maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"
-                    ? "Flagged"
-                    : DisplayStatus(string.Equals(v.VehicleStatus, "Flagged", OIC) ? "Ready to Deploy" : v.VehicleStatus);
+                v.OutOfService ? "Out of Service"
+                : maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues" ? "Flagged"
+                : DisplayStatus(string.Equals(v.VehicleStatus, "Flagged", OIC) ? "Ready to Deploy" : v.VehicleStatus);
 
             IEnumerable<Vehicle> filtered = vehicles;
 

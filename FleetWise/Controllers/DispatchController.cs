@@ -415,9 +415,9 @@ namespace FleetWise.Controllers
                         RouteName = r.RouteName
                     }).ToList(),
 
-                // Only vehicles with no open incident (road-safe)
+                // Only vehicles that are road-safe: no open incident and not grounded
                 Vehicles = vehicles
-                    .Where(v => !flaggedIds.Contains(v.VehicleId))
+                    .Where(v => !flaggedIds.Contains(v.VehicleId) && !v.OutOfService)
                     .OrderBy(v => v.VehicleId)
                     .Select(v => new VehicleOption
                     {
@@ -535,7 +535,7 @@ namespace FleetWise.Controllers
             // Available vehicles: no open incident AND not already in this shift
             // Always include the trip's current vehicle so it appears as the default
             var availableVehicles = vehicles
-                .Where(v => (!flaggedIds.Contains(v.VehicleId) || v.VehicleId == trip.VehicleId)
+                .Where(v => ((!flaggedIds.Contains(v.VehicleId) && !v.OutOfService) || v.VehicleId == trip.VehicleId)
                          && (!vehiclesInShift.Contains(v.VehicleId) || v.VehicleId == trip.VehicleId))
                 .OrderBy(v => v.VehicleId)
                 .Select(v => new
