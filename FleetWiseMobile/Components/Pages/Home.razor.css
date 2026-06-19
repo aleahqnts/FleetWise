@@ -164,6 +164,18 @@
     font-weight: 500;
 }
 
+.grounded-note {
+    background: #fdecec;
+    border: 1px solid #f5b5b5;
+    border-radius: 10px;
+    padding: 12px;
+    margin-top: 8px;
+    text-align: center;
+    color: #b42318;
+    font-size: 13px;
+    font-weight: 600;
+}
+
 .checklist-done {
     display: flex;
     align-items: center;

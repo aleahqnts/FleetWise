@@ -13,7 +13,7 @@ namespace FleetWise.Controllers
 
         // Fixed filter vocabularies for the Status and Issues dropdowns.
         private static readonly string[] StatusFilterOptions =
-            { "Ready to Deploy", "On Trip", "Pending", "Flagged" };
+            { "Ready to Deploy", "On Trip", "Pending", "Flagged", "Out of Service" };
 
         private static readonly string[] ConditionFilterOptions =
             { "No Issues", "Needs Attention", "Under Repair" };
@@ -37,7 +37,7 @@ namespace FleetWise.Controllers
                 Rows = new List<VehicleListItemViewModel>(),
 
                 TotalVehicles = vehicles.Count,
-                FlaggedVehicles = vehicles.Count(v => DisplayStatus(v.VehicleStatus) == "Flagged"),
+                FlaggedVehicles = vehicles.Count(v => maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
                 ScheduledMaintenance = vehicles.Count(v =>
                     maintenance.TryGetValue(v.VehicleId, out var m) && m == "Under Repair"),
 
@@ -170,6 +170,34 @@ namespace FleetWise.Controllers
                 vm.MaintenanceEntries = logs.Select(FormatMaintenanceEntry).ToList();
             }
 
+            // ── Flag review: out-of-service gate, the open incident to act on, and its
+            //    audit thread (comments + actions). The thread follows the open incident,
+            //    or the latest one when nothing is open. ──
+            vm.OutOfService = vehicle.OutOfService;
+            var openLog = logs.FirstOrDefault(l => l.ResolvedAt == null);
+            vm.OpenLogId = openLog?.LogId;
+
+            // Full audit history across ALL of this vehicle's incidents — not just the open
+            // one. (Showing only one incident's thread made older notes vanish once a second
+            // incident was opened.)
+            var logIds = logs.Select(l => l.LogId).ToHashSet();
+            if (logIds.Count > 0)
+            {
+                var notesResp = await _supabase.From<MaintenanceNote>()
+                    .Order("created_at", Postgrest.Constants.Ordering.Descending)
+                    .Get();
+                vm.Notes = notesResp.Models
+                    .Where(n => logIds.Contains(n.LogId))
+                    .Select(n => new VehicleNoteViewModel
+                    {
+                        Action = string.IsNullOrWhiteSpace(n.Action) ? "Comment" : n.Action,
+                        Note = n.Note ?? "",
+                        AuthorName = string.IsNullOrWhiteSpace(n.AuthorName) ? "—" : n.AuthorName,
+                        // Stored PH wall-clock digits tagged Utc -> postgrest reads +8; normalize back.
+                        When = n.CreatedAt.ToUniversalTime().ToString("MM/dd/yy hh:mm tt"),
+                    }).ToList();
+            }
+
             return PartialView("_VehicleDetails", vm);
         }
 
@@ -245,6 +273,213 @@ namespace FleetWise.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+        // ── Flag review actions (from the View Vehicle modal) ─────────────────
+
+        // Add a comment to an incident's audit thread.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddNote(int logId, string note)
+        {
+            if (logId <= 0 || string.IsNullOrWhiteSpace(note))
+                return BadRequest("A note is required.");
+
+            var (uid, uname) = CurrentUser();
+            await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
+            {
+                LogId = logId,
+                AuthorId = uid,
+                AuthorName = uname,
+                Action = "Comment",
+                Note = note.Trim(),
+                CreatedAt = PhClock.NowForDb,
+            });
+            return Ok();
+        }
+
+        // Resolve the incident -> close the log, clear the flag + out-of-service, record it.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ResolveIncident(int logId, string? note)
+        {
+            if (logId <= 0) return BadRequest("Invalid incident.");
+
+            var logResp = await _supabase.From<MaintenanceLog>()
+                .Filter("log_id", Postgrest.Constants.Operator.Equals, logId.ToString())
+                .Get();
+            var log = logResp.Models.FirstOrDefault();
+            if (log is null) return NotFound();
+
+            var (uid, uname) = CurrentUser();
+
+            if (log.ResolvedAt is null)
+            {
+                log.ResolvedAt = PhClock.Now;
+                log.MaintenanceStatus = "No Issues";
+                if (string.IsNullOrWhiteSpace(log.VerifiedBy)) log.VerifiedBy = uname;
+                await _supabase.From<MaintenanceLog>().Update(log);
+            }
+
+            // Un-flag + un-ground the vehicle.
+            if (!string.IsNullOrEmpty(log.VehicleId))
+            {
+                var vResp = await _supabase.From<Vehicle>()
+                    .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, log.VehicleId)
+                    .Get();
+                var vehicle = vResp.Models.FirstOrDefault();
+                if (vehicle != null)
+                {
+                    vehicle.OutOfService = false;
+                    if (string.Equals(vehicle.VehicleStatus?.Trim(), "Flagged", OIC))
+                        vehicle.VehicleStatus = "Ready to Deploy";
+                    vehicle.LastMaintenanceDate = PhClock.Today;
+                    vehicle.UpdatedAt = PhClock.Now;
+                    await _supabase.From<Vehicle>().Update(vehicle);
+                }
+            }
+
+            await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
+            {
+                LogId = logId,
+                AuthorId = uid,
+                AuthorName = uname,
+                Action = "Resolved",
+                Note = string.IsNullOrWhiteSpace(note) ? "Incident resolved." : note.Trim(),
+                CreatedAt = PhClock.NowForDb,
+            });
+            return Ok();
+        }
+
+        // Ground a bus (out of service) so dispatch can't assign it, or return it to service.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SetServiceState(string vehicleId, bool outOfService, int? logId, string? note, string? maintenanceStatus)
+        {
+            if (string.IsNullOrWhiteSpace(vehicleId)) return BadRequest("Vehicle required.");
+
+            var vResp = await _supabase.From<Vehicle>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
+                .Get();
+            var vehicle = vResp.Models.FirstOrDefault();
+            if (vehicle is null) return NotFound();
+
+            var (uid, uname) = CurrentUser();
+            int? effectiveLog = logId;
+
+            // The incident's nature: "Under Repair" when admin sends it to maintenance, else
+            // a plain "Needs Attention" grounding.
+            var ms = string.Equals(maintenanceStatus?.Trim(), "Under Repair", OIC) ? "Under Repair" : "Needs Attention";
+
+            if (outOfService && effectiveLog is null)
+            {
+                // Grounding a bus with no open incident still needs a record to hang the
+                // action + later notes on -> open one.
+                var insert = await _supabase.From<MaintenanceLog>().Insert(new MaintenanceLog
+                {
+                    VehicleId = vehicleId,
+                    MaintenanceStatus = ms,
+                    IssueDetails = new MaintenanceIssueDetails
+                    {
+                        Issues = new List<string>
+                        {
+                            string.IsNullOrWhiteSpace(note) ? "Taken out of service" : note.Trim()
+                        }
+                    },
+                    CreatedAt = PhClock.NowForDb,
+                });
+                effectiveLog = insert.Models.FirstOrDefault()?.LogId;
+            }
+            else if (outOfService && effectiveLog is int openLg)
+            {
+                // Grounding an already-flagged bus: reflect the chosen nature on the open
+                // incident (e.g. promote a driver flag to "Under Repair").
+                var logResp = await _supabase.From<MaintenanceLog>()
+                    .Filter("log_id", Postgrest.Constants.Operator.Equals, openLg.ToString())
+                    .Get();
+                var openLog = logResp.Models.FirstOrDefault();
+                if (openLog != null && !string.Equals(openLog.MaintenanceStatus?.Trim(), ms, OIC))
+                {
+                    openLog.MaintenanceStatus = ms;
+                    await _supabase.From<MaintenanceLog>().Update(openLog);
+                }
+            }
+
+            vehicle.OutOfService = outOfService;
+            vehicle.UpdatedAt = PhClock.Now;
+            await _supabase.From<Vehicle>().Update(vehicle);
+
+            if (effectiveLog is int lg)
+            {
+                await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
+                {
+                    LogId = lg,
+                    AuthorId = uid,
+                    AuthorName = uname,
+                    Action = outOfService ? "Out of Service" : "Returned to Service",
+                    Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
+                    CreatedAt = PhClock.NowForDb,
+                });
+            }
+            return Ok();
+        }
+
+        // Put a bus into scheduled maintenance: opens an "Under Repair" incident AND grounds
+        // the bus (out of service) — a bus in the shop is off the road. Fills the Scheduled
+        // Maintenance KPI, shows in history, and keeps it out of dispatch/edit-schedule.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ScheduleMaintenance(string vehicleId, string? note)
+        {
+            if (string.IsNullOrWhiteSpace(vehicleId)) return BadRequest("Vehicle required.");
+
+            var (uid, uname) = CurrentUser();
+            var insert = await _supabase.From<MaintenanceLog>().Insert(new MaintenanceLog
+            {
+                VehicleId = vehicleId,
+                MaintenanceStatus = "Under Repair",
+                IssueDetails = new MaintenanceIssueDetails
+                {
+                    Issues = new List<string> { string.IsNullOrWhiteSpace(note) ? "Scheduled maintenance" : note.Trim() }
+                },
+                CreatedAt = PhClock.NowForDb,
+            });
+
+            if (insert.Models.FirstOrDefault()?.LogId is int lg)
+            {
+                await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
+                {
+                    LogId = lg,
+                    AuthorId = uid,
+                    AuthorName = uname,
+                    Action = "Scheduled Maintenance",
+                    Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
+                    CreatedAt = PhClock.NowForDb,
+                });
+            }
+
+            // Ground it.
+            var vResp = await _supabase.From<Vehicle>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
+                .Get();
+            var vehicle = vResp.Models.FirstOrDefault();
+            if (vehicle != null)
+            {
+                vehicle.OutOfService = true;
+                vehicle.UpdatedAt = PhClock.Now;
+                await _supabase.From<Vehicle>().Update(vehicle);
+            }
+            return Ok();
+        }
+
+        // Current signed-in operator, for stamping the audit thread.
+        private (int? Id, string Name) CurrentUser()
+        {
+            var idStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            int? id = int.TryParse(idStr, out var i) ? i : null;
+            var name = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value
+                       ?? User.Identity?.Name ?? "Admin";
+            return (id, name);
+        }
+
         // ── Data loading & projection ────────────────────────────────────────
 
         private async Task<(List<Vehicle> Vehicles, List<BusRoute> Routes, Dictionary<string, string> Maintenance)> LoadVehicleDataAsync()
@@ -276,13 +511,29 @@ namespace FleetWise.Controllers
             var (vehicles, routes, maintenance) = await LoadVehicleDataAsync();
             var routeNames = routes.ToDictionary(r => r.RouteId, r => r.RouteName);
 
+            // Roadworthiness wins the registry's Status: an open incident shows as "Flagged"
+            // (persistent, can't be erased by the next shift), otherwise the operational
+            // status — and a stale vehicle_status of "Flagged" with no open incident is read
+            // as Ready (the flag was resolved).
+            string RoadStatus(Vehicle v) =>
+                v.OutOfService ? "Out of Service"
+                : maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues" ? "Flagged"
+                : DisplayStatus(string.Equals(v.VehicleStatus, "Flagged", OIC) ? "Ready to Deploy" : v.VehicleStatus);
+
             IEnumerable<Vehicle> filtered = vehicles;
 
             if (!string.IsNullOrWhiteSpace(route) && int.TryParse(route, out var routeId))
                 filtered = filtered.Where(v => v.RouteId == routeId);
 
             if (!string.IsNullOrWhiteSpace(status))
-                filtered = filtered.Where(v => string.Equals(DisplayStatus(v.VehicleStatus), status, OIC));
+            {
+                if (string.Equals(status, "Flagged", OIC))
+                    // Out-of-Service buses are flagged ones that were grounded — keep them in
+                    // the Flagged filter too (their badge still reads "Out of Service").
+                    filtered = filtered.Where(v => RoadStatus(v) is "Flagged" or "Out of Service");
+                else
+                    filtered = filtered.Where(v => string.Equals(RoadStatus(v), status, OIC));
+            }
 
             if (!string.IsNullOrWhiteSpace(condition))
                 filtered = filtered.Where(v =>
@@ -303,7 +554,7 @@ namespace FleetWise.Controllers
                     VehicleId = v.VehicleId,
                     PlateNumber = v.PlateNumber ?? "",
                     RouteName = v.RouteId.HasValue && routeNames.TryGetValue(v.RouteId.Value, out var rn) ? rn : "—",
-                    Status = DisplayStatus(v.VehicleStatus),
+                    Status = RoadStatus(v),
                     Maintenance = maintenance.GetValueOrDefault(v.VehicleId, "No Issues"),
                 })
                 .ToList();
@@ -313,14 +564,15 @@ namespace FleetWise.Controllers
         // (PRG can't carry ModelState, so a failed POST returns the view directly).
         private async Task<IActionResult> ReRenderIndexAsync(AddVehicleViewModel addModel)
         {
-            var (vehicles, routes, _) = await LoadVehicleDataAsync();
+            var (vehicles, routes, maintenance) = await LoadVehicleDataAsync();
 
             var vm = new VehiclesIndexViewModel
             {
                 Rows = new List<VehicleListItemViewModel>(),
                 TotalVehicles = vehicles.Count,
-                FlaggedVehicles = vehicles.Count(v => DisplayStatus(v.VehicleStatus) == "Flagged"),
-                ScheduledMaintenance = 0,
+                FlaggedVehicles = vehicles.Count(v => maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
+                ScheduledMaintenance = vehicles.Count(v =>
+                    maintenance.TryGetValue(v.VehicleId, out var um) && um == "Under Repair"),
                 RouteOptions = routes
                     .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
                     .ToList(),
@@ -395,7 +647,7 @@ namespace FleetWise.Controllers
             {
                 Rows = new List<VehicleListItemViewModel>(),
                 TotalVehicles = vehicles.Count,
-                FlaggedVehicles = vehicles.Count(v => DisplayStatus(v.VehicleStatus) == "Flagged"),
+                FlaggedVehicles = vehicles.Count(v => maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
                 ScheduledMaintenance = vehicles.Count(v =>
                     maintenance.TryGetValue(v.VehicleId, out var m) && m == "Under Repair"),
                 RouteOptions = BuildRouteOptions(routes),
@@ -442,23 +694,23 @@ namespace FleetWise.Controllers
             return "Needs Attention";
         }
 
-        // Inspection "Issue" = the checklist categories whose value isn't "Pass" (the five
-        // jsonb maps), humanized and de-duplicated. "None" when everything passed.
+        // Inspection "Issue" = the SECTIONS that have any failed item (high-level), so it
+        // complements the Maintenance "Issue Summary" which lists the individual failed
+        // items — no longer the same list shown twice. "None" when everything passed.
         private static string DeriveInspectionIssue(BusChecklist c)
         {
-            var maps = new[]
+            var sections = new (string Name, Dictionary<string, string> Map)[]
             {
-                c.ExteriorInspection, c.EngineCompartment, c.InteriorInspection,
-                c.BrakeSafety, c.PassengerSystems,
+                ("Exterior Inspection", c.ExteriorInspection),
+                ("Engine Compartment", c.EngineCompartment),
+                ("Interior Inspection", c.InteriorInspection),
+                ("Brake & Safety Systems", c.BrakeSafety),
+                ("Passenger & Fare Systems", c.PassengerSystems),
             };
 
-            var failed = maps
-                .Where(m => m != null)
-                .SelectMany(m => m)
-                .Where(kv => !string.Equals(kv.Value?.Trim(), "Pass", OIC))
-                .Select(kv => Humanize(kv.Key))
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+            var failed = sections
+                .Where(s => s.Map != null && s.Map.Any(kv => !string.Equals(kv.Value?.Trim(), "Pass", OIC)))
+                .Select(s => s.Name)
                 .ToList();
 
             return failed.Count > 0 ? string.Join(", ", failed) : "None";
@@ -473,12 +725,24 @@ namespace FleetWise.Controllers
             return string.IsNullOrEmpty(s) ? "Pending" : s;
         }
 
+        // Checklist items framed as a negative ("No X" reads as GOOD when it passes) look wrong
+        // when listed as a FAILED issue, so rephrase them to the actual problem.
+        private static readonly Dictionary<string, string> IssuePhrase = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["No Visible Body Damage"] = "Visible body damage",
+            ["No fluid leaks under bus"] = "Fluid leak under bus",
+            ["No unusual smoke or overheating"] = "Unusual smoke / overheating",
+        };
+
+        private static string RephraseIssue(string issue) =>
+            IssuePhrase.TryGetValue(issue?.Trim() ?? "", out var p) ? p : issue;
+
         // "Issue Summary" for the maintenance section: the latest log's issue_details list,
         // falling back to its remarks, then a dash.
         private static string DeriveIssueSummary(MaintenanceLog latest)
         {
             if (latest.IssueDetails?.Issues is { Count: > 0 } issues)
-                return string.Join(", ", issues);
+                return string.Join(", ", issues.Select(RephraseIssue));
             return string.IsNullOrWhiteSpace(latest.Remarks) ? "—" : latest.Remarks;
         }
 
@@ -498,15 +762,6 @@ namespace FleetWise.Controllers
             var name = string.Join(" ",
                 new[] { driver.FirstName, driver.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
             return string.IsNullOrWhiteSpace(name) ? $"Driver #{driverId}" : name;
-        }
-
-        // "engine_compartment" → "Engine Compartment".
-        private static string Humanize(string key)
-        {
-            if (string.IsNullOrWhiteSpace(key)) return "";
-            var words = key.Replace('_', ' ').Replace('-', ' ')
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            return string.Join(" ", words.Select(w => char.ToUpper(w[0]) + w[1..]));
         }
 
         // Normalize the stored vehicle_status to the registry's display labels. Matches

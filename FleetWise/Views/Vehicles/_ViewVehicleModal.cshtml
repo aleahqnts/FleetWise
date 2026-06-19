@@ -2,7 +2,9 @@
     View Vehicle Details modal shell — #viewVehicleContent is filled per vehicle via
     fetch('/Vehicles/Details?id=…') with the _VehicleDetails partial (header + body).
 *@
-<div class="modal fade vh-modal" id="viewVehicleModal" tabindex="-1" aria-labelledby="viewVehicleModalLabel" aria-hidden="true">
+@* data-bs-focus="false" -> Bootstrap won't trap focus inside the modal, so the custom
+   action overlay (schedule maintenance / out of service) above it stays typeable. *@
+<div class="modal fade vh-modal" id="viewVehicleModal" tabindex="-1" data-bs-focus="false" aria-labelledby="viewVehicleModalLabel" aria-hidden="true">
     <div class="modal-dialog vh-modal-sm">
         <div class="modal-content" id="viewVehicleContent">
             <div class="vh-modal-loading"><div class="vh-spinner"></div></div>

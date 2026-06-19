@@ -42,8 +42,9 @@ namespace FleetWise.Controllers
                                        .Get();
             var availabilityTask = _supabase.From<DriverAvailability>().Get();
             var checklistsTask = _supabase.From<BusChecklist>().Get();
+            var maintTask = _supabase.From<MaintenanceLog>().Get();
 
-            await Task.WhenAll(tripsTask, vehiclesTask, routesTask, driversTask, availabilityTask, checklistsTask);
+            await Task.WhenAll(tripsTask, vehiclesTask, routesTask, driversTask, availabilityTask, checklistsTask, maintTask);
 
             // Trips for this operational day (overnight ones included — they're dated today).
             var trips = tripsTask.Result.Models
@@ -54,6 +55,14 @@ namespace FleetWise.Controllers
             var drivers = driversTask.Result.Models;
             var availability = availabilityTask.Result.Models;
             var checklists = checklistsTask.Result.Models;
+
+            // Vehicles with an OPEN incident (unresolved maintenance_log) are flagged
+            // PERSISTENTLY — independent of any trip — so the flag survives the bus going
+            // On Trip and outlives the volatile vehicle_status column.
+            var flaggedVehicleIds = maintTask.Result.Models
+                .Where(l => l.ResolvedAt == null && l.VehicleId != null)
+                .Select(l => l.VehicleId)
+                .ToHashSet();
 
             // --- Build lookup dictionaries ---
             var vehicleDict = vehicles.ToDictionary(v => v.VehicleId);
@@ -71,19 +80,34 @@ namespace FleetWise.Controllers
             //       - checklist status == "Passed"  -> vehicle Ready to Deploy
             //       - anything else (e.g. "Failed") -> vehicle Flagged
             //     Match is case-insensitive, mirroring the JS check in the modal.
-            (Vehicle Vehicle, UserModel Driver, string VehicleStatus, string DriverStatus, string TripStatus) Resolve(Trip trip)
+            (Vehicle Vehicle, UserModel Driver, string VehicleStatus, string DriverStatus, string TripStatus, bool Flagged) Resolve(Trip trip)
             {
                 vehicleDict.TryGetValue(trip.VehicleId, out var vehicle);
                 driverDict.TryGetValue(trip.DriverId, out var driver);
                 var driverAvail = availabilityDict.TryGetValue(trip.DriverId, out var avail) ? avail : "Available";
 
+                // Roadworthiness comes from THIS trip's own inspection, never the shared
+                // vehicle_status column (which a later shift's start/end/checklist overwrites
+                // -> stale green on a missed trip). A submitted checklist that isn't "Passed"
+                // is a flag, and it's reported independently of the operational dot.
+                var cl = checklistDict.TryGetValue(trip.TripId, out var c0) ? c0 : null;
+                // After a bus reassignment the trip's old checklist belongs to a DIFFERENT bus
+                // — it doesn't describe the bus now on this trip, so ignore it (the new bus
+                // needs its own inspection).
+                if (cl != null && !string.Equals(cl.VehicleId, trip.VehicleId, StringComparison.OrdinalIgnoreCase))
+                    cl = null;
+                bool flagged = (cl != null && !string.Equals(cl.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase))
+                               || flaggedVehicleIds.Contains(trip.VehicleId);
+
                 if (trip.TripStatus == "Active")
-                    return (vehicle, driver, "On Trip", "On Trip", "Active");
+                    return (vehicle, driver, "On Trip", "On Trip", "Active", flagged);
 
                 if (trip.TripStatus == "Completed")
-                    return (vehicle, driver, "Ready to Deploy", "Available", "Completed");
+                    return (vehicle, driver, "Completed", "Available", "Completed", flagged);
 
-                var vehicleStatus = string.IsNullOrEmpty(vehicle?.VehicleStatus) ? "Pending" : vehicle.VehicleStatus;
+                // Waiting to depart — readiness is derived from the trip's checklist, not the
+                // bus row: no checklist yet -> Pending; failed -> Flagged; passed -> Ready.
+                var vehicleStatus = cl == null ? "Pending" : flagged ? "Flagged" : "Ready to Deploy";
 
                 // Treat null/missing availability as Available
                 var driverStatus = driver == null
@@ -93,22 +117,24 @@ namespace FleetWise.Controllers
                 // Shift already ended but the trip never went Active/Completed -> it was
                 // MISSED. Time-relative (derived per request, not stored), so a past
                 // operational day shows missed trips instead of a stale "Not Yet Started".
+                // A flag is advisory now — the bus is still deployable. Only a grounded
+                // (out-of-service) bus or an unavailable driver is a blocking Assignment Issue.
                 var tripStatus = ShiftEndAt(trip) < PhClock.Now
                     ? "Missed"
-                    : (vehicleStatus == "Flagged" || driverStatus == "Unavailable")
+                    : (vehicle?.OutOfService == true || driverStatus == "Unavailable")
                         ? "Assignment Issue"
                         : vehicleStatus == "Pending"
                             ? "Pending"
                             : "Not Yet Started";
 
-                return (vehicle, driver, vehicleStatus, driverStatus, tripStatus);
+                return (vehicle, driver, vehicleStatus, driverStatus, tripStatus, flagged);
             }
 
-            var resolved = new Dictionary<string, (Vehicle Vehicle, UserModel Driver, string VehicleStatus, string DriverStatus, string TripStatus)>();
+            var resolved = new Dictionary<string, (Vehicle Vehicle, UserModel Driver, string VehicleStatus, string DriverStatus, string TripStatus, bool Flagged)>();
             foreach (var trip in trips)
             {
                 try { resolved[trip.TripId] = Resolve(trip); }
-                catch { resolved[trip.TripId] = (null, null, "Pending", "Available", "Pending"); }
+                catch { resolved[trip.TripId] = (null, null, "Pending", "Available", "Pending", false); }
             }
 
             // --- Stats ---
@@ -121,7 +147,7 @@ namespace FleetWise.Controllers
                 && resolved[t.TripId].TripStatus != "Completed"
                 && resolved[t.TripId].TripStatus != "Missed");
             int unassigned = trips.Count(t => resolved[t.TripId].TripStatus == "Assignment Issue");
-            int flaggedVehicles = vehicles.Count(v => v.VehicleStatus == "Flagged");
+            int flaggedVehicles = vehicles.Count(v => flaggedVehicleIds.Contains(v.VehicleId));
             int unavailableDrivers = availability.Count(a => a.AvailabilityStatus == "Unavailable");
 
             // --- Group trips by route → shift ---
@@ -195,7 +221,11 @@ namespace FleetWise.Controllers
                                 ? $"{r.Driver.FirstName} {r.Driver.LastName}"
                                 : "Unassigned",
                             DriverStatus = r.DriverStatus,
-                            TripStatus = r.TripStatus
+                            TripStatus = r.TripStatus,
+                            Flagged = r.Flagged,
+                            AssignmentIssueReason = r.TripStatus == "Assignment Issue"
+                                ? BuildIssueReason(r.Vehicle, r.DriverStatus)
+                                : null
                         });
                     }
 
@@ -239,7 +269,12 @@ namespace FleetWise.Controllers
             var driver = driverTask.Result.Models.FirstOrDefault();
             var route = routeTask.Result.Models.FirstOrDefault();
             var availability = availabilityTask.Result.Models.FirstOrDefault();
-            var checklist = checklistTask.Result.Models.FirstOrDefault();
+            // Only the inspection of the bus CURRENTLY on this trip — after a reassignment an
+            // old checklist belongs to a different bus and must not describe the new one.
+            var checklist = checklistTask.Result.Models
+                .Where(c => string.Equals(c.VehicleId, trip.VehicleId, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(c => c.SubmittedAt)
+                .FirstOrDefault();
 
             // Resolve display statuses
             string vehicleStatus, driverStatus, resolvedTripStatus;
@@ -257,13 +292,15 @@ namespace FleetWise.Controllers
             }
             else
             {
-                // Vehicle status is derived from the inspection log itself, so
+                // Vehicle status is derived from THIS trip's inspection log itself (not the
+                // shared vehicle_status column, which a later shift overwrites), so
                 // "Vehicle Details" always agrees with the Inspection Log card:
                 //   - no checklist submitted yet     -> Pending
                 //   - checklist status == "Passed"   -> Ready to Deploy
                 //   - anything else (e.g. "Failed")  -> Flagged
                 // Match is case-insensitive, mirroring the JS check in the modal.
-                vehicleStatus = string.IsNullOrEmpty(vehicle?.VehicleStatus) ? "Pending" : vehicle.VehicleStatus;
+                var clFailed = checklist != null && !string.Equals(checklist.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase);
+                vehicleStatus = checklist == null ? "Pending" : clFailed ? "Flagged" : "Ready to Deploy";
 
                 driverStatus = driver == null
                     ? "Unavailable"
@@ -392,9 +429,10 @@ namespace FleetWise.Controllers
                         RouteName = r.RouteName
                     }).ToList(),
 
-                // Only vehicles that are NOT Flagged
+                // Flagged buses stay deployable (advisory) — only grounded (out-of-service)
+                // buses are withheld from assignment.
                 Vehicles = vehicles
-                    .Where(v => v.VehicleStatus != "Flagged")
+                    .Where(v => !v.OutOfService)
                     .OrderBy(v => v.VehicleId)
                     .Select(v => new VehicleOption
                     {
@@ -508,10 +546,11 @@ namespace FleetWise.Controllers
                 .Select(t => t.DriverId)
                 .ToHashSet();
 
-            // Available vehicles: not Flagged AND not already in this shift
+            // Available vehicles: no open incident AND not already in this shift
             // Always include the trip's current vehicle so it appears as the default
             var availableVehicles = vehicles
-                .Where(v => v.VehicleStatus != "Flagged" && (!vehiclesInShift.Contains(v.VehicleId) || v.VehicleId == trip.VehicleId))
+                .Where(v => (!v.OutOfService || v.VehicleId == trip.VehicleId)
+                         && (!vehiclesInShift.Contains(v.VehicleId) || v.VehicleId == trip.VehicleId))
                 .OrderBy(v => v.VehicleId)
                 .Select(v => new
                 {
@@ -735,6 +774,15 @@ namespace FleetWise.Controllers
             return (s.ToString("h:mm tt"), overnight ? $"{e:h:mm tt} (+1)" : e.ToString("h:mm tt"));
         }
 
+        // Brief, concrete reason a trip is an Assignment Issue, for the badge's hover tooltip.
+        private static string BuildIssueReason(Vehicle vehicle, string driverStatus)
+        {
+            var parts = new List<string>();
+            if (vehicle?.OutOfService == true) parts.Add("Bus is out of service");
+            if (driverStatus == "Unavailable") parts.Add("Driver is unavailable");
+            return parts.Count > 0 ? string.Join(" · ", parts) : "Needs reassignment";
+        }
+
         // Actual end as a DateTime on the trip's date (overnight rolls +1 day) — used to
         // tell whether a not-yet-started trip is already past its window (Missed).
         private static DateTime ShiftEndAt(Trip t) =>
@@ -821,7 +869,9 @@ namespace FleetWise.Controllers
 
                 string newStatus;
 
-                if (vehicle?.VehicleStatus == "Flagged" || driverAvail == "Unavailable")
+                // Grounded (out-of-service) bus or unavailable driver = blocking issue.
+                // A flag alone no longer blocks.
+                if (vehicle?.OutOfService == true || driverAvail == "Unavailable")
                     newStatus = "Assignment Issue";
                 else if (vehicle?.VehicleStatus == "Pending")
                     newStatus = "Pending";

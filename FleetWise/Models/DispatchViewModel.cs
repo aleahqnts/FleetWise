@@ -41,5 +41,14 @@
         public string DriverName { get; set; }
         public string DriverStatus { get; set; }
         public string TripStatus { get; set; }
+
+        // Roadworthiness, derived from THIS trip's own checklist (a failed inspection),
+        // kept separate from the operational dot so a flagged bus that proceeds shows
+        // both "On Trip" AND the flag — they can no longer overwrite each other.
+        public bool Flagged { get; set; }
+
+        // Why a trip is an Assignment Issue (out-of-service bus / unavailable driver),
+        // shown as the badge's hover tooltip. Null when there's no issue.
+        public string AssignmentIssueReason { get; set; }
     }
 }
