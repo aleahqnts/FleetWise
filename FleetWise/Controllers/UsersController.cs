@@ -10,10 +10,11 @@ namespace FleetWise.Controllers
     [Authorize]
     public class UsersController : Controller
     {
+        // Keys match the stored web_permissions / mobile_permissions JSON exactly (lowercase).
         private static readonly string[] WebPermissionKeys =
-            { "Dashboard", "FleetMap", "Vehicles", "Dispatch", "Analytics", "Reports", "Users" };
+            { "dashboard", "routes", "vehicles", "reports", "users" };
 
-        private static readonly string[] MobilePermissionKeys = { "FullAccess" };
+        private static readonly string[] MobilePermissionKeys = { "tracking", "messages", "checklist" };
 
         private readonly Supabase.Client _supabase;
 
@@ -31,7 +32,7 @@ namespace FleetWise.Controllers
             ViewBag.SearchTerm = search;
             ViewBag.AddUserModel = new AddUserViewModel();
             ViewBag.EditUserModel = new EditUserViewModel();
-            ViewBag.RoleFormModel = new RoleFormViewModel();
+            ViewBag.RoleFormModel = DefaultRoleForm(roles);
             ViewBag.OpenModal = (string?)null;
 
             return View(new List<UserListItemViewModel>());
@@ -63,7 +64,6 @@ namespace FleetWise.Controllers
                 var result = await ReRenderIndexAsync("AddUser");
                 ViewBag.AddUserModel = model;
                 ViewBag.EditUserModel = new EditUserViewModel();
-                ViewBag.RoleFormModel = new RoleFormViewModel();
                 return result;
             }
 
@@ -105,7 +105,6 @@ namespace FleetWise.Controllers
                 var result = await ReRenderIndexAsync("EditUser");
                 ViewBag.AddUserModel = new AddUserViewModel();
                 ViewBag.EditUserModel = model;
-                ViewBag.RoleFormModel = new RoleFormViewModel();
                 return result;
             }
 
@@ -280,6 +279,7 @@ namespace FleetWise.Controllers
             ViewBag.RolesFull = roles;
             ViewBag.SelectedRole = null;
             ViewBag.SearchTerm = null;
+            ViewBag.RoleFormModel = DefaultRoleForm(roles);
             ViewBag.OpenModal = openModal;
 
             return View("Index", new List<UserListItemViewModel>());
@@ -291,6 +291,22 @@ namespace FleetWise.Controllers
             foreach (var key in keys)
                 result[key] = posted.TryGetValue(key, out var value) && value;
             return result;
+        }
+
+        // The role the Manage Roles modal shows by default: the first role, with its stored
+        // permissions, so the toggles open pre-filled instead of blank.
+        private static RoleFormViewModel DefaultRoleForm(List<Role> roles)
+        {
+            var first = roles.FirstOrDefault();
+            if (first is null) return new RoleFormViewModel();
+            return new RoleFormViewModel
+            {
+                RoleId = first.RoleId,
+                RoleName = first.RoleName,
+                AccessLevel = first.AccessLevel,
+                WebPermissions = first.WebPermissions ?? new(),
+                MobilePermissions = first.MobilePermissions ?? new(),
+            };
         }
 
         private static string FormatFullName(string? firstName, string? middleName, string? lastName)
