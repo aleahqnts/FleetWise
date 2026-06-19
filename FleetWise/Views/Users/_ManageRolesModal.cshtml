@@ -3,17 +3,17 @@
 @{
     var webPermissions = new (string Key, string Label)[]
     {
-        ("Dashboard", "Dashboard"),
-        ("FleetMap", "Fleet Map"),
-        ("Vehicles", "Vehicles"),
-        ("Dispatch", "Dispatch"),
-        ("Analytics", "Analytics"),
-        ("Reports", "Reports"),
-        ("Users", "Users"),
+        ("dashboard", "Dashboard"),
+        ("routes", "Routes"),
+        ("vehicles", "Vehicles"),
+        ("reports", "Reports"),
+        ("users", "Users"),
     };
     var mobilePermissions = new (string Key, string Label)[]
     {
-        ("FullAccess", "Full Access"),
+        ("tracking", "Tracking"),
+        ("messages", "Messages"),
+        ("checklist", "Checklist"),
     };
 }
 
@@ -38,7 +38,6 @@
                             </button>
                         }
                     </div>
-                    <button type="button" class="us-role-item us-role-item--add @(Model.RoleId == null ? "us-role-item--active" : "")" data-role-id="">+ Add Role</button>
                 </div>
                 <div class="us-roles-form">
                     <form id="roleForm" asp-action="UpdateRole" asp-controller="Users" method="post">
@@ -62,12 +61,12 @@
                             {
                                 <div class="us-perm-row">
                                     <span>@perm.Label</span>
-                                    <input type="hidden" name="WebPermissions[@perm.Key]" value="false" />
                                     <label class="us-switch">
                                         <input type="checkbox" name="WebPermissions[@perm.Key]" value="true" id="perm_web_@perm.Key"
                                                checked="@(Model.WebPermissions.GetValueOrDefault(perm.Key))" />
                                         <span class="us-switch-slider"></span>
                                     </label>
+                                    <input type="hidden" name="WebPermissions[@perm.Key]" value="false" />
                                 </div>
                             }
                         </div>
@@ -78,12 +77,12 @@
                             {
                                 <div class="us-perm-row">
                                     <span>@perm.Label</span>
-                                    <input type="hidden" name="MobilePermissions[@perm.Key]" value="false" />
                                     <label class="us-switch">
                                         <input type="checkbox" name="MobilePermissions[@perm.Key]" value="true" id="perm_mobile_@perm.Key"
                                                checked="@(Model.MobilePermissions.GetValueOrDefault(perm.Key))" />
                                         <span class="us-switch-slider"></span>
                                     </label>
+                                    <input type="hidden" name="MobilePermissions[@perm.Key]" value="false" />
                                 </div>
                             }
                         </div>
