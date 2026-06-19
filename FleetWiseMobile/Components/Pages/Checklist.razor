@@ -189,7 +189,19 @@ else
                 Notes = null
             };
 
-            await Data.SubmitChecklistAsync(checklist);
+            var inserted = await Data.SubmitChecklistAsync(checklist);
+
+            // A failed inspection opens a maintenance incident so the flag is recorded and
+            // reviewable on the web (Vehicles tab / Trip Detail), not just a volatile status
+            // that the next shift overwrites. Lists the exact items that failed.
+            if (!allPass && inserted is not null)
+            {
+                var issues = sections
+                    .SelectMany(s => s.Items.Where(i => i.Status != "Pass").Select(i => i.Label))
+                    .ToList();
+                await Data.OpenInspectionIncidentAsync(inserted.ChecklistId, trip!.VehicleId, TripId, issues);
+            }
+
             await Data.UpdateVehicleStatusAsync(trip!.VehicleId, allPass ? "Ready to Deploy" : "Flagged");
 
             submitted = true;

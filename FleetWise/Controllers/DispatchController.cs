@@ -42,8 +42,9 @@ namespace FleetWise.Controllers
                                        .Get();
             var availabilityTask = _supabase.From<DriverAvailability>().Get();
             var checklistsTask = _supabase.From<BusChecklist>().Get();
+            var maintTask = _supabase.From<MaintenanceLog>().Get();
 
-            await Task.WhenAll(tripsTask, vehiclesTask, routesTask, driversTask, availabilityTask, checklistsTask);
+            await Task.WhenAll(tripsTask, vehiclesTask, routesTask, driversTask, availabilityTask, checklistsTask, maintTask);
 
             // Trips for this operational day (overnight ones included — they're dated today).
             var trips = tripsTask.Result.Models
@@ -54,6 +55,14 @@ namespace FleetWise.Controllers
             var drivers = driversTask.Result.Models;
             var availability = availabilityTask.Result.Models;
             var checklists = checklistsTask.Result.Models;
+
+            // Vehicles with an OPEN incident (unresolved maintenance_log) are flagged
+            // PERSISTENTLY — independent of any trip — so the flag survives the bus going
+            // On Trip and outlives the volatile vehicle_status column.
+            var flaggedVehicleIds = maintTask.Result.Models
+                .Where(l => l.ResolvedAt == null && l.VehicleId != null)
+                .Select(l => l.VehicleId)
+                .ToHashSet();
 
             // --- Build lookup dictionaries ---
             var vehicleDict = vehicles.ToDictionary(v => v.VehicleId);
@@ -82,7 +91,8 @@ namespace FleetWise.Controllers
                 // -> stale green on a missed trip). A submitted checklist that isn't "Passed"
                 // is a flag, and it's reported independently of the operational dot.
                 var cl = checklistDict.TryGetValue(trip.TripId, out var c0) ? c0 : null;
-                bool flagged = cl != null && !string.Equals(cl.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase);
+                bool flagged = (cl != null && !string.Equals(cl.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase))
+                               || flaggedVehicleIds.Contains(trip.VehicleId);
 
                 if (trip.TripStatus == "Active")
                     return (vehicle, driver, "On Trip", "On Trip", "Active", flagged);
@@ -130,7 +140,7 @@ namespace FleetWise.Controllers
                 && resolved[t.TripId].TripStatus != "Completed"
                 && resolved[t.TripId].TripStatus != "Missed");
             int unassigned = trips.Count(t => resolved[t.TripId].TripStatus == "Assignment Issue");
-            int flaggedVehicles = vehicles.Count(v => v.VehicleStatus == "Flagged");
+            int flaggedVehicles = vehicles.Count(v => flaggedVehicleIds.Contains(v.VehicleId));
             int unavailableDrivers = availability.Count(a => a.AvailabilityStatus == "Unavailable");
 
             // --- Group trips by route → shift ---
@@ -377,6 +387,7 @@ namespace FleetWise.Controllers
             var drivers = driversTask.Result.Models;
             var availability = availTask.Result.Models
                                         .ToDictionary(a => a.UserId, a => a.AvailabilityStatus);
+            var flaggedIds = await GetFlaggedVehicleIdsAsync();
 
             // Build per-vehicle booked shifts for today
             var vehicleBookedShifts = todayTrips
@@ -404,9 +415,9 @@ namespace FleetWise.Controllers
                         RouteName = r.RouteName
                     }).ToList(),
 
-                // Only vehicles that are NOT Flagged
+                // Only vehicles with no open incident (road-safe)
                 Vehicles = vehicles
-                    .Where(v => v.VehicleStatus != "Flagged")
+                    .Where(v => !flaggedIds.Contains(v.VehicleId))
                     .OrderBy(v => v.VehicleId)
                     .Select(v => new VehicleOption
                     {
@@ -507,6 +518,7 @@ namespace FleetWise.Controllers
             var drivers = driversTask.Result.Models;
             var availability = availTask.Result.Models.ToDictionary(a => a.UserId, a => a.AvailabilityStatus);
             var route = routeTask.Result.Models.FirstOrDefault();
+            var flaggedIds = await GetFlaggedVehicleIdsAsync();
 
             // Vehicles already in this shift (excluding the trip being reassigned)
             var vehiclesInShift = todayTrips
@@ -520,10 +532,11 @@ namespace FleetWise.Controllers
                 .Select(t => t.DriverId)
                 .ToHashSet();
 
-            // Available vehicles: not Flagged AND not already in this shift
+            // Available vehicles: no open incident AND not already in this shift
             // Always include the trip's current vehicle so it appears as the default
             var availableVehicles = vehicles
-                .Where(v => v.VehicleStatus != "Flagged" && (!vehiclesInShift.Contains(v.VehicleId) || v.VehicleId == trip.VehicleId))
+                .Where(v => (!flaggedIds.Contains(v.VehicleId) || v.VehicleId == trip.VehicleId)
+                         && (!vehiclesInShift.Contains(v.VehicleId) || v.VehicleId == trip.VehicleId))
                 .OrderBy(v => v.VehicleId)
                 .Select(v => new
                 {
@@ -806,6 +819,18 @@ namespace FleetWise.Controllers
             return null;
         }
 
+        // Vehicle ids with an OPEN maintenance incident (unresolved log). This is the
+        // persistent "flagged / not road-safe" gate — replaces the volatile
+        // vehicle_status == "Flagged" check so a flag can't be erased by the next shift.
+        private async Task<HashSet<string>> GetFlaggedVehicleIdsAsync()
+        {
+            var logs = await _supabase.From<MaintenanceLog>().Get();
+            return logs.Models
+                .Where(l => l.ResolvedAt == null && l.VehicleId != null)
+                .Select(l => l.VehicleId)
+                .ToHashSet();
+        }
+
         private async Task SyncTripStatuses(string date = null)
         {
             date ??= PhClock.Today.ToString("yyyy-MM-dd");
@@ -822,6 +847,7 @@ namespace FleetWise.Controllers
             var vehicleDict = vehiclesTask.Result.Models.ToDictionary(v => v.VehicleId);
             var availabilityDict = availabilityTask.Result.Models
                                     .ToDictionary(a => a.UserId, a => a.AvailabilityStatus);
+            var flaggedIds = await GetFlaggedVehicleIdsAsync();
 
             foreach (var trip in trips)
             {
@@ -833,7 +859,7 @@ namespace FleetWise.Controllers
 
                 string newStatus;
 
-                if (vehicle?.VehicleStatus == "Flagged" || driverAvail == "Unavailable")
+                if (flaggedIds.Contains(trip.VehicleId) || driverAvail == "Unavailable")
                     newStatus = "Assignment Issue";
                 else if (vehicle?.VehicleStatus == "Pending")
                     newStatus = "Pending";

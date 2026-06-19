@@ -37,7 +37,7 @@ namespace FleetWise.Controllers
                 Rows = new List<VehicleListItemViewModel>(),
 
                 TotalVehicles = vehicles.Count,
-                FlaggedVehicles = vehicles.Count(v => DisplayStatus(v.VehicleStatus) == "Flagged"),
+                FlaggedVehicles = vehicles.Count(v => maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
                 ScheduledMaintenance = vehicles.Count(v =>
                     maintenance.TryGetValue(v.VehicleId, out var m) && m == "Under Repair"),
 
@@ -276,13 +276,22 @@ namespace FleetWise.Controllers
             var (vehicles, routes, maintenance) = await LoadVehicleDataAsync();
             var routeNames = routes.ToDictionary(r => r.RouteId, r => r.RouteName);
 
+            // Roadworthiness wins the registry's Status: an open incident shows as "Flagged"
+            // (persistent, can't be erased by the next shift), otherwise the operational
+            // status — and a stale vehicle_status of "Flagged" with no open incident is read
+            // as Ready (the flag was resolved).
+            string RoadStatus(Vehicle v) =>
+                maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"
+                    ? "Flagged"
+                    : DisplayStatus(string.Equals(v.VehicleStatus, "Flagged", OIC) ? "Ready to Deploy" : v.VehicleStatus);
+
             IEnumerable<Vehicle> filtered = vehicles;
 
             if (!string.IsNullOrWhiteSpace(route) && int.TryParse(route, out var routeId))
                 filtered = filtered.Where(v => v.RouteId == routeId);
 
             if (!string.IsNullOrWhiteSpace(status))
-                filtered = filtered.Where(v => string.Equals(DisplayStatus(v.VehicleStatus), status, OIC));
+                filtered = filtered.Where(v => string.Equals(RoadStatus(v), status, OIC));
 
             if (!string.IsNullOrWhiteSpace(condition))
                 filtered = filtered.Where(v =>
@@ -303,7 +312,7 @@ namespace FleetWise.Controllers
                     VehicleId = v.VehicleId,
                     PlateNumber = v.PlateNumber ?? "",
                     RouteName = v.RouteId.HasValue && routeNames.TryGetValue(v.RouteId.Value, out var rn) ? rn : "—",
-                    Status = DisplayStatus(v.VehicleStatus),
+                    Status = RoadStatus(v),
                     Maintenance = maintenance.GetValueOrDefault(v.VehicleId, "No Issues"),
                 })
                 .ToList();
@@ -313,14 +322,15 @@ namespace FleetWise.Controllers
         // (PRG can't carry ModelState, so a failed POST returns the view directly).
         private async Task<IActionResult> ReRenderIndexAsync(AddVehicleViewModel addModel)
         {
-            var (vehicles, routes, _) = await LoadVehicleDataAsync();
+            var (vehicles, routes, maintenance) = await LoadVehicleDataAsync();
 
             var vm = new VehiclesIndexViewModel
             {
                 Rows = new List<VehicleListItemViewModel>(),
                 TotalVehicles = vehicles.Count,
-                FlaggedVehicles = vehicles.Count(v => DisplayStatus(v.VehicleStatus) == "Flagged"),
-                ScheduledMaintenance = 0,
+                FlaggedVehicles = vehicles.Count(v => maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
+                ScheduledMaintenance = vehicles.Count(v =>
+                    maintenance.TryGetValue(v.VehicleId, out var um) && um == "Under Repair"),
                 RouteOptions = routes
                     .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
                     .ToList(),
@@ -395,7 +405,7 @@ namespace FleetWise.Controllers
             {
                 Rows = new List<VehicleListItemViewModel>(),
                 TotalVehicles = vehicles.Count,
-                FlaggedVehicles = vehicles.Count(v => DisplayStatus(v.VehicleStatus) == "Flagged"),
+                FlaggedVehicles = vehicles.Count(v => maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
                 ScheduledMaintenance = vehicles.Count(v =>
                     maintenance.TryGetValue(v.VehicleId, out var m) && m == "Under Repair"),
                 RouteOptions = BuildRouteOptions(routes),
