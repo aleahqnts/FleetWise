@@ -98,16 +98,18 @@ namespace FleetWise.Controllers
             var existingById = existing.ToDictionary(t => t.TripId);
 
             // ── Conflict validation across the EFFECTIVE schedule ─────
-            // Submitted cells PLUS any existing locked (Active/Completed) trip the grid didn't
-            // resend — those still occupy that driver/vehicle/shift, so a new cell colliding
-            // with them is a double-booking and must be rejected (the bug: a completed
-            // Afternoon let an Evening get booked for the same driver back-to-back).
+            // Submitted (editable) cells PLUS any existing locked (Active/Completed) trip the
+            // grid didn't resend — those still occupy that driver/vehicle/shift, so a NEW cell
+            // colliding with them is a real double-booking. But a clash between two LOCKED
+            // trips is immutable history the dispatcher can't fix, so it must never block the
+            // save (that was the false flag). A conflict is reported only when at least one
+            // side is editable, and only the editable cells are returned for highlighting.
             var submittedIds = cells.Where(c => !string.IsNullOrEmpty(c.TripId)).Select(c => c.TripId).ToHashSet();
-            var effective = new List<ScheduleCellInput>(cells);
+            var effective = cells.Select(c => (cell: c, locked: false)).ToList();
             effective.AddRange(existing
                 .Where(t => !submittedIds.Contains(t.TripId)
                          && (t.TripStatus == "Active" || t.TripStatus == "Completed"))
-                .Select(t => new ScheduleCellInput
+                .Select(t => (cell: new ScheduleCellInput
                 {
                     TripId = t.TripId,
                     VehicleId = t.VehicleId,
@@ -115,10 +117,10 @@ namespace FleetWise.Controllers
                     Shift = t.ShiftType,
                     RouteId = t.RouteId,
                     Date = t.Date.ToString("yyyy-MM-dd"),
-                }));
+                }, locked: true)));
 
-            var conflict = ValidateConflicts(effective);
-            if (conflict != null) return BadRequest(conflict);
+            var conflicts = FindConflicts(effective);
+            if (conflicts.Count > 0) return BadRequest(new { conflicts });
 
             // Trip ids that survive this save (existing rows kept/updated).
             var keptIds = new HashSet<string>();
@@ -175,45 +177,89 @@ namespace FleetWise.Controllers
             return Ok();
         }
 
-        // Returns an error string if a conflict exists, else null.
-        private static string ValidateConflicts(List<ScheduleCellInput> cells)
+        // Conflicts in the effective schedule. A conflict is reported ONLY when at least one
+        // participating cell is editable (locked == false); two locked trips clashing is
+        // immutable history and must never block the save. Each conflict carries the editable
+        // cells involved so the UI can highlight exactly what the dispatcher must fix.
+        private static List<ConflictDto> FindConflicts(List<(ScheduleCellInput cell, bool locked)> all)
         {
-            var valid = cells.Where(c => !string.IsNullOrEmpty(c.VehicleId) && c.DriverId != 0
-                                      && !string.IsNullOrEmpty(c.Shift) && DateTime.TryParse(c.Date, out _)).ToList();
+            var results = new List<ConflictDto>();
 
-            // Per (day, shift): no driver or vehicle assigned twice.
-            foreach (var g in valid.GroupBy(c => new { c.Date, c.Shift }))
+            var valid = all.Where(x => !string.IsNullOrEmpty(x.cell.VehicleId) && x.cell.DriverId != 0
+                                    && !string.IsNullOrEmpty(x.cell.Shift) && DateTime.TryParse(x.cell.Date, out _))
+                           .ToList();
+
+            static CellRef Ref((ScheduleCellInput cell, bool locked) x) =>
+                new() { RouteId = x.cell.RouteId, Shift = x.cell.Shift, Date = x.cell.Date };
+
+            // ── Per (day, shift): a driver or vehicle booked twice ──
+            foreach (var g in valid.GroupBy(x => new { x.cell.Date, x.cell.Shift }))
             {
-                var dupDriver = g.GroupBy(c => c.DriverId).FirstOrDefault(x => x.Count() > 1);
-                if (dupDriver != null)
-                    return $"Driver assigned to two routes in the same {g.Key.Shift} shift on {g.Key.Date}.";
-
-                var dupVeh = g.GroupBy(c => c.VehicleId).FirstOrDefault(x => x.Count() > 1);
-                if (dupVeh != null)
-                    return $"Vehicle assigned to two routes in the same {g.Key.Shift} shift on {g.Key.Date}.";
-            }
-
-            // No driver in two CONSECUTIVE shifts (same day adjacency, or evening -> next-day morning).
-            foreach (var g in valid.GroupBy(c => c.DriverId))
-            {
-                var byDate = g.GroupBy(c => DateTime.Parse(c.Date).Date)
-                              .ToDictionary(x => x.Key, x => x.Select(c => c.Shift).ToHashSet());
-
-                foreach (var (day, shifts) in byDate)
+                foreach (var dup in g.GroupBy(x => x.cell.DriverId).Where(x => x.Count() > 1))
                 {
-                    if (shifts.Contains("Morning") && shifts.Contains("Afternoon"))
-                        return $"Driver assigned to back-to-back Morning + Afternoon on {day:yyyy-MM-dd}.";
-                    if (shifts.Contains("Afternoon") && shifts.Contains("Evening"))
-                        return $"Driver assigned to back-to-back Afternoon + Evening on {day:yyyy-MM-dd}.";
+                    var editable = dup.Where(x => !x.locked).ToList();
+                    if (editable.Count == 0) continue; // locked-vs-locked -> not the user's problem
+                    results.Add(new ConflictDto
+                    {
+                        Message = $"This driver is already booked for the {g.Key.Shift} shift on {FmtDate(g.Key.Date)}.",
+                        Cells = editable.Select(Ref).ToList()
+                    });
+                }
 
-                    // Evening today -> Morning tomorrow
-                    if (shifts.Contains("Evening") && byDate.TryGetValue(day.AddDays(1), out var next)
-                        && next.Contains("Morning"))
-                        return $"Driver works Evening on {day:yyyy-MM-dd} then Morning the next day — no rest.";
+                foreach (var dup in g.GroupBy(x => x.cell.VehicleId).Where(x => x.Count() > 1))
+                {
+                    var editable = dup.Where(x => !x.locked).ToList();
+                    if (editable.Count == 0) continue;
+                    results.Add(new ConflictDto
+                    {
+                        Message = $"This bus is already booked for the {g.Key.Shift} shift on {FmtDate(g.Key.Date)}.",
+                        Cells = editable.Select(Ref).ToList()
+                    });
                 }
             }
 
-            return null;
+            // ── Per driver: no two CONSECUTIVE shifts (same-day adjacency or evening->next morning) ──
+            foreach (var g in valid.GroupBy(x => x.cell.DriverId))
+            {
+                var byDayShift = g.GroupBy(x => (Day: DateTime.Parse(x.cell.Date).Date, x.cell.Shift))
+                                  .ToDictionary(k => k.Key, k => k.ToList());
+
+                void Pair((DateTime Day, string Shift) a, (DateTime Day, string Shift) b, string message)
+                {
+                    if (!byDayShift.TryGetValue(a, out var la) || !byDayShift.TryGetValue(b, out var lb)) return;
+                    var editable = la.Concat(lb).Where(x => !x.locked).ToList();
+                    if (editable.Count == 0) return; // both shifts locked -> immutable, skip
+                    results.Add(new ConflictDto { Message = message, Cells = editable.Select(Ref).ToList() });
+                }
+
+                foreach (var day in byDayShift.Keys.Select(k => k.Day).Distinct())
+                {
+                    Pair((day, "Morning"), (day, "Afternoon"),
+                        $"This driver is booked for Morning and Afternoon back to back on {FmtDate(day.ToString("yyyy-MM-dd"))}. Give them a break.");
+                    Pair((day, "Afternoon"), (day, "Evening"),
+                        $"This driver is booked for Afternoon and Evening back to back on {FmtDate(day.ToString("yyyy-MM-dd"))}. Give them a break.");
+                    Pair((day, "Evening"), (day.AddDays(1), "Morning"),
+                        $"This driver ends with Evening on {FmtDate(day.ToString("yyyy-MM-dd"))} and starts Morning the next day. They need rest.");
+                }
+            }
+
+            return results;
+        }
+
+        private static string FmtDate(string isoDate) =>
+            DateTime.TryParse(isoDate, out var d) ? d.ToString("MMM d") : isoDate;
+
+        private sealed class ConflictDto
+        {
+            public string Message { get; set; } = "";
+            public List<CellRef> Cells { get; set; } = new();
+        }
+
+        private sealed class CellRef
+        {
+            public int RouteId { get; set; }
+            public string Shift { get; set; } = "";
+            public string Date { get; set; } = "";
         }
     }
 }
