@@ -57,17 +57,23 @@ namespace FleetWise.Controllers
                 (!routeId.HasValue || routeId.Value == 0 || t.RouteId == routeId.Value) &&
                 (!date.HasValue || t.Date.Date == anchor);
 
-            // ── Table (Daily Trip Reports) ─────────────────────────
+            // ── All filtered trips: drives the stat cards (incl. Missed) ───
             var filtered = allTrips
                 .Where(MatchesGlobalFilters)
                 .OrderByDescending(t => t.Date)
                 .ThenBy(t => t.TripId)
                 .ToList();
 
-            int totalCount = filtered.Count;
+            // ── Table (Daily Trip Reports): completed only — finished trips are the
+            // ones with real passenger/revenue data; in-progress/missed add noise here.
+            var tableTrips = filtered
+                .Where(t => string.Equals(t.TripStatus, "Completed", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            int totalCount = tableTrips.Count;
             int totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)PageSize));
             if (page > totalPages) page = totalPages;
-            var pageTrips = filtered.Skip((page - 1) * PageSize).Take(PageSize).ToList();
+            var pageTrips = tableTrips.Skip((page - 1) * PageSize).Take(PageSize).ToList();
 
             var tableRows = pageTrips.Select(t => new
             {
@@ -79,14 +85,14 @@ namespace FleetWise.Controllers
                 shiftType = t.ShiftType,
                 passengers = Passengers(t),
                 revenue = t.EstimatedRevenue,
-                status = t.TripStatus
+                status = DeriveStatus(t)
             });
 
             // ── Stat cards ──────────────────────────────────────────
             int completedTrips = filtered.Count(t => string.Equals(t.TripStatus, "completed", StringComparison.OrdinalIgnoreCase));
-            int delayedTrips = filtered.Count(t =>
-                string.Equals(t.TripStatus, "delayed", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(t.TripStatus, "missed", StringComparison.OrdinalIgnoreCase));
+            // "Missed" is never stored — derived from the shift window (see DeriveStatus),
+            // so this counts trips past their window that never went Active/Completed.
+            int delayedTrips = filtered.Count(t => DeriveStatus(t) == "Missed");
 
             int totalPassengers = filtered.Sum(Passengers);
             decimal totalRevenue = filtered.Sum(t => t.EstimatedRevenue);
@@ -326,7 +332,7 @@ namespace FleetWise.Controllers
                 driverId = tripResponse.DriverId,
                 totalPassengers = liveBoarded,
                 estimatedRevenue = tripResponse.EstimatedRevenue,
-                tripStatus = tripResponse.TripStatus,
+                tripStatus = DeriveStatus(tripResponse),
                 date = tripResponse.Date.ToString("MMMM dd, yyyy")
             };
 
@@ -893,6 +899,16 @@ namespace FleetWise.Controllers
         private static DateTime ShiftStartAt(Trip t) => t.Date.Date + t.ShiftStartTime;
         private static DateTime ShiftEndAt(Trip t) => t.Date.Date + t.ShiftEndTime
             + (IsOvernight(t) ? TimeSpan.FromDays(1) : TimeSpan.Zero);
+
+        // Trip status is partly derived: "Missed" is never stored. A trip past its shift
+        // window that never went Active/Completed was missed (mirrors the Dispatch board).
+        private static string DeriveStatus(Trip t)
+        {
+            if (string.Equals(t.TripStatus, "Completed", StringComparison.OrdinalIgnoreCase)) return "Completed";
+            if (string.Equals(t.TripStatus, "Active", StringComparison.OrdinalIgnoreCase)) return "Active";
+            if (ShiftEndAt(t) < PhClock.Now) return "Missed";
+            return "Not Yet Started";
+        }
 
         // Plain clock end time, e.g. "06:00 AM" — no date/"+1" suffix (the operational-day
         // header at the top of the report already makes the service window clear).
