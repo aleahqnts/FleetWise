@@ -617,23 +617,23 @@ namespace FleetWise.Controllers
             return "Needs Attention";
         }
 
-        // Inspection "Issue" = the checklist categories whose value isn't "Pass" (the five
-        // jsonb maps), humanized and de-duplicated. "None" when everything passed.
+        // Inspection "Issue" = the SECTIONS that have any failed item (high-level), so it
+        // complements the Maintenance "Issue Summary" which lists the individual failed
+        // items — no longer the same list shown twice. "None" when everything passed.
         private static string DeriveInspectionIssue(BusChecklist c)
         {
-            var maps = new[]
+            var sections = new (string Name, Dictionary<string, string> Map)[]
             {
-                c.ExteriorInspection, c.EngineCompartment, c.InteriorInspection,
-                c.BrakeSafety, c.PassengerSystems,
+                ("Exterior Inspection", c.ExteriorInspection),
+                ("Engine Compartment", c.EngineCompartment),
+                ("Interior Inspection", c.InteriorInspection),
+                ("Brake & Safety Systems", c.BrakeSafety),
+                ("Passenger & Fare Systems", c.PassengerSystems),
             };
 
-            var failed = maps
-                .Where(m => m != null)
-                .SelectMany(m => m)
-                .Where(kv => !string.Equals(kv.Value?.Trim(), "Pass", OIC))
-                .Select(kv => Humanize(kv.Key))
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+            var failed = sections
+                .Where(s => s.Map != null && s.Map.Any(kv => !string.Equals(kv.Value?.Trim(), "Pass", OIC)))
+                .Select(s => s.Name)
                 .ToList();
 
             return failed.Count > 0 ? string.Join(", ", failed) : "None";
@@ -673,15 +673,6 @@ namespace FleetWise.Controllers
             var name = string.Join(" ",
                 new[] { driver.FirstName, driver.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
             return string.IsNullOrWhiteSpace(name) ? $"Driver #{driverId}" : name;
-        }
-
-        // "engine_compartment" → "Engine Compartment".
-        private static string Humanize(string key)
-        {
-            if (string.IsNullOrWhiteSpace(key)) return "";
-            var words = key.Replace('_', ' ').Replace('-', ' ')
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            return string.Join(" ", words.Select(w => char.ToUpper(w[0]) + w[1..]));
         }
 
         // Normalize the stored vehicle_status to the registry's display labels. Matches
