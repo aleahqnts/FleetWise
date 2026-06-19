@@ -222,7 +222,14 @@
                                         </div>
                                     </td>
                                     <td>
-                                        <span class="dp-badge @badgeClass">@badgeLabel</span>
+                                        @if (trip.TripStatus == "Assignment Issue" && !string.IsNullOrEmpty(trip.AssignmentIssueReason))
+                                        {
+                                            <span class="dp-badge @badgeClass dp-badge--hint" title="@trip.AssignmentIssueReason">@badgeLabel</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="dp-badge @badgeClass">@badgeLabel</span>
+                                        }
                                     </td>
                                     <td>
                                         <div class="dp-actions-cell">
@@ -933,6 +940,12 @@
         background: #FDE8E8;
         color: #B42318;
         border: 1px solid #F5C2C0;
+    }
+
+    .dp-badge--hint {
+        cursor: help;
+        text-decoration: underline dotted;
+        text-underline-offset: 3px;
     }
 
     /* ── Action buttons ─────────────────────────────────────── */

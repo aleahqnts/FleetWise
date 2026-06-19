@@ -222,7 +222,10 @@ namespace FleetWise.Controllers
                                 : "Unassigned",
                             DriverStatus = r.DriverStatus,
                             TripStatus = r.TripStatus,
-                            Flagged = r.Flagged
+                            Flagged = r.Flagged,
+                            AssignmentIssueReason = r.TripStatus == "Assignment Issue"
+                                ? BuildIssueReason(r.Vehicle, r.DriverStatus)
+                                : null
                         });
                     }
 
@@ -769,6 +772,15 @@ namespace FleetWise.Controllers
             var s = t.Date.Date.Add(t.ShiftStartTime);
             var e = t.Date.Date.Add(t.ShiftEndTime).AddDays(overnight ? 1 : 0);
             return (s.ToString("h:mm tt"), overnight ? $"{e:h:mm tt} (+1)" : e.ToString("h:mm tt"));
+        }
+
+        // Brief, concrete reason a trip is an Assignment Issue, for the badge's hover tooltip.
+        private static string BuildIssueReason(Vehicle vehicle, string driverStatus)
+        {
+            var parts = new List<string>();
+            if (vehicle?.OutOfService == true) parts.Add("Bus is out of service");
+            if (driverStatus == "Unavailable") parts.Add("Driver is unavailable");
+            return parts.Count > 0 ? string.Join(" · ", parts) : "Needs reassignment";
         }
 
         // Actual end as a DateTime on the trip's date (overnight rolls +1 day) — used to
