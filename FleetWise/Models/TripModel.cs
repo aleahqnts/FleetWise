@@ -50,4 +50,9 @@ public class Trip : BaseModel
 
     [Column("actual_end_time")]
     public DateTime? ActualEndTime { get; set; }
+
+    // True for trips the TelemetrySimulator created. Lets the simulator animate only its
+    // own demo trips and lets the OFF switch delete exactly what it made — never real data.
+    [Column("is_simulated")]
+    public bool IsSimulated { get; set; }
 }

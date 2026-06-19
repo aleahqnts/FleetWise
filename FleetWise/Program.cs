@@ -39,11 +39,11 @@ builder.Services.AddSingleton(provider => {
     return client;
 });
 
-// Simulated live telemetry producer — Development only, so it never runs in production.
-if (builder.Environment.IsDevelopment())
-{
-    builder.Services.AddHostedService<TelemetrySimulator>();
-}
+// Simulated live telemetry producer. Registered in every environment but OFF by default —
+// SimulatorControl gates it, and an operator turns it on from the Fleet Map only when a
+// demo is wanted. Turning it off deletes the data it produced.
+builder.Services.AddSingleton<SimulatorControl>();
+builder.Services.AddHostedService<TelemetrySimulator>();
 
 var app = builder.Build();
 

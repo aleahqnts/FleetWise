@@ -122,6 +122,12 @@
     </aside>
 
     <div class="fm-legend" id="fmLegend"></div>
+
+    <!-- Hidden demo-simulator switch. Subtle by design — operators only. OFF deletes
+         the data the simulator created (real trips/telemetry are untouched). -->
+    <button id="fmSimToggle" class="fm-sim-toggle" type="button"
+            title="Demo telemetry simulator (creates fake moving buses)">SIM ·</button>
+    @Html.AntiForgeryToken()
 </div>
 
 <style>
@@ -635,6 +641,38 @@
     .fm-stop-tooltip.leaflet-tooltip::before {
         display: none;
     }
+
+    /* ── Hidden demo-simulator toggle (bottom-right, faint until hover) ── */
+    .fm-sim-toggle {
+        position: absolute;
+        right: 14px;
+        bottom: 14px;
+        z-index: 1000;
+        background: var(--fm-white);
+        color: #9AA5B4;
+        border: 1px solid var(--fm-border);
+        border-radius: 8px;
+        padding: 5px 10px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        font-family: 'Segoe UI', sans-serif;
+        cursor: pointer;
+        opacity: 0.25;
+        transition: opacity .15s, color .15s, background .15s;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+    }
+
+    .fm-sim-toggle:hover {
+        opacity: 1;
+    }
+
+    .fm-sim-toggle.fm-sim-toggle--on {
+        opacity: 1;
+        background: #34C759;
+        color: #fff;
+        border-color: #34C759;
+    }
 </style>
 
 @section Scripts {
@@ -645,4 +683,48 @@
             : "null");
     </script>
     <script src="~/js/fleetmap.js" asp-append-version="true"></script>
+    <script>
+        // ── Hidden demo-simulator toggle ──────────────────────────
+        (function () {
+            var btn = document.getElementById('fmSimToggle');
+            if (!btn) return;
+            var tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
+            var token = tokenEl ? tokenEl.value : '';
+            var busy = false;
+
+            function render(on) {
+                btn.classList.toggle('fm-sim-toggle--on', !!on);
+                btn.textContent = on ? 'SIM ● ON' : 'SIM ·';
+                btn.dataset.on = on ? '1' : '0';
+            }
+
+            function post(url) {
+                return fetch(url, {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': token }
+                }).then(function (r) { return r.json(); });
+            }
+
+            // Initial state.
+            fetch('/Simulator/Status').then(function (r) { return r.json(); })
+                .then(function (d) { render(d.enabled); })
+                .catch(function () { render(false); });
+
+            btn.addEventListener('click', function () {
+                if (busy) return;
+                var on = btn.dataset.on === '1';
+                if (on && !confirm('Stop the demo simulator and DELETE all simulated trips + their telemetry? Real trips are kept.'))
+                    return;
+                busy = true;
+                btn.style.pointerEvents = 'none';
+                post(on ? '/Simulator/Stop' : '/Simulator/Start')
+                    .then(function (d) {
+                        render(d.enabled);
+                        if (d.removed != null) console.info('Simulator removed ' + d.removed + ' simulated trips.');
+                    })
+                    .catch(function () { alert('Simulator toggle failed.'); })
+                    .finally(function () { busy = false; btn.style.pointerEvents = ''; });
+            });
+        })();
+    </script>
 }
