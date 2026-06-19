@@ -72,10 +72,11 @@
     }
 
     function statusColor(status) {
-        if (status === 'Active') return '#34C759'; // green — moving / on trip
+        if (status === 'On Trip') return '#34C759'; // green — moving / on trip
         if (status === 'Flagged') return '#DC2626'; // red
+        if (status === 'Out of Service') return '#6B7280'; // slate — grounded
         if (status === 'Offline') return '#9CA3AF'; // grey
-        return '#F59E0B'; // amber — Ready to Deploy / Pending / Idle / other parked
+        return '#F59E0B'; // amber — Ready to Deploy / Pending / other parked
     }
 
     // Server timestamps are UTC but serialized without a 'Z', so append one before parsing.
@@ -195,7 +196,7 @@
                 // buses out in a stable grid (sorted by id so slots don't reshuffle).
                 var parkedGroups = {};
                 buses.forEach(function (b) {
-                    if (b.status === 'Active') return;
+                    if (b.status === 'On Trip') return;
                     var key = b.terminalName || (b.lat + ',' + b.lng);
                     if (!parkedGroups[key]) parkedGroups[key] = { name: b.terminalName, lat: b.lat, lng: b.lng, list: [] };
                     parkedGroups[key].list.push(b);
