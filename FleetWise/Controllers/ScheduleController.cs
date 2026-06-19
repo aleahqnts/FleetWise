@@ -52,7 +52,9 @@ namespace FleetWise.Controllers
                 Routes = routesTask.Result.Models.OrderBy(r => r.RouteId)
                     .Select(r => new RouteOption { RouteId = r.RouteId, RouteName = r.RouteName }).ToList(),
                 Vehicles = vehiclesTask.Result.Models
-                    .Where(v => v.VehicleStatus != "Flagged")
+                    // Flagged buses stay schedulable (advisory) — only grounded
+                    // (out-of-service) buses are withheld.
+                    .Where(v => !v.OutOfService)
                     .OrderBy(v => v.VehicleId)
                     .Select(v => new VehicleOption { VehicleId = v.VehicleId, PlateNumber = v.PlateNumber }).ToList(),
                 Drivers = driversTask.Result.Models.OrderBy(d => d.FirstName)

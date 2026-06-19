@@ -177,21 +177,25 @@ namespace FleetWise.Controllers
             var openLog = logs.FirstOrDefault(l => l.ResolvedAt == null);
             vm.OpenLogId = openLog?.LogId;
 
-            var threadLog = openLog ?? logs.FirstOrDefault();
-            if (threadLog != null)
+            // Full audit history across ALL of this vehicle's incidents — not just the open
+            // one. (Showing only one incident's thread made older notes vanish once a second
+            // incident was opened.)
+            var logIds = logs.Select(l => l.LogId).ToHashSet();
+            if (logIds.Count > 0)
             {
                 var notesResp = await _supabase.From<MaintenanceNote>()
-                    .Filter("log_id", Postgrest.Constants.Operator.Equals, threadLog.LogId.ToString())
                     .Order("created_at", Postgrest.Constants.Ordering.Descending)
                     .Get();
-                vm.Notes = notesResp.Models.Select(n => new VehicleNoteViewModel
-                {
-                    Action = string.IsNullOrWhiteSpace(n.Action) ? "Comment" : n.Action,
-                    Note = n.Note ?? "",
-                    AuthorName = string.IsNullOrWhiteSpace(n.AuthorName) ? "—" : n.AuthorName,
-                    // Stored PH wall-clock digits tagged Utc -> postgrest reads +8; normalize back.
-                    When = n.CreatedAt.ToUniversalTime().ToString("MM/dd/yy hh:mm tt"),
-                }).ToList();
+                vm.Notes = notesResp.Models
+                    .Where(n => logIds.Contains(n.LogId))
+                    .Select(n => new VehicleNoteViewModel
+                    {
+                        Action = string.IsNullOrWhiteSpace(n.Action) ? "Comment" : n.Action,
+                        Note = n.Note ?? "",
+                        AuthorName = string.IsNullOrWhiteSpace(n.AuthorName) ? "—" : n.AuthorName,
+                        // Stored PH wall-clock digits tagged Utc -> postgrest reads +8; normalize back.
+                        When = n.CreatedAt.ToUniversalTime().ToString("MM/dd/yy hh:mm tt"),
+                    }).ToList();
             }
 
             return PartialView("_VehicleDetails", vm);
@@ -348,7 +352,7 @@ namespace FleetWise.Controllers
         // Ground a bus (out of service) so dispatch can't assign it, or return it to service.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> SetServiceState(string vehicleId, bool outOfService, int? logId, string? note)
+        public async Task<IActionResult> SetServiceState(string vehicleId, bool outOfService, int? logId, string? note, string? maintenanceStatus)
         {
             if (string.IsNullOrWhiteSpace(vehicleId)) return BadRequest("Vehicle required.");
 
@@ -361,24 +365,42 @@ namespace FleetWise.Controllers
             var (uid, uname) = CurrentUser();
             int? effectiveLog = logId;
 
-            // Grounding a bus with no open incident still needs a record to hang the action
-            // and any later notes on -> open one.
+            // The incident's nature: "Under Repair" when admin sends it to maintenance, else
+            // a plain "Needs Attention" grounding.
+            var ms = string.Equals(maintenanceStatus?.Trim(), "Under Repair", OIC) ? "Under Repair" : "Needs Attention";
+
             if (outOfService && effectiveLog is null)
             {
+                // Grounding a bus with no open incident still needs a record to hang the
+                // action + later notes on -> open one.
                 var insert = await _supabase.From<MaintenanceLog>().Insert(new MaintenanceLog
                 {
                     VehicleId = vehicleId,
-                    MaintenanceStatus = "Under Repair",
+                    MaintenanceStatus = ms,
                     IssueDetails = new MaintenanceIssueDetails
                     {
                         Issues = new List<string>
                         {
-                            string.IsNullOrWhiteSpace(note) ? "Taken out of service by dispatcher" : note.Trim()
+                            string.IsNullOrWhiteSpace(note) ? "Taken out of service" : note.Trim()
                         }
                     },
                     CreatedAt = PhClock.NowForDb,
                 });
                 effectiveLog = insert.Models.FirstOrDefault()?.LogId;
+            }
+            else if (outOfService && effectiveLog is int openLg)
+            {
+                // Grounding an already-flagged bus: reflect the chosen nature on the open
+                // incident (e.g. promote a driver flag to "Under Repair").
+                var logResp = await _supabase.From<MaintenanceLog>()
+                    .Filter("log_id", Postgrest.Constants.Operator.Equals, openLg.ToString())
+                    .Get();
+                var openLog = logResp.Models.FirstOrDefault();
+                if (openLog != null && !string.Equals(openLog.MaintenanceStatus?.Trim(), ms, OIC))
+                {
+                    openLog.MaintenanceStatus = ms;
+                    await _supabase.From<MaintenanceLog>().Update(openLog);
+                }
             }
 
             vehicle.OutOfService = outOfService;
@@ -400,9 +422,9 @@ namespace FleetWise.Controllers
             return Ok();
         }
 
-        // Put a bus into scheduled maintenance: opens an "Under Repair" incident. That makes it
-        // count in the Scheduled Maintenance KPI, show in the bus's history, and (as an open
-        // incident) keep it out of dispatch until resolved.
+        // Put a bus into scheduled maintenance: opens an "Under Repair" incident AND grounds
+        // the bus (out of service) — a bus in the shop is off the road. Fills the Scheduled
+        // Maintenance KPI, shows in history, and keeps it out of dispatch/edit-schedule.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ScheduleMaintenance(string vehicleId, string? note)
@@ -432,6 +454,18 @@ namespace FleetWise.Controllers
                     Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
                     CreatedAt = PhClock.NowForDb,
                 });
+            }
+
+            // Ground it.
+            var vResp = await _supabase.From<Vehicle>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
+                .Get();
+            var vehicle = vResp.Models.FirstOrDefault();
+            if (vehicle != null)
+            {
+                vehicle.OutOfService = true;
+                vehicle.UpdatedAt = PhClock.Now;
+                await _supabase.From<Vehicle>().Update(vehicle);
             }
             return Ok();
         }
