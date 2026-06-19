@@ -725,12 +725,24 @@ namespace FleetWise.Controllers
             return string.IsNullOrEmpty(s) ? "Pending" : s;
         }
 
+        // Checklist items framed as a negative ("No X" reads as GOOD when it passes) look wrong
+        // when listed as a FAILED issue, so rephrase them to the actual problem.
+        private static readonly Dictionary<string, string> IssuePhrase = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["No Visible Body Damage"] = "Visible body damage",
+            ["No fluid leaks under bus"] = "Fluid leak under bus",
+            ["No unusual smoke or overheating"] = "Unusual smoke / overheating",
+        };
+
+        private static string RephraseIssue(string issue) =>
+            IssuePhrase.TryGetValue(issue?.Trim() ?? "", out var p) ? p : issue;
+
         // "Issue Summary" for the maintenance section: the latest log's issue_details list,
         // falling back to its remarks, then a dash.
         private static string DeriveIssueSummary(MaintenanceLog latest)
         {
             if (latest.IssueDetails?.Issues is { Count: > 0 } issues)
-                return string.Join(", ", issues);
+                return string.Join(", ", issues.Select(RephraseIssue));
             return string.IsNullOrWhiteSpace(latest.Remarks) ? "—" : latest.Remarks;
         }
 

@@ -100,7 +100,11 @@ else
                         </div>
                     </div>
 
-                    @if (!CanStart)
+                    @if (VehicleGrounded && assignment.TripStatus != "Active")
+                    {
+                        <div class="grounded-note">This bus is out of service. Contact your dispatcher for a reassignment before driving.</div>
+                    }
+                    else if (!CanStart)
                     {
                         <div class="upcoming-note">@LockLabel</div>
                     }
@@ -216,6 +220,10 @@ else
     private bool ReasonReady => reasonChoice is not null || !string.IsNullOrWhiteSpace(reasonNote);
 
     private bool IsAvailable => availability == "Available";
+
+    // Admin grounded the assigned bus -> block starting a trip on it (an already-Active
+    // trip can still be resumed so the driver isn't stranded mid-route).
+    private bool VehicleGrounded => vehicle?.OutOfService == true;
 
     private string Greeting
     {
