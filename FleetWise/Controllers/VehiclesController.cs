@@ -400,6 +400,42 @@ namespace FleetWise.Controllers
             return Ok();
         }
 
+        // Put a bus into scheduled maintenance: opens an "Under Repair" incident. That makes it
+        // count in the Scheduled Maintenance KPI, show in the bus's history, and (as an open
+        // incident) keep it out of dispatch until resolved.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ScheduleMaintenance(string vehicleId, string? note)
+        {
+            if (string.IsNullOrWhiteSpace(vehicleId)) return BadRequest("Vehicle required.");
+
+            var (uid, uname) = CurrentUser();
+            var insert = await _supabase.From<MaintenanceLog>().Insert(new MaintenanceLog
+            {
+                VehicleId = vehicleId,
+                MaintenanceStatus = "Under Repair",
+                IssueDetails = new MaintenanceIssueDetails
+                {
+                    Issues = new List<string> { string.IsNullOrWhiteSpace(note) ? "Scheduled maintenance" : note.Trim() }
+                },
+                CreatedAt = PhClock.NowForDb,
+            });
+
+            if (insert.Models.FirstOrDefault()?.LogId is int lg)
+            {
+                await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
+                {
+                    LogId = lg,
+                    AuthorId = uid,
+                    AuthorName = uname,
+                    Action = "Scheduled Maintenance",
+                    Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
+                    CreatedAt = PhClock.NowForDb,
+                });
+            }
+            return Ok();
+        }
+
         // Current signed-in operator, for stamping the audit thread.
         private (int? Id, string Name) CurrentUser()
         {
@@ -456,7 +492,14 @@ namespace FleetWise.Controllers
                 filtered = filtered.Where(v => v.RouteId == routeId);
 
             if (!string.IsNullOrWhiteSpace(status))
-                filtered = filtered.Where(v => string.Equals(RoadStatus(v), status, OIC));
+            {
+                if (string.Equals(status, "Flagged", OIC))
+                    // Out-of-Service buses are flagged ones that were grounded — keep them in
+                    // the Flagged filter too (their badge still reads "Out of Service").
+                    filtered = filtered.Where(v => RoadStatus(v) is "Flagged" or "Out of Service");
+                else
+                    filtered = filtered.Where(v => string.Equals(RoadStatus(v), status, OIC));
+            }
 
             if (!string.IsNullOrWhiteSpace(condition))
                 filtered = filtered.Where(v =>

@@ -228,6 +228,14 @@
         } else { alert('Failed to resolve.'); }
     }
 
+    async function vhScheduleMaintenance(vehicleId) {
+        const note = prompt('Schedule maintenance — what work / reason?');
+        if (note === null) return; // cancelled
+        if (await vhPost('@Url.Action("ScheduleMaintenance", "Vehicles")', { vehicleId: vehicleId, note: note })) {
+            vhReloadModal(); loadVehicleRows();
+        } else { alert('Failed to schedule maintenance.'); }
+    }
+
     async function vhSetService(vehicleId, outOfService, logId) {
         const verb = outOfService ? 'take this bus OUT of service' : 'return this bus to service';
         if (!confirm('Are you sure you want to ' + verb + '?')) return;
@@ -798,6 +806,21 @@
 
     /* ── Flag review (View modal) ───────────────────────────── */
     .vh-badge--oos { background: #4B5563; color: #fff; }
+
+    .vh-maint-head-right { display: inline-flex; align-items: center; gap: 10px; }
+    .vh-btn-mini {
+        padding: 4px 12px;
+        border: 1.5px solid var(--vh-border);
+        border-radius: 20px;
+        background: #fff;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .vh-btn-mini:hover { border-color: var(--vh-teal); color: var(--vh-teal); }
 
     .vh-oos-banner {
         background: #FDECEC;

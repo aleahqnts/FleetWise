@@ -60,7 +60,10 @@
     <!-- Maintenance Log -->
     <div class="vh-section-header">
         <span>Maintenance Log</span>
-        <span class="vh-section-badge @MaintClass(Model.CurrentStatus)">@Model.CurrentStatus</span>
+        <span class="vh-maint-head-right">
+            <button type="button" class="vh-btn-mini" onclick="vhScheduleMaintenance('@Model.VehicleId')">+ Schedule Maintenance</button>
+            <span class="vh-section-badge @MaintClass(Model.CurrentStatus)">@Model.CurrentStatus</span>
+        </span>
     </div>
     <div class="vh-section-body">
         <div class="vh-detail-row"><strong>Current Status:</strong> @Model.CurrentStatus</div>
