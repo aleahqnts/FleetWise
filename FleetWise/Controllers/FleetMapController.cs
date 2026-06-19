@@ -152,6 +152,13 @@ namespace FleetWise.Controllers
             var vehiclesResponse = await _supabase.From<Vehicle>().Get();
             var routesResponse = await _supabase.From<BusRoute>().Get();
             var usersResponse = await _supabase.From<UserModel>().Get();
+            var maintenanceResponse = await _supabase.From<MaintenanceLog>().Get();
+
+            // Flagged = open incident — same definition as Dashboard/Dispatch/Vehicles.
+            var flaggedVehicleIds = maintenanceResponse.Models
+                .Where(l => l.ResolvedAt == null && l.VehicleId != null)
+                .Select(l => l.VehicleId)
+                .ToHashSet();
 
             // Latest telemetry row per active trip.
             var latestByTrip = telemetryResponse.Models
@@ -184,8 +191,6 @@ namespace FleetWise.Controllers
                     continue; // no telemetry yet (simulator hasn't ticked for this trip)
 
                 vehiclesById.TryGetValue(trip.VehicleId, out var vehicle);
-                if (DisplayStatus(vehicle?.VehicleStatus) != "Active")
-                    continue; // only "On Trip" buses run on the map; the rest park (below)
 
                 if (movingByVehicle.TryGetValue(trip.VehicleId, out var existing) &&
                     existing.Timestamp >= telemetry.Timestamp)
@@ -214,7 +219,7 @@ namespace FleetWise.Controllers
                     RouteName = route?.RouteName ?? "—",
                     Shift = FormatShift(trip),
                     DriverName = FormatDriverName(driver),
-                    Status = "Active",
+                    Status = "On Trip",
                     Lat = (double)telemetry.Latitude,
                     Lng = (double)telemetry.Longitude,
                     Heading = telemetry.Heading ?? 0,
@@ -235,13 +240,15 @@ namespace FleetWise.Controllers
             // Flagged / Idle / Offline …), shown stationary at the terminal.
             foreach (var vehicle in vehiclesResponse.Models)
             {
-                var vehicleStatus = DisplayStatus(vehicle.VehicleStatus);
-                if (vehicleStatus == "Active")
-                    continue; // on-trip buses are shown moving, not parked
                 if (movingVehicleIds.Contains(vehicle.VehicleId))
                     continue;
                 if (routeId.HasValue && vehicle.RouteId != routeId.Value)
                     continue;
+
+                // Grounded wins over flag, else the operational status — registry's rules.
+                var vehicleStatus = vehicle.OutOfService ? "Out of Service"
+                    : flaggedVehicleIds.Contains(vehicle.VehicleId) ? "Flagged"
+                    : NormalizeParked(vehicle.VehicleStatus);
 
                 routesById.TryGetValue(vehicle.RouteId ?? -1, out var route);
                 var terminal = TerminalFor(vehicle.RouteId);
@@ -294,17 +301,22 @@ namespace FleetWise.Controllers
             return string.IsNullOrEmpty(name) ? "Unassigned" : name;
         }
 
-        // Normalize the stored vehicle_status to the labels the Status filter shows
-        // ("Active" / "Idle" / "Offline"). Buses on the map are on live trips, so the
-        // running state reads "Active".
-        private static string DisplayStatus(string? vehicleStatus) => vehicleStatus switch
+        // Parked bus's operational status in the registry's vocabulary. A parked bus has no
+        // live trip, so any stale "moving"/"Flagged" label reads as Ready to Deploy.
+        private static string NormalizeParked(string? vehicleStatus)
         {
-            null or "" => "Active",
-            "OnTrip" or "On Trip" or "Active" => "Active",
-            "Idle" => "Idle",
-            "Offline" => "Offline",
-            _ => vehicleStatus
-        };
+            var s = (vehicleStatus ?? "").Trim();
+            if (s.Length == 0) return "Ready to Deploy";
+            if (s.Equals("Pending", StringComparison.OrdinalIgnoreCase)) return "Pending";
+            if (s.Equals("OnTrip", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("On Trip", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("Active", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("Flagged", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("Ready", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("Ready to Deploy", StringComparison.OrdinalIgnoreCase))
+                return "Ready to Deploy";
+            return s;
+        }
 
         private class WaypointDto
         {
