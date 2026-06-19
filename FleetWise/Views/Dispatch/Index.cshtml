@@ -11,9 +11,10 @@
         <a class="dp-date-arrow" href="@Url.Action("Index", new { date = Model.PrevDate })" title="Previous day">
             <i class="ti ti-chevron-left"></i>
         </a>
-        <span class="dp-date-badge">
+        <span class="dp-date-badge" title="One operational day runs 6:00 AM to 5:59 AM the next morning">
             <i class="ti ti-calendar-event"></i>
-            @Model.ScheduleDate.ToString("dddd, MMMM d, yyyy")
+            <span class="dp-cycle-main">@Model.ScheduleDate.ToString("ddd, MMM d")</span>
+            <span class="dp-cycle-range">6:00 AM → @Model.ScheduleDate.AddDays(1).ToString("MMM d") 5:59 AM</span>
         </span>
         <a class="dp-date-arrow" href="@Url.Action("Index", new { date = Model.NextDate })" title="Next day">
             <i class="ti ti-chevron-right"></i>
@@ -136,7 +137,7 @@
                     @if (!route.Shifts.Any())
                     {
                         <tr class="dp-trip-row dp-empty-row" data-trip-status="">
-                            <td colspan="5" class="dp-empty-cell">No trips scheduled for today.</td>
+                            <td colspan="5" class="dp-empty-cell">No trips scheduled for this operational day.</td>
                         </tr>
                     }
                     else
@@ -176,6 +177,7 @@
                                     "Not Yet Started" => ("dp-badge--not-started", "Not Yet Started"),
                                     "Pending" => ("dp-badge--pending", "Pending"),
                                     "Assignment Issue" => ("dp-badge--issue", "Assignment Issue"),
+                                    "Missed" => ("dp-badge--missed", "Missed"),
                                     "Completed" => ("dp-badge--completed", "Completed"),
                                     _ => ("dp-badge--completed", trip.TripStatus)
                                 };
@@ -187,7 +189,11 @@
                                     {
                                         <td class="dp-shift-cell" rowspan="@shiftTrips.Count">
                                             @shift.ShiftType<br />
-                                            <span class="dp-shift-time">(@shift.ShiftStartTime – @shift.ShiftEndTime)</span>
+                                            <span class="dp-shift-time">(@shift.ShiftStartTime – @shift.ShiftEndTime@(shift.IsOvernight ? " +1" : ""))</span>
+                                            @if (shift.IsOvernight)
+                                            {
+                                                <span class="dp-overnight-tag" title="Ends the next morning">overnight</span>
+                                            }
                                         </td>
                                     }
                                     <td>
@@ -338,6 +344,9 @@
     .dp-title-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
     .dp-date-badge { display:inline-flex; align-items:center; gap:8px; padding:8px 16px; border-radius:30px; background:#EAF7F5; color:#2e7d72; font-size:.86rem; font-weight:700; border:1px solid #CDE9E4; }
     .dp-date-badge i { font-size:1rem; }
+    .dp-cycle-main { font-weight:800; }
+    .dp-cycle-range { font-weight:600; font-size:.74rem; color:#3d9490; padding-left:8px; margin-left:4px; border-left:1px solid #BFE2DC; }
+    .dp-overnight-tag { display:inline-block; margin-top:3px; padding:1px 7px; border-radius:10px; background:#EEF2FF; color:#4F6BED; font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
     .dp-date-nav { display:inline-flex; align-items:center; gap:8px; }
     .dp-date-arrow { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:50%; background:#EAF7F5; color:#2e7d72; border:1px solid #CDE9E4; text-decoration:none; font-size:1.1rem; transition:background .15s,transform .15s; }
     .dp-date-arrow:hover { background:#2e7d72; color:#fff; transform:translateY(-1px); }
@@ -890,6 +899,12 @@
         color: #6B7280;
     }
 
+    .dp-badge--missed {
+        background: #FDE8E8;
+        color: #B42318;
+        border: 1px solid #F5C2C0;
+    }
+
     /* ── Action buttons ─────────────────────────────────────── */
     .dp-actions-cell {
         display: flex;
@@ -1041,6 +1056,7 @@
                 <option value="Not Yet Started">Not Yet Started</option>
                 <option value="Pending">Pending</option>
                 <option value="Assignment Issue">Assignment Issue</option>
+                <option value="Missed">Missed</option>
                 <option value="Completed">Completed</option>
             </select>
             <span class="rp-select-arrow">
