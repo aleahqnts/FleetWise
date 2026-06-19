@@ -529,7 +529,8 @@
     /* ───────────────────────────────────────────────────────────
     Charts
     ─────────────────────────────────────────────────────────── */
-    function miniLineChart(id, labels, data, color) {
+    function miniLineChart(id, labels, data, color, tooltipFmt) {
+    const fmt = tooltipFmt || (v => v);
     return new Chart(document.getElementById(id).getContext('2d'), {
     type: 'line',
     data: {
@@ -539,9 +540,13 @@
     borderColor: color,
     borderWidth: 1.8,
     pointRadius: 3,
+    pointHoverRadius: 6,
+    pointHitRadius: 20,
     pointBackgroundColor: '#fff',
     pointBorderColor: color,
     pointBorderWidth: 1.5,
+    pointHoverBackgroundColor: color,
+    pointHoverBorderColor: '#fff',
     tension: 0.35,
     fill: false
     }]
@@ -549,7 +554,21 @@
     options: {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+    legend: { display: false },
+    tooltip: {
+    enabled: true,
+    backgroundColor: '#fff',
+    titleColor: '#2D3748',
+    bodyColor: '#2D3748',
+    borderColor: '#E8ECF0',
+    borderWidth: 1,
+    padding: 10,
+    displayColors: false,
+    callbacks: { label: (item) => ' ' + fmt(item.parsed.y) }
+    }
+    },
     scales: {
     x: {
     display: true,
@@ -715,7 +734,7 @@
     document.getElementById('passengerSummaryVsLabel').textContent = summary.comparisonLabel;
 
     if (!passengerChart) {
-    passengerChart = miniLineChart('passengerMiniChart', summary.weekLabels, summary.weekData, '#9B59B6');
+    passengerChart = miniLineChart('passengerMiniChart', summary.weekLabels, summary.weekData, '#9B59B6', v => formatNumber(v) + ' passengers');
     } else {
     passengerChart.data.labels = summary.weekLabels;
     passengerChart.data.datasets[0].data = summary.weekData;
@@ -743,7 +762,7 @@
     document.getElementById('revenueSummaryVsLabel').textContent = summary.comparisonLabel;
 
     if (!revenueChart) {
-    revenueChart = miniLineChart('revenueMiniChart', summary.weekLabels, summary.weekData, '#4AADA8');
+    revenueChart = miniLineChart('revenueMiniChart', summary.weekLabels, summary.weekData, '#4AADA8', v => formatCurrencyCompact(v));
     } else {
     revenueChart.data.labels = summary.weekLabels;
     revenueChart.data.datasets[0].data = summary.weekData;
@@ -1164,6 +1183,18 @@
     table.appendChild(tbody);
     previewTables.appendChild(table);
     });
+
+    // Clear grand total at the end
+    if (data.totals) {
+    const t = data.totals;
+    const parts = [`Total Trips: <strong>${formatNumber(t.trips)}</strong>`];
+    if (currentReportType !== 'Revenue') parts.push(`Total Passengers: <strong>${formatNumber(t.passengers)}</strong>`);
+    if (currentReportType !== 'Passenger') parts.push(`Total Revenue: <strong>${formatCurrencyCompact(t.revenue)}</strong>`);
+    const totalDiv = document.createElement('div');
+    totalDiv.className = 'rg-total-bar';
+    totalDiv.innerHTML = `<span class="rg-total-label">TOTAL</span><span class="rg-total-vals">${parts.join('&nbsp;&nbsp;•&nbsp;&nbsp;')}</span>`;
+    previewTables.appendChild(totalDiv);
+    }
     }
 
     // ── Download ──────────────────────────────────────────────
@@ -2101,7 +2132,7 @@
     background: #fff;
     border-radius: 20px;
     width: 100%;
-    max-width: 860px;
+    max-width: min(1180px, 96vw);
     max-height: 92vh;
     display: flex;
     flex-direction: column;
@@ -2360,6 +2391,32 @@
     font-family: 'Segoe UI', sans-serif;
     font-size: 0.88rem;
     padding: 48px 0;
+    }
+
+    .rg-total-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-top: 2px solid var(--rp-teal);
+    background: #F4FBFA;
+    border-radius: 0 0 8px 8px;
+    font-family: 'Segoe UI', sans-serif;
+    }
+
+    .rg-total-label {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: .06em;
+    color: var(--rp-teal);
+    }
+
+    .rg-total-vals {
+    font-size: 0.84rem;
+    color: var(--rp-text);
     }
 
     /* ── Footer ─────────────────────────────────────────────── */

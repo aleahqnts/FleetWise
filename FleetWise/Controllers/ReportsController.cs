@@ -421,14 +421,22 @@ namespace FleetWise.Controllers
                 .ThenBy(t => t.ShiftStartTime)
                 .ToList();
 
-            object result = reportType switch
+            object groups = reportType switch
             {
                 "Passenger" => BuildPassengerReport(filtered, routeNames, userNames, Passengers),
                 "Revenue" => BuildRevenueReport(filtered, routeNames, userNames, vehiclesById),
                 _ => BuildDailyTripReport(filtered, routeNames, userNames, vehiclesById, Passengers),
             };
 
-            return Json(result);
+            // Grand totals across all filtered trips (rendered as a clear total at the end).
+            var totals = new
+            {
+                trips = filtered.Count,
+                passengers = filtered.Sum(Passengers),
+                revenue = filtered.Sum(t => t.EstimatedRevenue),
+            };
+
+            return Json(new { groups, totals });
         }
 
         private static object BuildDailyTripReport(
@@ -458,7 +466,7 @@ namespace FleetWise.Controllers
                 })
                 .ToList();
 
-            return new { groups };
+            return groups;
         }
 
         private static object BuildPassengerReport(
@@ -485,7 +493,7 @@ namespace FleetWise.Controllers
                 })
                 .ToList();
 
-            return new { groups };
+            return groups;
         }
 
         private static object BuildRevenueReport(
@@ -512,7 +520,7 @@ namespace FleetWise.Controllers
                 })
                 .ToList();
 
-            return new { groups };
+            return groups;
         }
 
         // ── Download report as PDF (QuestPDF) ────────────────────────
@@ -569,7 +577,7 @@ namespace FleetWise.Controllers
             {
                 "Passenger" => new[] { "Trip ID", "Date", "Driver", "Route", "Shift", "Shift Time", "Passengers" },
                 "Revenue" => new[] { "Trip ID", "Date", "Driver", "Bus ID", "Route", "Shift", "Est. Revenue" },
-                _ => new[] { "Trip ID", "Date", "Driver", "Bus ID", "Route", "Shift", "Start", "End", "Passengers", "Revenue" }
+                _ => new[] { "Trip ID", "Date", "Driver", "Bus ID", "Route", "Shift", "Actual Start", "Actual End", "Passengers", "Revenue" }
             };
 
             Func<Trip, string[]> rowBuilder = reportType switch
@@ -602,8 +610,8 @@ namespace FleetWise.Controllers
                     vehiclesById.TryGetValue(t.VehicleId, out var v) ? v.PlateNumber : t.VehicleId,
                     routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A",
                     t.ShiftType ?? "",
-                    ShiftStartAt(t).ToString("hh:mm tt"),
-                    ShiftEndLabel(t),
+                    FmtActual(t.ActualStartTime),
+                    FmtActual(t.ActualEndTime),
                     Passengers(t).ToString(),
                     $"₱{t.EstimatedRevenue:N2}"
                 }
@@ -644,15 +652,17 @@ namespace FleetWise.Controllers
                         {
                             row.RelativeItem().Column(inner =>
                             {
-                                inner.Item().Text("FleetWise")
+                                inner.Item().Text("RouteSync")
                                     .Bold().FontSize(16).FontColor(accentColor);
                                 inner.Item().Text(reportTitle)
                                     .Bold().FontSize(11).FontColor("#2D3748");
                             });
-                            row.ConstantItem(160).AlignRight().Column(inner =>
+                            row.ConstantItem(220).AlignRight().Column(inner =>
                             {
-                                inner.Item().Text(anchor.ToString("MMMM dd, yyyy"))
-                                    .FontSize(9).FontColor("#9AA5B4");
+                                inner.Item().Text("Operational Day")
+                                    .Bold().FontSize(8).FontColor("#9AA5B4").LetterSpacing(0.06f);
+                                inner.Item().Text(OpDayLabel(anchor))
+                                    .Bold().FontSize(9.5f).FontColor("#2D3748");
                                 inner.Item().Text($"Generated: {PhClock.Now:MMM dd, yyyy hh:mm tt}")
                                     .FontSize(8).FontColor("#9AA5B4");
                             });
@@ -721,13 +731,32 @@ namespace FleetWise.Controllers
                                 }
                             });
                         }
+
+                        // ── Clear grand total at the end ──────────────
+                        var totalTrips = filtered.Count;
+                        var totalPax = filtered.Sum(Passengers);
+                        var totalRev = filtered.Sum(t => t.EstimatedRevenue);
+                        string totalsText = reportType switch
+                        {
+                            "Passenger" => $"Total Trips: {totalTrips}        Total Passengers: {totalPax:N0}",
+                            "Revenue" => $"Total Trips: {totalTrips}        Total Revenue: ₱{totalRev:N2}",
+                            _ => $"Total Trips: {totalTrips}        Total Passengers: {totalPax:N0}        Total Revenue: ₱{totalRev:N2}",
+                        };
+                        col.Item().PaddingTop(6).BorderTop(1.5f).BorderColor(accentColor)
+                            .PaddingTop(8).Row(row =>
+                            {
+                                row.RelativeItem().Text("TOTAL")
+                                    .Bold().FontSize(10).FontColor(accentColor).LetterSpacing(0.06f);
+                                row.RelativeItem().AlignRight().Text(totalsText)
+                                    .Bold().FontSize(10).FontColor("#2D3748");
+                            });
                     });
 
                     // ── Footer ────────────────────────────────────────
                     page.Footer().AlignCenter()
                         .Text(text =>
                         {
-                            text.Span("FleetWise  •  ").FontColor("#9AA5B4").FontSize(8);
+                            text.Span("RouteSync  •  ").FontColor("#9AA5B4").FontSize(8);
                             text.Span(reportTitle).FontColor("#9AA5B4").FontSize(8);
                             text.Span("  •  Page ").FontColor("#9AA5B4").FontSize(8);
                             text.CurrentPageNumber().FontColor("#9AA5B4").FontSize(8);
@@ -783,6 +812,17 @@ namespace FleetWise.Controllers
             var sb = new System.Text.StringBuilder();
             string fileName;
 
+            // Banner: brand + the operational day this report covers, then a blank line.
+            var reportLabel = reportType switch
+            {
+                "Passenger" => "Passenger Report",
+                "Revenue" => "Revenue Report",
+                _ => "Daily Trip Report"
+            };
+            sb.AppendLine("RouteSync - " + reportLabel);
+            sb.AppendLine("Operational Day," + CsvEscape(OpDayLabel(anchor)));
+            sb.AppendLine();
+
             switch (reportType)
             {
                 case "Passenger":
@@ -815,7 +855,7 @@ namespace FleetWise.Controllers
 
                 default:
                     fileName = $"DailyTripReport_{anchor:yyyy-MM-dd}.csv";
-                    sb.AppendLine("Trip ID,Date,Driver,Bus ID,Route,Shift,Shift Time,Start Trip,End Trip,Passengers,Revenue");
+                    sb.AppendLine("Trip ID,Date,Driver,Bus ID,Route,Shift,Shift Time,Actual Start,Actual End,Passengers,Revenue");
                     foreach (var t in filtered)
                         sb.AppendLine(string.Join(",",
                             CsvEscape(t.TripId),
@@ -825,12 +865,21 @@ namespace FleetWise.Controllers
                             CsvEscape(routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A"),
                             CsvEscape(t.ShiftType ?? ""),
                             CsvEscape(ShiftRange(t, "-")),
-                            CsvEscape(ShiftStartAt(t).ToString("hh:mm tt")),
-                            CsvEscape(ShiftEndLabel(t)),
+                            CsvEscape(FmtActual(t.ActualStartTime)),
+                            CsvEscape(FmtActual(t.ActualEndTime)),
                             Passengers(t).ToString(),
                             t.EstimatedRevenue.ToString("F2")));
                     break;
             }
+
+            // ── Clear grand total at the end ──────────────────────────
+            sb.AppendLine();
+            sb.AppendLine("TOTAL");
+            sb.AppendLine($"Total Trips,{filtered.Count}");
+            if (reportType != "Revenue")
+                sb.AppendLine($"Total Passengers,{filtered.Sum(Passengers)}");
+            if (reportType != "Passenger")
+                sb.AppendLine($"Total Revenue,{filtered.Sum(t => t.EstimatedRevenue):F2}");
 
             var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
             return File(bytes, "text/csv", fileName);
@@ -845,14 +894,22 @@ namespace FleetWise.Controllers
         private static DateTime ShiftEndAt(Trip t) => t.Date.Date + t.ShiftEndTime
             + (IsOvernight(t) ? TimeSpan.FromDays(1) : TimeSpan.Zero);
 
-        // End time, with the next-day date appended for overnight shifts: "06:00 AM (Jun 20)".
-        private static string ShiftEndLabel(Trip t) => IsOvernight(t)
-            ? $"{ShiftEndAt(t):hh:mm tt} ({ShiftEndAt(t):MMM dd})"
-            : ShiftEndAt(t).ToString("hh:mm tt");
+        // Plain clock end time, e.g. "06:00 AM" — no date/"+1" suffix (the operational-day
+        // header at the top of the report already makes the service window clear).
+        private static string ShiftEndLabel(Trip t) => ShiftEndAt(t).ToString("hh:mm tt");
 
-        // Full window: "10:00 PM – 06:00 AM (Jun 20)" overnight, else "08:00 AM – 04:00 PM".
+        // Full window: "10:00 PM – 06:00 AM".
         private static string ShiftRange(Trip t, string dash = "–") =>
             $"{ShiftStartAt(t):hh:mm tt} {dash} {ShiftEndLabel(t)}";
+
+        // Actual logged start/end. Stored timestamptz comes back LOCAL-kind (+8h shifted),
+        // so normalize to UTC to recover the true PH wall-clock digits. "—" when not logged.
+        private static string FmtActual(DateTime? dt) =>
+            dt.HasValue ? dt.Value.ToUniversalTime().ToString("hh:mm tt") : "—";
+
+        // Operational-day banner: "June 18, 2026  •  6:00 AM – June 19, 5:59 AM".
+        private static string OpDayLabel(DateTime anchor) =>
+            $"{anchor:MMMM d, yyyy}  •  6:00 AM – {anchor.AddDays(1):MMMM d}, 5:59 AM";
 
         // ── Internal model for report groups ─────────────────────────
         private class ReportGroup
