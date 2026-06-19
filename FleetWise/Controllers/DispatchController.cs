@@ -71,19 +71,28 @@ namespace FleetWise.Controllers
             //       - checklist status == "Passed"  -> vehicle Ready to Deploy
             //       - anything else (e.g. "Failed") -> vehicle Flagged
             //     Match is case-insensitive, mirroring the JS check in the modal.
-            (Vehicle Vehicle, UserModel Driver, string VehicleStatus, string DriverStatus, string TripStatus) Resolve(Trip trip)
+            (Vehicle Vehicle, UserModel Driver, string VehicleStatus, string DriverStatus, string TripStatus, bool Flagged) Resolve(Trip trip)
             {
                 vehicleDict.TryGetValue(trip.VehicleId, out var vehicle);
                 driverDict.TryGetValue(trip.DriverId, out var driver);
                 var driverAvail = availabilityDict.TryGetValue(trip.DriverId, out var avail) ? avail : "Available";
 
+                // Roadworthiness comes from THIS trip's own inspection, never the shared
+                // vehicle_status column (which a later shift's start/end/checklist overwrites
+                // -> stale green on a missed trip). A submitted checklist that isn't "Passed"
+                // is a flag, and it's reported independently of the operational dot.
+                var cl = checklistDict.TryGetValue(trip.TripId, out var c0) ? c0 : null;
+                bool flagged = cl != null && !string.Equals(cl.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase);
+
                 if (trip.TripStatus == "Active")
-                    return (vehicle, driver, "On Trip", "On Trip", "Active");
+                    return (vehicle, driver, "On Trip", "On Trip", "Active", flagged);
 
                 if (trip.TripStatus == "Completed")
-                    return (vehicle, driver, "Ready to Deploy", "Available", "Completed");
+                    return (vehicle, driver, "Completed", "Available", "Completed", flagged);
 
-                var vehicleStatus = string.IsNullOrEmpty(vehicle?.VehicleStatus) ? "Pending" : vehicle.VehicleStatus;
+                // Waiting to depart — readiness is derived from the trip's checklist, not the
+                // bus row: no checklist yet -> Pending; failed -> Flagged; passed -> Ready.
+                var vehicleStatus = cl == null ? "Pending" : flagged ? "Flagged" : "Ready to Deploy";
 
                 // Treat null/missing availability as Available
                 var driverStatus = driver == null
@@ -101,14 +110,14 @@ namespace FleetWise.Controllers
                             ? "Pending"
                             : "Not Yet Started";
 
-                return (vehicle, driver, vehicleStatus, driverStatus, tripStatus);
+                return (vehicle, driver, vehicleStatus, driverStatus, tripStatus, flagged);
             }
 
-            var resolved = new Dictionary<string, (Vehicle Vehicle, UserModel Driver, string VehicleStatus, string DriverStatus, string TripStatus)>();
+            var resolved = new Dictionary<string, (Vehicle Vehicle, UserModel Driver, string VehicleStatus, string DriverStatus, string TripStatus, bool Flagged)>();
             foreach (var trip in trips)
             {
                 try { resolved[trip.TripId] = Resolve(trip); }
-                catch { resolved[trip.TripId] = (null, null, "Pending", "Available", "Pending"); }
+                catch { resolved[trip.TripId] = (null, null, "Pending", "Available", "Pending", false); }
             }
 
             // --- Stats ---
@@ -195,7 +204,8 @@ namespace FleetWise.Controllers
                                 ? $"{r.Driver.FirstName} {r.Driver.LastName}"
                                 : "Unassigned",
                             DriverStatus = r.DriverStatus,
-                            TripStatus = r.TripStatus
+                            TripStatus = r.TripStatus,
+                            Flagged = r.Flagged
                         });
                     }
 
@@ -257,13 +267,15 @@ namespace FleetWise.Controllers
             }
             else
             {
-                // Vehicle status is derived from the inspection log itself, so
+                // Vehicle status is derived from THIS trip's inspection log itself (not the
+                // shared vehicle_status column, which a later shift overwrites), so
                 // "Vehicle Details" always agrees with the Inspection Log card:
                 //   - no checklist submitted yet     -> Pending
                 //   - checklist status == "Passed"   -> Ready to Deploy
                 //   - anything else (e.g. "Failed")  -> Flagged
                 // Match is case-insensitive, mirroring the JS check in the modal.
-                vehicleStatus = string.IsNullOrEmpty(vehicle?.VehicleStatus) ? "Pending" : vehicle.VehicleStatus;
+                var clFailed = checklist != null && !string.Equals(checklist.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase);
+                vehicleStatus = checklist == null ? "Pending" : clFailed ? "Flagged" : "Ready to Deploy";
 
                 driverStatus = driver == null
                     ? "Unavailable"
