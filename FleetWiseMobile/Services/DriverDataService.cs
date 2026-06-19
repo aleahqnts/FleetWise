@@ -65,17 +65,29 @@ public class DriverDataService
     // Today's assignment for this driver (anything not yet completed).
     public async Task<Trip?> GetTodayAssignmentAsync(int userId)
     {
-        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        // Include yesterday so an overnight shift (e.g. 10pm -> 6am) started on the
+        // previous calendar day is still picked up after midnight.
+        var yesterday = DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd");
         var r = await _supabase.From<Trip>()
             .Filter("driver_id", Operator.Equals, userId.ToString())
-            .Filter("date", Operator.Equals, today)
+            .Filter("date", Operator.GreaterThanOrEqual, yesterday)
+            .Filter("date", Operator.LessThanOrEqual, DateTime.Today.ToString("yyyy-MM-dd"))
             .Get();
 
+        // Drop missed shifts: once shift end passes and the trip was never started,
+        // it disappears. An Active trip running past its end stays (driver still on
+        // it). Completed already excluded.
+        var now = PhTime.Now;
         return r.Models
             .Where(t => t.TripStatus != "Completed")
-            .OrderBy(t => t.ShiftStartTime)
+            .Where(t => t.TripStatus == "Active" || now < ShiftEnd(t))
+            .OrderBy(t => t.Date).ThenBy(t => t.ShiftStartTime)
             .FirstOrDefault();
     }
+
+    // Wall-clock end of the shift. Overnight shifts (end <= start) roll to next day.
+    private static DateTime ShiftEnd(Trip t)
+        => t.Date.Date + t.ShiftEndTime + (t.ShiftEndTime <= t.ShiftStartTime ? TimeSpan.FromDays(1) : TimeSpan.Zero);
 
     // Nearest future (date > today) non-completed trip, for the Home preview.
     public async Task<Trip?> GetUpcomingAssignmentAsync(int userId)
@@ -145,17 +157,39 @@ public class DriverDataService
         return r.Models;
     }
 
-    public async Task<List<NotificationModel>> GetNotificationsAsync(int userId)
+    // Messages the driver should see: broadcast (all) + route msgs for any route
+    // the driver runs + driver-targeted msgs. Capped to the last 14 days so the
+    // history stays small. Volume is tiny -> resolve route/driver match client-side.
+    public async Task<List<MessageModel>> GetMessagesAsync(int userId)
     {
-        var r = await _supabase.From<NotificationModel>()
-            .Filter("user_id", Operator.Equals, userId.ToString())
+        var cutoff = PhTime.Now.AddDays(-14);
+
+        // route ids this driver runs (all-time; small set)
+        var trips = await _supabase.From<Trip>()
+            .Filter("driver_id", Operator.Equals, userId.ToString())
+            .Get();
+        var myRoutes = trips.Models
+            .Select(t => t.RouteId.ToString())
+            .ToHashSet();
+
+        var r = await _supabase.From<MessageModel>()
+            .Filter("created_at", Operator.GreaterThanOrEqual, cutoff.ToString("yyyy-MM-dd HH:mm:ss"))
             .Order("created_at", Ordering.Descending)
             .Get();
-        return r.Models;
+
+        var me = userId.ToString();
+        return r.Models.Where(m => (m.TargetAudience ?? "").ToLowerInvariant() switch
+        {
+            "all"    => true,
+            "route"  => myRoutes.Contains(m.TargetId),
+            "driver" => m.TargetId == me,
+            _        => false
+        }).ToList();
     }
 
-    public async Task MarkNotificationReadAsync(long id)
-        => await PatchAsync($"notifications?notification_id=eq.{id}", new { is_read = true });
+    // Read state only meaningful for driver-targeted msgs (1 recipient).
+    public async Task MarkMessageReadAsync(long id)
+        => await PatchAsync($"messages?message_id=eq.{id}", new { is_read = true });
 
     public async Task<UserModel?> GetUserAsync(int userId)
     {
@@ -222,6 +256,9 @@ public class DriverDataService
             body = new { trip_status = "Active" }; // resume keeps original start
 
         await PatchAsync($"trips?trip_id=eq.{Uri.EscapeDataString(tripId)}", body);
+
+        if (!string.IsNullOrEmpty(t.VehicleId))
+            await UpdateVehicleStatusAsync(t.VehicleId, "On Trip");
     }
 
     public async Task UpdateTripProgressAsync(string tripId, int totalBoarded, decimal revenue)
@@ -232,6 +269,8 @@ public class DriverDataService
 
     public async Task EndTripAsync(string tripId, int totalBoarded, decimal revenue)
     {
+        var t = await GetTripAsync(tripId);
+
         await PatchAsync($"trips?trip_id=eq.{Uri.EscapeDataString(tripId)}",
             new
             {
@@ -240,5 +279,8 @@ public class DriverDataService
                 estimated_revenue = revenue,
                 actual_end_time = PhTime.Now
             });
+
+        if (!string.IsNullOrEmpty(t?.VehicleId))
+            await UpdateVehicleStatusAsync(t.VehicleId, "Ready to Deploy");
     }
 }

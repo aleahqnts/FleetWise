@@ -1,0 +1,340 @@
+@model FleetWise.ViewModels.ScheduleViewModel
+@{
+    ViewData["Title"] = "Edit Schedule";
+    string CellKey(int routeId, string shift, DateTime day) => $"{routeId}|{shift}|{day:yyyy-MM-dd}";
+}
+
+<div class="sch-wrap">
+
+    <!-- Toolbar -->
+    <div class="sch-toolbar">
+        <a class="sch-btn-ghost" href="/Dispatch">&#8592; Back to Dispatch</a>
+        <div class="sch-week-nav">
+            <a class="sch-btn-ghost" href="/Schedule?start=@Model.PrevWeekStart">&#8249; Prev</a>
+            <span class="sch-week-label">@Model.WeekStart.ToString("MMM d") – @Model.WeekEnd.ToString("MMM d, yyyy")</span>
+            <a class="sch-btn-ghost" href="/Schedule?start=@Model.NextWeekStart">Next &#8250;</a>
+        </div>
+        <div class="sch-pick">
+            <label>Week starting</label>
+            <input type="date" id="sch-start" value="@Model.WeekStart.ToString("yyyy-MM-dd")" />
+            <button class="sch-btn-ghost" onclick="schGoWeek()">Go</button>
+        </div>
+        <button class="sch-btn-save" id="sch-save" onclick="schSave()">Save Schedule</button>
+    </div>
+
+    <p class="sch-hint">Assign vehicle + driver per route, shift and day. Multiple buses per shift — use <strong>+ Add bus</strong>. Started/completed trips are locked. Conflicts (double-booking, back-to-back driver shifts) are blocked on save.</p>
+
+    @foreach (var route in Model.Routes)
+    {
+        <div class="sch-card">
+            <div class="sch-card-head">@route.RouteName</div>
+            <div class="sch-table-scroll">
+                <table class="sch-table">
+                    <thead>
+                        <tr>
+                            <th class="sch-shift-col">Shift</th>
+                            @foreach (var day in Model.Days)
+                            {
+                                <th class="@(day.Date == DateTime.Today ? "sch-today" : "")">
+                                    <div class="sch-day-name">@day.ToString("ddd")</div>
+                                    <div class="sch-day-num">@day.ToString("MMM d")</div>
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    @foreach (var shift in Model.Shifts)
+                    {
+                        // lanes = most buses on any single day this shift (>=1)
+                        var laneCount = 1;
+                        foreach (var day in Model.Days)
+                        {
+                            if (Model.Cells.TryGetValue(CellKey(route.RouteId, shift, day), out var lst))
+                                laneCount = Math.Max(laneCount, lst.Count);
+                        }
+
+                        <tbody class="sch-shift-body" data-route="@route.RouteId" data-shift="@shift">
+                            @for (var lane = 0; lane < laneCount; lane++)
+                            {
+                                <tr>
+                                    @if (lane == 0)
+                                    {
+                                        <td class="sch-shift-col" rowspan="@laneCount">
+                                            <div class="sch-shift-name">@shift</div>
+                                            <button type="button" class="sch-add-bus" onclick="schAddBus(this)">+ Add bus</button>
+                                        </td>
+                                    }
+                                    @foreach (var day in Model.Days)
+                                    {
+                                        Model.Cells.TryGetValue(CellKey(route.RouteId, shift, day), out var lst);
+                                        var cell = lst != null && lane < lst.Count ? lst[lane] : null;
+                                        var locked = cell != null && (cell.TripStatus == "Active" || cell.TripStatus == "Completed");
+                                        <td class="sch-cell-td">
+                                            @if (locked)
+                                            {
+                                                <div class="sch-locked">
+                                                    <span class="sch-lock-badge">@cell.TripStatus</span>
+                                                    <span class="sch-lock-txt">@cell.VehicleId · @(Model.Drivers.FirstOrDefault(d => d.DriverId == cell.DriverId)?.DriverName ?? "—")</span>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="sch-cell" data-route="@route.RouteId" data-shift="@shift" data-date="@day.ToString("yyyy-MM-dd")" data-tripid="@(cell?.TripId ?? "")">
+                                                    <select class="sch-sel sch-veh">
+                                                        <option value="">Vehicle…</option>
+                                                        @foreach (var v in Model.Vehicles)
+                                                        {
+                                                            <option value="@v.VehicleId" selected="@(cell?.VehicleId == v.VehicleId)">@v.VehicleId · @v.PlateNumber</option>
+                                                        }
+                                                    </select>
+                                                    <select class="sch-sel sch-drv">
+                                                        <option value="">Driver…</option>
+                                                        @foreach (var dr in Model.Drivers)
+                                                        {
+                                                            <option value="@dr.DriverId" selected="@(cell != null && cell.DriverId == dr.DriverId)">@dr.DriverName</option>
+                                                        }
+                                                    </select>
+                                                </div>
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    }
+                </table>
+            </div>
+        </div>
+    }
+
+    <!-- Save toast -->
+    <div id="sch-toast" class="sch-toast">
+        <span class="sch-toast-ico">&#10003;</span> Schedule saved
+    </div>
+
+    <!-- Conflict popup -->
+    <div id="sch-conflict-modal" class="sch-modal-overlay" style="display:none;">
+        <div class="sch-modal">
+            <div class="sch-modal-head">
+                <span class="sch-modal-ico">&#9888;</span>
+                <h3>Schedule conflicts</h3>
+            </div>
+            <p class="sch-modal-sub">Please fix the cells in red before saving.</p>
+            <ul id="sch-conflict-list" class="sch-modal-list"></ul>
+            <button class="sch-modal-btn" onclick="schCloseConflicts()">Got it</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .sch-wrap { padding: 20px 24px 60px; font-family: 'Segoe UI', sans-serif; }
+    .sch-toolbar { display:flex; align-items:center; gap:18px; flex-wrap:wrap; margin-bottom:10px; }
+    .sch-week-nav { display:flex; align-items:center; gap:10px; }
+    .sch-week-label { font-weight:700; color:#1a2a4a; font-size:.95rem; min-width:180px; text-align:center; }
+    .sch-pick { display:flex; align-items:center; gap:8px; font-size:.85rem; color:#4A5568; }
+    .sch-pick input[type=date] { padding:7px 10px; border:1.5px solid #E2E8F0; border-radius:8px; font-size:.85rem; }
+    .sch-btn-ghost { padding:7px 14px; border:1.5px solid #E2E8F0; border-radius:8px; background:#fff; color:#2D3748; font-weight:600; font-size:.85rem; cursor:pointer; text-decoration:none; }
+    .sch-btn-ghost:hover { border-color:#4AADA8; color:#4AADA8; }
+    .sch-btn-save { margin-left:auto; padding:9px 22px; border:none; border-radius:9px; background:#4AADA8; color:#fff; font-weight:700; font-size:.88rem; cursor:pointer; }
+    .sch-btn-save:hover { background:#3d9490; }
+    .sch-btn-save:disabled { background:#9AA5B4; cursor:not-allowed; }
+    .sch-hint { font-size:.8rem; color:#9AA5B4; margin:0 0 18px; }
+
+    .sch-card { background:#fff; border:1px solid #E8ECF0; border-radius:14px; margin-bottom:20px; overflow:hidden; }
+    .sch-card-head { font-weight:700; color:#1a2a4a; padding:14px 18px; border-bottom:1px solid #E8ECF0; background:#F8F9FA; }
+    .sch-table-scroll { overflow-x:auto; }
+    .sch-table { width:100%; border-collapse:collapse; min-width:900px; }
+    .sch-table th, .sch-table td { border:1px solid #EEF1F4; padding:8px; text-align:center; vertical-align:top; }
+    .sch-table thead th { background:#FBFCFD; font-size:.78rem; color:#4A5568; }
+    .sch-shift-body { border-top:2px solid #E8ECF0; }
+    .sch-day-name { font-weight:700; color:#2D3748; }
+    .sch-day-num { font-size:.72rem; color:#9AA5B4; }
+    .sch-today { background:#EAF7F5 !important; }
+    .sch-shift-col { background:#FBFCFD; font-weight:700; color:#2D3748; font-size:.82rem; text-align:left; width:104px; position:sticky; left:0; z-index:1; vertical-align:middle; }
+    .sch-shift-name { margin-bottom:8px; }
+    .sch-add-bus { display:inline-block; padding:4px 9px; border:1px dashed #B7D9D5; border-radius:7px; background:#F2FAF9; color:#3d9490; font-size:.72rem; font-weight:700; cursor:pointer; }
+    .sch-add-bus:hover { background:#E4F3F1; border-color:#4AADA8; }
+    .sch-cell-td { min-width:120px; }
+    .sch-cell { display:flex; flex-direction:column; gap:5px; position:relative; }
+    .sch-sel { width:100%; padding:6px 8px; border:1.5px solid #E2E8F0; border-radius:7px; font-size:.78rem; color:#2D3748; background:#fff; cursor:pointer; }
+    .sch-sel:focus { outline:none; border-color:#4AADA8; }
+    .sch-cell.sch-dirty .sch-sel { border-color:#4AADA8; }
+    .sch-cell.sch-conflict .sch-sel { border-color:#E74C3C; background:#FEECEC; }
+    .sch-locked { display:flex; flex-direction:column; gap:4px; align-items:center; padding:6px; }
+    .sch-lock-badge { font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:2px 8px; border-radius:20px; background:#F0F2F5; color:#6B7C93; }
+    .sch-lock-txt { font-size:.72rem; color:#6B7C93; }
+
+    .sch-modal-overlay { position:fixed; inset:0; background:rgba(13,28,40,.5); z-index:2000; display:flex; align-items:center; justify-content:center; padding:24px; }
+    .sch-modal { background:#fff; border-radius:16px; width:100%; max-width:440px; padding:24px; box-shadow:0 14px 44px rgba(0,0,0,.28); }
+    .sch-modal-head { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+    .sch-modal-ico { font-size:1.4rem; color:#E74C3C; }
+    .sch-modal-head h3 { margin:0; font-size:1.1rem; color:#1a2a4a; font-weight:800; }
+    .sch-modal-sub { margin:0 0 12px; font-size:.85rem; color:#6B7C93; }
+    .sch-modal-list { margin:0 0 18px; padding-left:18px; display:flex; flex-direction:column; gap:7px; }
+    .sch-modal-list li { font-size:.85rem; color:#41505e; line-height:1.4; }
+    .sch-modal-btn { width:100%; border:none; border-radius:10px; padding:11px; font-size:.9rem; font-weight:800; color:#fff; background:#E74C3C; cursor:pointer; }
+    .sch-modal-btn:hover { background:#cf3d2e; }
+
+    .sch-toast {
+        position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px);
+        background:#1f7a6e; color:#fff; font-size:.9rem; font-weight:700;
+        padding:12px 22px; border-radius:30px; box-shadow:0 8px 24px rgba(0,0,0,.25);
+        display:flex; align-items:center; gap:9px; z-index:3000;
+        opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease;
+    }
+    .sch-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+    .sch-toast-ico { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:rgba(255,255,255,.22); font-size:.8rem; }
+</style>
+
+<script>
+    const SCH_WEEK_START = '@Model.WeekStart.ToString("yyyy-MM-dd")';
+    const SCH_WEEK_END   = '@Model.WeekEnd.ToString("yyyy-MM-dd")';
+    const SCH_DAYS = [@Html.Raw(string.Join(",", Model.Days.Select(d => $"'{d:yyyy-MM-dd}'")))];
+    const SCH_VEH_OPTS = `<option value="">Vehicle…</option>@Html.Raw(string.Join("", Model.Vehicles.Select(v => $"<option value=\"{v.VehicleId}\">{v.VehicleId} · {v.PlateNumber}</option>")))`;
+    const SCH_DRV_OPTS = `<option value="">Driver…</option>@Html.Raw(string.Join("", Model.Drivers.Select(d => $"<option value=\"{d.DriverId}\">{d.DriverName}</option>")))`;
+
+    // show save toast once after the post-save reload
+    if (sessionStorage.getItem('sch_saved')) {
+        sessionStorage.removeItem('sch_saved');
+        window.addEventListener('DOMContentLoaded', () => {
+            const t = document.getElementById('sch-toast');
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2600);
+        });
+    }
+
+    function schGoWeek() {
+        const v = document.getElementById('sch-start').value;
+        if (v) window.location.href = '/Schedule?start=' + v;
+    }
+
+    function schWireCell(cell) {
+        cell.querySelectorAll('.sch-sel').forEach(sel =>
+            sel.addEventListener('change', () => cell.classList.add('sch-dirty')));
+    }
+    document.querySelectorAll('.sch-cell').forEach(schWireCell);
+
+    // Add a new bus lane (empty row) to a shift, across all 7 days.
+    function schAddBus(btn) {
+        const tbody = btn.closest('.sch-shift-body');
+        const route = tbody.dataset.route;
+        const shift = tbody.dataset.shift;
+
+        const tr = document.createElement('tr');
+        SCH_DAYS.forEach(date => {
+            const td = document.createElement('td');
+            td.className = 'sch-cell-td';
+            const cell = document.createElement('div');
+            cell.className = 'sch-cell';
+            cell.dataset.route = route;
+            cell.dataset.shift = shift;
+            cell.dataset.date = date;
+            cell.dataset.tripid = '';
+            cell.innerHTML = `<select class="sch-sel sch-veh">${SCH_VEH_OPTS}</select>`
+                           + `<select class="sch-sel sch-drv">${SCH_DRV_OPTS}</select>`;
+            schWireCell(cell);
+            td.appendChild(cell);
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+
+        // grow the sticky shift-label rowspan to cover the new lane
+        const labelCell = tbody.querySelector('.sch-shift-col');
+        labelCell.rowSpan = (parseInt(labelCell.rowSpan) || 1) + 1;
+    }
+
+    const SHIFT_ADJ = { 'Morning': 'Afternoon', 'Afternoon': 'Evening' }; // back-to-back pairs
+    const SCH_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    function schFmtDate(iso) {
+        const [y, m, d] = iso.split('-').map(Number);
+        return `${SCH_MONTHS[m - 1]} ${d}, ${y}`;
+    }
+
+    function schShowConflicts(messages) {
+        const ul = document.getElementById('sch-conflict-list');
+        ul.innerHTML = messages.map(m => `<li>${m}</li>`).join('');
+        document.getElementById('sch-conflict-modal').style.display = 'flex';
+    }
+    function schCloseConflicts() {
+        document.getElementById('sch-conflict-modal').style.display = 'none';
+    }
+
+    function schSave() {
+        const btn = document.getElementById('sch-save');
+        const cells = [];        // payload for server
+        const filled = [];       // {el, route, shift, date, veh, drv}
+        const messages = [];
+        const flag = el => el.classList.add('sch-conflict');
+
+        // reset marks + gather
+        let partial = false;
+        document.querySelectorAll('.sch-cell').forEach(c => {
+            c.classList.remove('sch-conflict');
+            const veh = c.querySelector('.sch-veh').value;
+            const drv = c.querySelector('.sch-drv').value;
+            if (veh && drv) {
+                const rec = { el: c, route: c.dataset.route, shift: c.dataset.shift, date: c.dataset.date, veh, drv };
+                filled.push(rec);
+                cells.push({ tripId: c.dataset.tripid || null, routeId: parseInt(c.dataset.route),
+                             shift: c.dataset.shift, date: c.dataset.date, vehicleId: veh, driverId: parseInt(drv) });
+            } else if ((veh && !drv) || (!veh && drv)) {
+                partial = true; flag(c);
+            }
+        });
+        if (partial) {
+            schShowConflicts(['Each slot needs both a bus and a driver. Pick both or leave it blank.']);
+            return;
+        }
+
+        // ── same shift + day: duplicate driver / vehicle ──
+        const byDayShift = {};
+        filled.forEach(r => { (byDayShift[r.date + '|' + r.shift] ??= []).push(r); });
+        Object.values(byDayShift).forEach(group => {
+            ['drv', 'veh'].forEach(field => {
+                const seen = {};
+                group.forEach(r => (seen[r[field]] ??= []).push(r));
+                Object.values(seen).forEach(dups => {
+                    if (dups.length > 1) {
+                        dups.forEach(r => flag(r.el));
+                        const what = field === 'drv' ? 'driver' : 'bus';
+                        messages.push(`This ${what} is already booked for the ${dups[0].shift} shift on ${schFmtDate(dups[0].date)}.`);
+                    }
+                });
+            });
+        });
+
+        // ── same driver: back-to-back shifts ──
+        const byDriver = {};
+        filled.forEach(r => { (byDriver[r.drv] ??= []).push(r); });
+        Object.values(byDriver).forEach(list => {
+            const map = {}; // date|shift -> rec
+            list.forEach(r => map[r.date + '|' + r.shift] = r);
+            list.forEach(r => {
+                const next = SHIFT_ADJ[r.shift];
+                if (next && map[r.date + '|' + next]) {
+                    flag(r.el); flag(map[r.date + '|' + next].el);
+                    messages.push(`This driver is booked for ${r.shift} and ${next} back to back on ${schFmtDate(r.date)}. Give them a break.`);
+                }
+                // Evening -> next-day Morning
+                if (r.shift === 'Evening') {
+                    const tomo = new Date(r.date); tomo.setDate(tomo.getDate() + 1);
+                    const tk = tomo.toISOString().slice(0, 10) + '|Morning';
+                    if (map[tk]) { flag(r.el); flag(map[tk].el); messages.push(`This driver ends with Evening on ${schFmtDate(r.date)} and starts Morning the next day. They need rest.`); }
+                }
+            });
+        });
+
+        if (messages.length) { schShowConflicts([...new Set(messages)]); return; }
+
+        btn.disabled = true; btn.textContent = 'Saving…';
+        fetch('/Schedule/Save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cells, weekStart: SCH_WEEK_START, weekEnd: SCH_WEEK_END })
+        }).then(async res => {
+            if (!res.ok) { schShowConflicts([await res.text()]); return; }
+            sessionStorage.setItem('sch_saved', '1'); // survive the reload -> show toast
+            window.location.reload();
+        }).catch(err => schShowConflicts(['Save failed: ' + err.message]))
+          .finally(() => { btn.disabled = false; btn.textContent = 'Save Schedule'; });
+    }
+</script>

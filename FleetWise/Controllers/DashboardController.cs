@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using FleetWise.Models;
+using FleetWise.Services;
 
 namespace FleetWise.Controllers
 {
@@ -14,8 +15,10 @@ namespace FleetWise.Controllers
 
         public async Task<IActionResult> Index(int? routeId)
         {
-            // ── Date is ALWAYS today — not user-configurable ──────────
-            var today = DateTime.Today;
+            // ── Service day = current operating cycle (06:00 -> 05:59 next morning),
+            //    not raw calendar day. Trips are dated their START day, so a cycle's
+            //    trips are exactly those dated `today`. ──────────────────
+            var today = PhClock.OperationalDay;
             var yesterday = today.AddDays(-1);
 
             // ── Flagged Vehicles (unaffected by filters) ──────────────
@@ -37,14 +40,19 @@ namespace FleetWise.Controllers
                 .Filter("date", Postgrest.Constants.Operator.Equals, yesterday.ToString("yyyy-MM-dd"))
                 .Get();
 
-            // ── Apply route filter ────────────────────────────────────
-            var todayTrips = routeId.HasValue
-                ? todayTripsResponse.Models.Where(t => t.RouteId == routeId.Value).ToList()
-                : todayTripsResponse.Models;
+            // ── Apply route filter. Trips dated `today` already span the whole 06:00→06:00
+            //    cycle (night shift dated its start day). Also fold in any STILL-ACTIVE trip
+            //    dated yesterday that hasn't been ended yet, so a lingering overnight trip
+            //    never vanishes from the dashboard when the cycle rolls. ──
+            var todayTrips = todayTripsResponse.Models
+                .Concat(yesterdayTripsResponse.Models.Where(t => t.TripStatus == "Active"))
+                .Where(t => !routeId.HasValue || t.RouteId == routeId.Value)
+                .GroupBy(t => t.TripId).Select(g => g.First())   // de-dupe
+                .ToList();
 
-            var yesterdayTrips = routeId.HasValue
-                ? yesterdayTripsResponse.Models.Where(t => t.RouteId == routeId.Value).ToList()
-                : yesterdayTripsResponse.Models;
+            var yesterdayTrips = yesterdayTripsResponse.Models
+                .Where(t => !routeId.HasValue || t.RouteId == routeId.Value)
+                .ToList();
 
             // ── Active Trips ──────────────────────────────────────────
             int activeTrips = todayTrips.Count(t => t.TripStatus == "Active");
@@ -53,56 +61,101 @@ namespace FleetWise.Controllers
             decimal todayRevenue = todayTrips.Sum(t => t.EstimatedRevenue);
             decimal yesterdayRevenue = yesterdayTrips.Sum(t => t.EstimatedRevenue);
 
-            // ── Passenger Count (from telemetry_data) ─────────────────
-            var telemetryResponse = await _supabase
-                .From<TelemetryData>()
-                .Filter("timestamp", Postgrest.Constants.Operator.GreaterThanOrEqual,
-                        yesterday.ToString("yyyy-MM-dd"))   // catches 22:00–23:59 PHT yesterday
-                .Filter("timestamp", Postgrest.Constants.Operator.LessThan,
-                        today.AddDays(1).ToString("yyyy-MM-dd"))
-                .Get();
-
+            // ── Passenger Count (from trips.total_boarded) ────────────
             var todayTripIds = todayTrips.Select(t => t.TripId).ToHashSet();
             var yesterdayTripIds = yesterdayTrips.Select(t => t.TripId).ToHashSet();
 
-            // For each trip, take the most recent telemetry record's passenger count
-            var todayPassengers = telemetryResponse.Models
-                .Where(t => todayTripIds.Contains(t.TripId))
-                .GroupBy(t => t.TripId)
-                .Sum(g => g.OrderByDescending(t => t.Timestamp).First().TotalPassengers);
+            int todayPassengers = todayTrips.Sum(t => t.TotalBoarded);
+            int yesterdayPassengers = yesterdayTrips.Sum(t => t.TotalBoarded);
 
-            var yesterdayPassengers = telemetryResponse.Models
-                .Where(t => yesterdayTripIds.Contains(t.TripId))
-                .GroupBy(t => t.TripId)
-                .Sum(g => g.OrderByDescending(t => t.Timestamp).First().TotalPassengers);
+            // ── Telemetry feed (hourly chart only — TotalBoarded has no intra-day
+            //    breakdown, so the demand chart still needs the raw telemetry stream) ──
+            // Window = this service cycle: opDay 06:00 (inclusive) -> next day 06:00 (exclusive).
+            var cycleStart = today.Add(PhClock.DayStartTime);
+            var cycleEnd = today.AddDays(1).Add(PhClock.DayStartTime);
+            var telemetryResponse = await _supabase
+                .From<TelemetryData>()
+                .Filter("timestamp", Postgrest.Constants.Operator.GreaterThanOrEqual,
+                        cycleStart.ToString("yyyy-MM-dd HH:mm:ss"))
+                .Filter("timestamp", Postgrest.Constants.Operator.LessThan,
+                        cycleEnd.ToString("yyyy-MM-dd HH:mm:ss"))
+                .Get();
 
-            // ── Passenger Demand Chart (hourly buckets) ───────────────
-            // Covers all three shifts: 06:00–14:00, 14:00–22:00, 22:00–06:00
-            var labelHours = new[] { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5 };
+            // ── Passenger Onboard Chart — hour marks across the full cycle ─────
+            // 25 points: 06:00 today -> 06:00 next day (6am to 6am, both ends shown).
+            var markTimes = Enumerable.Range(0, 25).Select(i => cycleStart.AddHours(i)).ToList();
 
-            var labels = labelHours
-                .Select(h => h == 0 ? "12:00 AM"
-                    : h < 12 ? $"{h}:00 AM"
-                    : h == 12 ? "12:00 PM"
-                    : $"{h - 12}:00 PM")
+            var labels = markTimes
+                .Select(dt => dt.Hour switch
+                {
+                    0 => "12:00 AM",
+                    12 => "12:00 PM",
+                    < 12 => $"{dt.Hour}:00 AM",
+                    _ => $"{dt.Hour - 12}:00 PM",
+                })
                 .ToList();
 
-            // Bucket telemetry readings (for today's trips) by the local hour the reading
-            // was recorded. Timestamps are stored in UTC; convert to PHT (UTC+8) for bucketing.
-            var phtOffset = TimeSpan.FromHours(8);
-
+            // Stored timestamp digits are ALREADY PH wall-clock (PhClock.NowForDb) — never
+            // add a +8 offset (double-shift bug).
             var todayTelemetry = telemetryResponse.Models
-                .Where(t => todayTripIds.Contains(t.TripId));
+                .Where(t => todayTripIds.Contains(t.TripId))
+                .ToList();
+            var now = PhClock.Now;
 
-            var data = labelHours.Select(h =>
+            // We only record BOARDINGS (no alighting), so "occupancy" is unknowable. The chart
+            // shows CUMULATIVE passengers boarded by hour — a count that only ever grows and
+            // ends exactly at trips.total_boarded (the source of truth). Each trip's live
+            // window uses ACTUAL start/end when the driver app set them, else the scheduled
+            // shift (overnight rolls +1 day).
+            static DateTime FloorHour(DateTime d) => new(d.Year, d.Month, d.Day, d.Hour, 0, 0);
+            var tripWindows = todayTrips.Select(t =>
             {
-                return todayTelemetry
-                    .Where(t => DateTime.SpecifyKind(t.Timestamp, DateTimeKind.Utc).Add(phtOffset).Hour == h)
-                    .GroupBy(t => t.TripId)
-                    .Sum(g => g.OrderByDescending(t => t.Timestamp).First().TotalPassengers);
+                var schedStart = t.Date.Date + t.ShiftStartTime;
+                var schedEnd = t.Date.Date + t.ShiftEndTime
+                    + (t.ShiftEndTime <= t.ShiftStartTime ? TimeSpan.FromDays(1) : TimeSpan.Zero);
+                // Postgrest deserializes timestamptz to a LOCAL-kind DateTime, shifting the
+                // stored PH wall-clock digits +8h. Normalize back to UTC so the raw digits
+                // (true PH time) line up with the Unspecified-kind hour marks — otherwise an
+                // overnight trip shifts past the cycle window and vanishes from the chart.
+                var start = t.ActualStartTime?.ToUniversalTime() ?? schedStart;
+                var end = t.ActualEndTime?.ToUniversalTime() ?? (t.TripStatus == "Active" ? now : schedEnd);
+                // Guard against clock skew / future timestamps (mobile may write a start
+                // ahead of server time): never let the window start after "now", and floor
+                // to the hour so the starting bucket is included. End can't exceed now.
+                if (start > now) start = now;
+                start = FloorHour(start);
+                if (end > now) end = now;
+                if (end < start) end = start;
+                return new { Trip = t, Start = start, End = end };
             }).ToList();
 
-            int yMax = data.Any(d => d > 0) ? (int)(Math.Ceiling((data.Max() + 50) / 100.0) * 100) : 400;
+            // For each hour mark sum every trip's cumulative boarded-so-far. Marks in the
+            // future (> now) return null -> the line stops at the current time.
+            var data = markTimes.Select(mark =>
+            {
+                if (mark > now) return (int?)null;
+                int sum = 0;
+                foreach (var w in tripWindows)
+                {
+                    if (mark < w.Start) continue;                       // trip hasn't started yet
+                    if (mark > w.End) { sum += w.Trip.TotalBoarded; continue; } // ended earlier today -> count persists
+                    // Cumulative boarded up to this hour: max telemetry reading seen so far
+                    // (monotonic), capped at the trip's total. The trip's CURRENT hour is
+                    // anchored to total_boarded so the line matches the KPI exactly.
+                    int boarded = todayTelemetry
+                        .Where(x => x.TripId == w.Trip.TripId && x.Timestamp.ToUniversalTime() <= mark)
+                        .Select(x => x.TotalPassengers)
+                        .DefaultIfEmpty(0)
+                        .Max();
+                    boarded = Math.Min(boarded, w.Trip.TotalBoarded);
+                    if (mark.AddHours(1) > w.End) boarded = w.Trip.TotalBoarded; // last/current hour = truth
+                    sum += boarded;
+                }
+                return (int?)sum;
+            }).ToList();
+
+            var maxVal = data.Where(d => d.HasValue).Select(d => d!.Value).DefaultIfEmpty(0).Max();
+            int yMax = maxVal > 0 ? (int)(Math.Ceiling((maxVal + 50) / 100.0) * 100) : 400;
             int yStep = yMax / 4;
 
             // ── Routes dropdown ───────────────────────────────────────
@@ -117,6 +170,21 @@ namespace FleetWise.Controllers
                     Value = r.RouteId.ToString(),
                     Text = r.RouteName,
                     Selected = routeId.HasValue && r.RouteId == routeId.Value
+                })
+                .ToList();
+
+            // ── Passenger breakdown for ALL trips this cycle (Total Passengers modal) ──
+            var routeNames = routesResponse.Models.ToDictionary(r => r.RouteId, r => r.RouteName);
+            var tripBreakdown = todayTrips
+                .OrderByDescending(t => t.TotalBoarded)
+                .Select(t => new ActiveTripRow
+                {
+                    TripId = t.TripId,
+                    RouteName = routeNames.TryGetValue(t.RouteId, out var rn) ? rn : $"Route {t.RouteId}",
+                    VehicleId = t.VehicleId,
+                    ShiftType = t.ShiftType,
+                    Status = t.TripStatus,
+                    Passengers = t.TotalBoarded,
                 })
                 .ToList();
 
@@ -135,6 +203,8 @@ namespace FleetWise.Controllers
                 ChartYStep = yStep,
                 Routes = routes,
                 SelectedRouteId = routeId,
+                Today = today,
+                ActiveTripBreakdown = tripBreakdown,
             };
 
             return View(vm);

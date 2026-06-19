@@ -40,6 +40,33 @@
                 </div>
             </div>
 
+            <!-- Trip Summary (completed trips only) -->
+            <div id="tdm-summary-section" style="display:none;">
+                <div class="tdm-section-header">
+                    <span class="tdm-section-title">Trip Summary</span>
+                </div>
+                <div class="tdm-section-body">
+                    <div class="tdm-info-grid">
+                        <div class="tdm-info-item">
+                            <span class="tdm-label">Start Time</span>
+                            <span class="tdm-value" id="tdm-actual-start">—</span>
+                        </div>
+                        <div class="tdm-info-item">
+                            <span class="tdm-label">End Time</span>
+                            <span class="tdm-value" id="tdm-actual-end">—</span>
+                        </div>
+                        <div class="tdm-info-item">
+                            <span class="tdm-label">Total Boarded</span>
+                            <span class="tdm-value" id="tdm-total-boarded">—</span>
+                        </div>
+                        <div class="tdm-info-item">
+                            <span class="tdm-label">Revenue</span>
+                            <span class="tdm-value" id="tdm-revenue">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Assignment Information -->
             <div class="tdm-section-header">
                 <span class="tdm-section-title">Assignment Information</span>
@@ -258,6 +285,15 @@
 
         .tdm-badge--completed::before {
             background: #9AA5B4;
+        }
+
+    .tdm-badge--missed {
+        background: #FDE8E8;
+        color: #B42318;
+    }
+
+        .tdm-badge--missed::before {
+            background: #B42318;
         }
 
     .tdm-badge--passed {
@@ -539,6 +575,7 @@
             'Assignment Issue': ['tdm-badge--issue',      'Assignment Issue'],
             'Not Yet Started':  ['tdm-badge--not-started','Not Yet Started'],
             'Pending':          ['tdm-badge--pending',    'Pending'],
+            'Missed':           ['tdm-badge--missed',     'Missed'],
             'Completed':        ['tdm-badge--completed',  'Completed'],
         };
         const [cls, label] = map[status] ?? ['tdm-badge--completed', status];
@@ -554,6 +591,7 @@
             'Flagged':         'tdm-dot--red',
             'Unavailable':     'tdm-dot--red',
             'Pending':         'tdm-dot--yellow',
+            'Trip Completed':  'tdm-dot--gray',
         };
         return `<span class="tdm-dot ${map[status] ?? 'tdm-dot--gray'}"></span>${status}`;
     }
@@ -592,6 +630,20 @@
             document.getElementById('tdm-shift-time').textContent =
                 (d.shiftStartTime && d.shiftEndTime) ? `${d.shiftStartTime} – ${d.shiftEndTime}` : '—';
             document.getElementById('tdm-route').textContent = d.routeName ?? '—';
+
+            // Trip Summary (completed only)
+            const summary = document.getElementById('tdm-summary-section');
+            if (d.isCompleted) {
+                document.getElementById('tdm-actual-start').textContent  = d.actualStartTime ?? '—';
+                document.getElementById('tdm-actual-end').textContent    = d.actualEndTime ?? '—';
+                document.getElementById('tdm-total-boarded').textContent =
+                    (d.totalBoarded ?? 0) + ' passengers';
+                document.getElementById('tdm-revenue').textContent =
+                    '₱' + Number(d.estimatedRevenue ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                summary.style.display = 'block';
+            } else {
+                summary.style.display = 'none';
+            }
 
             // Vehicle
             document.getElementById('tdm-vehicle-id').textContent   = d.vehicleId   ?? '—';

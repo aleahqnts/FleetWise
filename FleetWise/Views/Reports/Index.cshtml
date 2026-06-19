@@ -4,7 +4,22 @@
 }
 
 <!-- PAGE TITLE -->
-<h2 class="rp-title">Reports</h2>
+<div class="rp-title-row">
+    <h2 class="rp-title">Reports</h2>
+    <div class="rp-toolbar-right">
+        <div class="rp-date-nav">
+            <button type="button" class="rp-date-arrow" id="rpPrevDay" title="Previous day"><i class="ti ti-chevron-left"></i></button>
+            <span class="rp-date-badge" id="rpDateBadge" title="Pick report date"><i class="ti ti-calendar-event"></i> —</span>
+            <button type="button" class="rp-date-arrow" id="rpNextDay" title="Next day"><i class="ti ti-chevron-right"></i></button>
+            <button type="button" class="rp-date-today" id="rpTodayBtn" style="display:none;">Today</button>
+        </div>
+        <button type="button" class="rp-btn-refresh" id="rpRefreshBtn" title="Refresh report data">
+            <i class="ti ti-refresh"></i> Refresh
+        </button>
+        <span class="rp-updated" id="rpUpdated" title="Auto-refreshes every 30 seconds"></span>
+        <input type="date" id="dateFilter" class="rp-hidden-date" />
+    </div>
+</div>
 
 <!-- STAT CARDS -->
 <div class="rp-stat-grid">
@@ -462,8 +477,7 @@
     </div>
 </div>
 
-<!-- Chart.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
 <!-- Chart.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
@@ -515,7 +529,8 @@
     /* ───────────────────────────────────────────────────────────
     Charts
     ─────────────────────────────────────────────────────────── */
-    function miniLineChart(id, labels, data, color) {
+    function miniLineChart(id, labels, data, color, tooltipFmt) {
+    const fmt = tooltipFmt || (v => v);
     return new Chart(document.getElementById(id).getContext('2d'), {
     type: 'line',
     data: {
@@ -525,9 +540,13 @@
     borderColor: color,
     borderWidth: 1.8,
     pointRadius: 3,
+    pointHoverRadius: 6,
+    pointHitRadius: 20,
     pointBackgroundColor: '#fff',
     pointBorderColor: color,
     pointBorderWidth: 1.5,
+    pointHoverBackgroundColor: color,
+    pointHoverBorderColor: '#fff',
     tension: 0.35,
     fill: false
     }]
@@ -535,7 +554,21 @@
     options: {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+    legend: { display: false },
+    tooltip: {
+    enabled: true,
+    backgroundColor: '#fff',
+    titleColor: '#2D3748',
+    bodyColor: '#2D3748',
+    borderColor: '#E8ECF0',
+    borderWidth: 1,
+    padding: 10,
+    displayColors: false,
+    callbacks: { label: (item) => ' ' + fmt(item.parsed.y) }
+    }
+    },
     scales: {
     x: {
     display: true,
@@ -701,7 +734,7 @@
     document.getElementById('passengerSummaryVsLabel').textContent = summary.comparisonLabel;
 
     if (!passengerChart) {
-    passengerChart = miniLineChart('passengerMiniChart', summary.weekLabels, summary.weekData, '#9B59B6');
+    passengerChart = miniLineChart('passengerMiniChart', summary.weekLabels, summary.weekData, '#9B59B6', v => formatNumber(v) + ' passengers');
     } else {
     passengerChart.data.labels = summary.weekLabels;
     passengerChart.data.datasets[0].data = summary.weekData;
@@ -729,7 +762,7 @@
     document.getElementById('revenueSummaryVsLabel').textContent = summary.comparisonLabel;
 
     if (!revenueChart) {
-    revenueChart = miniLineChart('revenueMiniChart', summary.weekLabels, summary.weekData, '#4AADA8');
+    revenueChart = miniLineChart('revenueMiniChart', summary.weekLabels, summary.weekData, '#4AADA8', v => formatCurrencyCompact(v));
     } else {
     revenueChart.data.labels = summary.weekLabels;
     revenueChart.data.datasets[0].data = summary.weekData;
@@ -794,13 +827,92 @@
     Filter event wiring
     ─────────────────────────────────────────────────────────── */
     document.getElementById('routeFilter').addEventListener('change', () => { currentPage = 1; loadAll(); });
-    document.getElementById('dateFilter').addEventListener('change', () => { currentPage = 1; loadAll(); });
     document.getElementById('passengerPeriodSelect').addEventListener('change', () => loadAll());
     document.getElementById('revenuePeriodSelect').addEventListener('change', () => loadAll());
 
-    const today = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Manila' }).split(',')[0];
-    document.getElementById('dateFilter').value = today;
-    loadAll();
+    /* ───────────────────────────────────────────────────────────
+    Date navigation (operational day, 06:00 -> 05:59 next morning)
+    ─────────────────────────────────────────────────────────── */
+    function rpPHParts() {
+        // "2026-06-19, 04:21" in PH wall-clock
+        const s = new Date().toLocaleString('en-CA', {
+            timeZone: 'Asia/Manila', hour12: false,
+            year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+        });
+        const [date, time] = s.split(', ');
+        return { date, hour: parseInt(time.slice(0, 2), 10) };
+    }
+    function rpISO(dt) { return dt.toLocaleDateString('en-CA'); } // yyyy-mm-dd
+    function rpOperationalDay() {
+        const p = rpPHParts();
+        if (p.hour < 6) { const dt = new Date(p.date + 'T00:00:00'); dt.setDate(dt.getDate() - 1); return rpISO(dt); }
+        return p.date;
+    }
+    function rpFmtBadge(iso) {
+        return new Date(iso + 'T00:00:00').toLocaleDateString('en-PH',
+            { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    function rpUpdateBadge() {
+        const iso = document.getElementById('dateFilter').value;
+        document.getElementById('rpDateBadge').innerHTML =
+            '<i class="ti ti-calendar-event"></i> ' + (iso ? rpFmtBadge(iso) : '—');
+        document.getElementById('rpTodayBtn').style.display =
+            iso === rpOperationalDay() ? 'none' : '';
+    }
+    function rpSetDate(iso) {
+        document.getElementById('dateFilter').value = iso;
+        rpUpdateBadge();
+        currentPage = 1;
+        loadAll();
+    }
+    function rpStepDate(delta) {
+        const cur = document.getElementById('dateFilter').value || rpOperationalDay();
+        const dt = new Date(cur + 'T00:00:00'); dt.setDate(dt.getDate() + delta);
+        rpSetDate(rpISO(dt));
+    }
+    document.getElementById('rpPrevDay').addEventListener('click', () => rpStepDate(-1));
+    document.getElementById('rpNextDay').addEventListener('click', () => rpStepDate(1));
+    document.getElementById('rpTodayBtn').addEventListener('click', () => rpSetDate(rpOperationalDay()));
+    document.getElementById('rpDateBadge').addEventListener('click', () => {
+        const i = document.getElementById('dateFilter');
+        if (i.showPicker) i.showPicker();
+    });
+    // Manual calendar pick (hidden input) keeps badge + data in sync.
+    document.getElementById('dateFilter').addEventListener('change', function () { rpSetDate(this.value); });
+
+    /* ───────────────────────────────────────────────────────────
+    Manual refresh button + silent 30s auto-refresh
+    ─────────────────────────────────────────────────────────── */
+    let rpBusy = false;
+    function rpAnyModalOpen() {
+        return ['reportGenModal', 'tripModal'].some(id => {
+            const e = document.getElementById(id);
+            return e && getComputedStyle(e).display !== 'none';
+        });
+    }
+    function rpStamp() {
+        const e = document.getElementById('rpUpdated');
+        if (e) e.textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    async function rpRefresh(manual) {
+        if (rpBusy) return;
+        rpBusy = true;
+        const btn = document.getElementById('rpRefreshBtn');
+        if (manual && btn) btn.classList.add('spinning');
+        try { await loadAll(); rpStamp(); }
+        catch (e) { console.warn('reports refresh failed', e); }
+        finally { rpBusy = false; if (btn) btn.classList.remove('spinning'); }
+    }
+    document.getElementById('rpRefreshBtn').addEventListener('click', () => rpRefresh(true));
+    setInterval(() => {
+        if (document.hidden) return;       // tab not visible
+        if (rpAnyModalOpen()) return;      // don't yank an open modal
+        rpRefresh(false);
+    }, 30000);
+
+    // ── Initial load (default to current operational day) ──
+    rpSetDate(rpOperationalDay());
+    rpStamp();
 </script>
 
 <script>
@@ -1071,6 +1183,18 @@
     table.appendChild(tbody);
     previewTables.appendChild(table);
     });
+
+    // Clear grand total at the end
+    if (data.totals) {
+    const t = data.totals;
+    const parts = [`Total Trips: <strong>${formatNumber(t.trips)}</strong>`];
+    if (currentReportType !== 'Revenue') parts.push(`Total Passengers: <strong>${formatNumber(t.passengers)}</strong>`);
+    if (currentReportType !== 'Passenger') parts.push(`Total Revenue: <strong>${formatCurrencyCompact(t.revenue)}</strong>`);
+    const totalDiv = document.createElement('div');
+    totalDiv.className = 'rg-total-bar';
+    totalDiv.innerHTML = `<span class="rg-total-label">TOTAL</span><span class="rg-total-vals">${parts.join('&nbsp;&nbsp;•&nbsp;&nbsp;')}</span>`;
+    previewTables.appendChild(totalDiv);
+    }
     }
 
     // ── Download ──────────────────────────────────────────────
@@ -1291,6 +1415,24 @@
     font-family: 'Segoe UI', sans-serif;
     margin-bottom: 20px;
     }
+
+    /* ── Title row: date nav + refresh (dispatch-style) ─────── */
+    .rp-title-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+    .rp-title-row .rp-title { margin-bottom:0; }
+    .rp-toolbar-right { display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .rp-date-nav { display:inline-flex; align-items:center; gap:8px; }
+    .rp-date-arrow { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:50%; background:#EAF7F5; color:#2e7d72; border:1px solid #CDE9E4; cursor:pointer; font-size:1.1rem; transition:background .15s, transform .15s; }
+    .rp-date-arrow:hover { background:#2e7d72; color:#fff; transform:translateY(-1px); }
+    .rp-date-badge { display:inline-flex; align-items:center; gap:8px; padding:8px 16px; border-radius:30px; background:#EAF7F5; color:#2e7d72; font-size:.86rem; font-weight:700; border:1px solid #CDE9E4; cursor:pointer; white-space:nowrap; }
+    .rp-date-badge i { font-size:1rem; }
+    .rp-date-today { display:inline-flex; align-items:center; padding:7px 14px; border-radius:30px; background:#fff; color:#2e7d72; border:1px solid #CDE9E4; font-size:.82rem; font-weight:700; cursor:pointer; }
+    .rp-date-today:hover { background:#2e7d72; color:#fff; }
+    .rp-btn-refresh { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; background:#fff; color:#2e7d72; border:1px solid #CDE9E4; font-weight:700; font-size:.86rem; cursor:pointer; }
+    .rp-btn-refresh:hover { background:#EAF7F5; }
+    .rp-btn-refresh.spinning .ti { animation:rpSpin .7s linear infinite; }
+    @@keyframes rpSpin { to { transform:rotate(360deg); } }
+    .rp-updated { font-size:.78rem; color:#8a98a3; }
+    .rp-hidden-date { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
 
     /* ── Stat grid ──────────────────────────────────────────── */
     .rp-stat-grid {
@@ -1990,7 +2132,7 @@
     background: #fff;
     border-radius: 20px;
     width: 100%;
-    max-width: 860px;
+    max-width: min(1180px, 96vw);
     max-height: 92vh;
     display: flex;
     flex-direction: column;
@@ -2251,6 +2393,32 @@
     padding: 48px 0;
     }
 
+    .rg-total-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-top: 2px solid var(--rp-teal);
+    background: #F4FBFA;
+    border-radius: 0 0 8px 8px;
+    font-family: 'Segoe UI', sans-serif;
+    }
+
+    .rg-total-label {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: .06em;
+    color: var(--rp-teal);
+    }
+
+    .rg-total-vals {
+    font-size: 0.84rem;
+    color: var(--rp-text);
+    }
+
     /* ── Footer ─────────────────────────────────────────────── */
     .rg-footer {
     display: flex;
@@ -2375,13 +2543,6 @@
                     <polyline points="6 9 12 15 18 9" />
                 </svg>
             </span>
-        </div>
-    </div>
-
-    <div class="rp-date-wrap">
-        <span class="rp-filter-label">Date:</span>
-        <div class="rp-input-wrap">
-            <input type="date" class="rp-date-input" id="dateFilter" />
         </div>
     </div>
 }

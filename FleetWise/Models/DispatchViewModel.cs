@@ -2,6 +2,10 @@
 {
     public class DispatchViewModel
     {
+        public DateTime ScheduleDate { get; set; }
+        public string PrevDate { get; set; }
+        public string NextDate { get; set; }
+        public bool IsToday { get; set; }
         public int ActiveTrips { get; set; }
         public int TripsNotStarted { get; set; }
         public int UnassignedTrips { get; set; }
@@ -24,6 +28,7 @@
         public string ShiftType { get; set; }
         public string ShiftStartTime { get; set; }
         public string ShiftEndTime { get; set; }
+        public bool IsOvernight { get; set; }
         public List<TripRow> Trips { get; set; } = new();
     }
 

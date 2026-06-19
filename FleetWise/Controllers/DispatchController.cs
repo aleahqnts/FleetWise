@@ -18,14 +18,21 @@ namespace FleetWise.Controllers
             _supabase = supabase;
         }
 
-        public async Task<IActionResult> Index()
+        public async Task<IActionResult> Index(string date)
         {
-            // --- Always scope dispatch to today's date ---
-            var today = PhClock.Today.ToString("yyyy-MM-dd");
+            // --- Scope dispatch to ONE operational day (06:00 -> 05:59 next morning).
+            //     Default = the current service cycle (before 6 AM that's still
+            //     yesterday's day). Arrows in the header move this back/forward a day. ---
+            var selected = DateTime.TryParse(date, out var d) ? d.Date : PhClock.OperationalDay;
+            var selStr = selected.ToString("yyyy-MM-dd");
 
             // --- Fetch all data in parallel ---
+            // A trip is dated its START day. An overnight shift (10pm->6am) rolls past
+            // midnight but still belongs to its start day's cycle, so the board for day D
+            // is EXACTLY the trips dated D — no previous-day merge (that double-showed an
+            // overnight trip on the next day's board too).
             var tripsTask = _supabase.From<Trip>()
-                                       .Filter("date", Operator.Equals, today)
+                                       .Filter("date", Operator.Equals, selStr)
                                        .Get();
             var vehiclesTask = _supabase.From<Vehicle>().Get();
             var routesTask = _supabase.From<BusRoute>().Get();
@@ -38,7 +45,10 @@ namespace FleetWise.Controllers
 
             await Task.WhenAll(tripsTask, vehiclesTask, routesTask, driversTask, availabilityTask, checklistsTask);
 
-            var trips = tripsTask.Result.Models;
+            // Trips for this operational day (overnight ones included — they're dated today).
+            var trips = tripsTask.Result.Models
+                .Where(t => t.Date.Date == selected)
+                .ToList();
             var vehicles = vehiclesTask.Result.Models;
             var routes = routesTask.Result.Models;
             var drivers = driversTask.Result.Models;
@@ -65,7 +75,6 @@ namespace FleetWise.Controllers
             {
                 vehicleDict.TryGetValue(trip.VehicleId, out var vehicle);
                 driverDict.TryGetValue(trip.DriverId, out var driver);
-                checklistDict.TryGetValue(trip.TripId, out var checklist);
                 var driverAvail = availabilityDict.TryGetValue(trip.DriverId, out var avail) ? avail : "Available";
 
                 if (trip.TripStatus == "Active")
@@ -74,22 +83,23 @@ namespace FleetWise.Controllers
                 if (trip.TripStatus == "Completed")
                     return (vehicle, driver, "Ready to Deploy", "Available", "Completed");
 
-                var vehicleStatus = checklist == null
-                    ? "Pending"
-                    : string.Equals(checklist.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase)
-                        ? "Ready to Deploy"
-                        : "Flagged";
+                var vehicleStatus = string.IsNullOrEmpty(vehicle?.VehicleStatus) ? "Pending" : vehicle.VehicleStatus;
 
                 // Treat null/missing availability as Available
                 var driverStatus = driver == null
                     ? "Unavailable"
                     : string.IsNullOrEmpty(driverAvail) ? "Available" : driverAvail;
 
-                var tripStatus = (vehicleStatus == "Flagged" || driverStatus == "Unavailable")
-                    ? "Assignment Issue"
-                    : vehicleStatus == "Pending"
-                        ? "Pending"
-                        : "Not Yet Started";
+                // Shift already ended but the trip never went Active/Completed -> it was
+                // MISSED. Time-relative (derived per request, not stored), so a past
+                // operational day shows missed trips instead of a stale "Not Yet Started".
+                var tripStatus = ShiftEndAt(trip) < PhClock.Now
+                    ? "Missed"
+                    : (vehicleStatus == "Flagged" || driverStatus == "Unavailable")
+                        ? "Assignment Issue"
+                        : vehicleStatus == "Pending"
+                            ? "Pending"
+                            : "Not Yet Started";
 
                 return (vehicle, driver, vehicleStatus, driverStatus, tripStatus);
             }
@@ -103,7 +113,13 @@ namespace FleetWise.Controllers
 
             // --- Stats ---
             int activeTrips = trips.Count(t => resolved[t.TripId].TripStatus == "Active");
-            int notStarted = trips.Count(t => resolved[t.TripId].TripStatus == "Not Yet Started");
+            // Still awaiting departure = not started, not finished, and NOT already missed
+            // (Not Yet Started + Pending checklist + Assignment Issue). Missed trips are
+            // past their window so they no longer count as awaiting.
+            int notStarted = trips.Count(t =>
+                resolved[t.TripId].TripStatus != "Active"
+                && resolved[t.TripId].TripStatus != "Completed"
+                && resolved[t.TripId].TripStatus != "Missed");
             int unassigned = trips.Count(t => resolved[t.TripId].TripStatus == "Assignment Issue");
             int flaggedVehicles = vehicles.Count(v => v.VehicleStatus == "Flagged");
             int unavailableDrivers = availability.Count(a => a.AvailabilityStatus == "Unavailable");
@@ -111,6 +127,10 @@ namespace FleetWise.Controllers
             // --- Group trips by route → shift ---
             var vm = new DispatchViewModel
             {
+                ScheduleDate = selected,
+                PrevDate = selected.AddDays(-1).ToString("yyyy-MM-dd"),
+                NextDate = selected.AddDays(1).ToString("yyyy-MM-dd"),
+                IsToday = selected == PhClock.OperationalDay,
                 ActiveTrips = activeTrips,
                 TripsNotStarted = notStarted,
                 UnassignedTrips = unassigned,
@@ -144,11 +164,21 @@ namespace FleetWise.Controllers
 
                 foreach (var shiftGroup in shiftGroups)
                 {
+                    // Build the shift window on the SELECTED operational day so an overnight
+                    // shift's end correctly lands on the next morning; flag it so the view can
+                    // show a "+1" day hint and never look like it ends the same morning.
+                    var startTs = shiftGroup.Key.ShiftStartTime;
+                    var endTs = shiftGroup.Key.ShiftEndTime;
+                    bool overnight = endTs <= startTs;
+                    var startDt = selected.Add(startTs);
+                    var endDt = selected.Add(endTs).AddDays(overnight ? 1 : 0);
+
                     var shift = new ShiftGroup
                     {
                         ShiftType = shiftGroup.Key.ShiftType,
-                        ShiftStartTime = DateTime.Today.Add(shiftGroup.Key.ShiftStartTime).ToString("h:mm tt"),
-                        ShiftEndTime = DateTime.Today.Add(shiftGroup.Key.ShiftEndTime).ToString("h:mm tt")
+                        ShiftStartTime = startDt.ToString("h:mm tt"),
+                        ShiftEndTime = endDt.ToString("h:mm tt"),
+                        IsOvernight = overnight
                     };
 
                     foreach (var trip in shiftGroup.OrderBy(t => t.VehicleId))
@@ -221,8 +251,8 @@ namespace FleetWise.Controllers
             }
             else if (trip.TripStatus == "Completed")
             {
-                vehicleStatus = "Ready to Deploy";
-                driverStatus = "Available";
+                vehicleStatus = "Trip Completed";
+                driverStatus = "Trip Completed";
                 resolvedTripStatus = "Completed";
             }
             else
@@ -233,23 +263,22 @@ namespace FleetWise.Controllers
                 //   - checklist status == "Passed"   -> Ready to Deploy
                 //   - anything else (e.g. "Failed")  -> Flagged
                 // Match is case-insensitive, mirroring the JS check in the modal.
-                vehicleStatus = checklist == null
-                    ? "Pending"
-                    : string.Equals(checklist.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase)
-                        ? "Ready to Deploy"
-                        : "Flagged";
+                vehicleStatus = string.IsNullOrEmpty(vehicle?.VehicleStatus) ? "Pending" : vehicle.VehicleStatus;
 
                 driverStatus = driver == null
                     ? "Unavailable"
                     : (availability?.AvailabilityStatus ?? "Available");
 
                 // Overall trip status mirrors the dispatch dashboard's resolution,
-                // so the header badge always agrees with Vehicle Status / Inspection Log:
-                resolvedTripStatus = (vehicleStatus == "Flagged" || driverStatus == "Unavailable")
-                    ? "Assignment Issue"
-                    : vehicleStatus == "Pending"
-                        ? "Pending"
-                        : "Not Yet Started";
+                // so the header badge always agrees with Vehicle Status / Inspection Log.
+                // Past its window without running -> Missed.
+                resolvedTripStatus = ShiftEndAt(trip) < PhClock.Now
+                    ? "Missed"
+                    : (vehicleStatus == "Flagged" || driverStatus == "Unavailable")
+                        ? "Assignment Issue"
+                        : vehicleStatus == "Pending"
+                            ? "Pending"
+                            : "Not Yet Started";
             }
 
             var vm = new TripDetailViewModel
@@ -257,8 +286,8 @@ namespace FleetWise.Controllers
                 TripId = trip.TripId,
                 TripStatus = resolvedTripStatus,
                 ShiftType = trip.ShiftType,
-                ShiftStartTime = DateTime.Today.Add(trip.ShiftStartTime).ToString("h:mm tt"),
-                ShiftEndTime = DateTime.Today.Add(trip.ShiftEndTime).ToString("h:mm tt"),
+                ShiftStartTime = FormatShiftWindow(trip).Start,
+                ShiftEndTime = FormatShiftWindow(trip).End,
                 RouteName = route?.RouteName ?? "—",
                 VehicleId = trip.VehicleId,
                 PlateNumber = vehicle?.PlateNumber ?? "—",
@@ -266,6 +295,16 @@ namespace FleetWise.Controllers
                 DriverName = driver != null ? $"{driver.FirstName} {driver.LastName}" : "Unassigned",
                 DriverId = trip.DriverId.ToString(),
                 DriverStatus = driverStatus,
+
+                IsCompleted = trip.TripStatus == "Completed",
+                TotalBoarded = trip.TripStatus == "Completed" ? trip.TotalBoarded : null,
+                EstimatedRevenue = trip.TripStatus == "Completed" ? trip.EstimatedRevenue : null,
+                // Stored timestamptz digits are already PH wall-clock (PhClock.NowForDb).
+                // Postgrest deserializes the "+00:00" value to a LOCAL-kind DateTime, so a
+                // plain ToString() shifts it +8h (01:06 -> 09:06). Normalize back to UTC to
+                // print the raw stored digits unchanged.
+                ActualStartTime = trip.ActualStartTime?.ToUniversalTime().ToString("h:mm tt"),
+                ActualEndTime = trip.ActualEndTime?.ToUniversalTime().ToString("h:mm tt"),
 
                 Checklist = checklist != null ? new TripChecklistViewModel
                 {
@@ -305,7 +344,7 @@ namespace FleetWise.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAddTripOptions()
         {
-            var today = PhClock.Today.ToString("yyyy-MM-dd");
+            var today = PhClock.OperationalDay.ToString("yyyy-MM-dd");
 
             var tripsTask = _supabase.From<Trip>()
                                         .Filter("date", Operator.Equals, today)
@@ -397,10 +436,13 @@ namespace FleetWise.Controllers
              || !TimeSpan.TryParse(req.ShiftEndTime, out var endTime))
                 return BadRequest("Invalid shift times.");
 
+            var conflict = await ValidateAssignmentAsync(PhClock.OperationalDay, req.ShiftType, req.VehicleId, req.DriverId, null);
+            if (conflict != null) return BadRequest(conflict);
+
             var newTrip = new Trip
             {
                 // Specify UTC so Postgrest serialises as yyyy-MM-dd, matching the Index filter
-                Date = DateTime.SpecifyKind(PhClock.Today, DateTimeKind.Utc),
+                Date = DateTime.SpecifyKind(PhClock.OperationalDay, DateTimeKind.Utc),
                 ShiftType = req.ShiftType,
                 ShiftStartTime = startTime,
                 ShiftEndTime = endTime,
@@ -426,7 +468,7 @@ namespace FleetWise.Controllers
             if (string.IsNullOrEmpty(tripId))
                 return BadRequest("Trip ID is required.");
 
-            var today = PhClock.Today.ToString("yyyy-MM-dd");
+            var today = PhClock.OperationalDay.ToString("yyyy-MM-dd");
 
             // Fetch the trip being reassigned so we know its shift
             var tripResp = await _supabase.From<Trip>()
@@ -496,8 +538,8 @@ namespace FleetWise.Controllers
                 {
                     tripId = trip.TripId,
                     shiftType = trip.ShiftType,
-                    shiftStart = DateTime.Today.Add(trip.ShiftStartTime).ToString("h:mm tt"),
-                    shiftEnd = DateTime.Today.Add(trip.ShiftEndTime).ToString("h:mm tt"),
+                    shiftStart = FormatShiftWindow(trip).Start,
+                    shiftEnd = FormatShiftWindow(trip).End,
                     routeName = route?.RouteName ?? "—",
                     tripStatus = trip.TripStatus,
                     currentVehicleId = trip.VehicleId,
@@ -528,6 +570,9 @@ namespace FleetWise.Controllers
             if (req.DriverId.HasValue && req.DriverId.Value > 0)
                 trip.DriverId = req.DriverId.Value;
 
+            var conflict = await ValidateAssignmentAsync(trip.Date, trip.ShiftType, trip.VehicleId, trip.DriverId, trip.TripId);
+            if (conflict != null) return BadRequest(conflict);
+
             // Use Update with filter to avoid inserting a duplicate row
             await _supabase.From<Trip>()
                 .Filter("trip_id", Operator.Equals, req.TripId)
@@ -544,7 +589,7 @@ namespace FleetWise.Controllers
         [HttpGet]
         public async Task<IActionResult> GetDriverCount(int? routeId)
         {
-            var today = PhClock.Today.ToString("yyyy-MM-dd");
+            var today = PhClock.OperationalDay.ToString("yyyy-MM-dd");
 
             if (routeId.HasValue)
             {
@@ -586,7 +631,7 @@ namespace FleetWise.Controllers
                 Subject = req.Subject?.Trim(),
                 Body = req.Body.Trim(),
                 Priority = req.Priority ?? "Normal",
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = PhClock.NowForDb
             });
 
             return Ok();
@@ -610,7 +655,7 @@ namespace FleetWise.Controllers
                 Subject = req.Subject?.Trim(),
                 Body = req.Body.Trim(),
                 Priority = req.Priority ?? "Normal",
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = PhClock.NowForDb
             });
 
             return Ok();
@@ -641,7 +686,7 @@ namespace FleetWise.Controllers
                 Subject = req.Subject?.Trim(),
                 Body = req.Body.Trim(),
                 Priority = req.Priority ?? "Normal",
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = PhClock.NowForDb
             });
 
             return Ok();
@@ -662,7 +707,7 @@ namespace FleetWise.Controllers
             if (existing != null)
             {
                 existing.AvailabilityStatus = status;
-                existing.UpdatedAt = DateTime.UtcNow;
+                existing.UpdatedAt = PhClock.Now;
                 await _supabase.From<DriverAvailability>().Upsert(existing);
                 await SyncTripStatuses();
             }
@@ -672,11 +717,81 @@ namespace FleetWise.Controllers
                 {
                     UserId = userId,
                     AvailabilityStatus = status,
-                    UpdatedAt = DateTime.UtcNow
+                    UpdatedAt = PhClock.Now
                 });
             }
 
             return Ok();
+        }
+
+        // Format a trip's shift window on ITS OWN date; an overnight shift (end <= start)
+        // rolls the end onto the next morning and gets a "(+1)" hint so it's never read as
+        // ending the same morning.
+        private static (string Start, string End) FormatShiftWindow(Trip t)
+        {
+            bool overnight = t.ShiftEndTime <= t.ShiftStartTime;
+            var s = t.Date.Date.Add(t.ShiftStartTime);
+            var e = t.Date.Date.Add(t.ShiftEndTime).AddDays(overnight ? 1 : 0);
+            return (s.ToString("h:mm tt"), overnight ? $"{e:h:mm tt} (+1)" : e.ToString("h:mm tt"));
+        }
+
+        // Actual end as a DateTime on the trip's date (overnight rolls +1 day) — used to
+        // tell whether a not-yet-started trip is already past its window (Missed).
+        private static DateTime ShiftEndAt(Trip t) =>
+            t.Date.Date.Add(t.ShiftEndTime).AddDays(t.ShiftEndTime <= t.ShiftStartTime ? 1 : 0);
+
+        // Adjacent shift that immediately follows (back-to-back, same day).
+        private static readonly Dictionary<string, string> NextShift = new()
+        {
+            ["Morning"] = "Afternoon",
+            ["Afternoon"] = "Evening",
+        };
+
+        // Returns an error string if assigning (vehicle, driver) to this date/shift
+        // clashes with existing trips; null if clear. Mirrors the schedule planner rules:
+        //   - no driver/vehicle twice in the same shift+day
+        //   - no driver in back-to-back shifts (incl. Evening -> next-day Morning)
+        private async Task<string> ValidateAssignmentAsync(
+            DateTime date, string shift, string vehicleId, int driverId, string excludeTripId)
+        {
+            var prev = date.AddDays(-1).ToString("yyyy-MM-dd");
+            var next = date.AddDays(1).ToString("yyyy-MM-dd");
+
+            // All trips on the day before/of/after — enough to judge every rule.
+            var resp = await _supabase.From<Trip>()
+                .Filter("date", Operator.GreaterThanOrEqual, prev)
+                .Filter("date", Operator.LessThanOrEqual, next)
+                .Get();
+            var trips = resp.Models.Where(t => t.TripId != excludeTripId).ToList();
+
+            string Fmt(DateTime d) => d.ToString("MMMM d, yyyy");
+
+            // same shift + day: duplicate driver / vehicle
+            foreach (var t in trips.Where(t => t.Date.Date == date.Date && t.ShiftType == shift))
+            {
+                if (t.DriverId == driverId)
+                    return $"This driver is already booked for the {shift} shift on {Fmt(date)}.";
+                if (t.VehicleId == vehicleId)
+                    return $"This bus is already booked for the {shift} shift on {Fmt(date)}.";
+            }
+
+            // back-to-back for the driver (same day adjacency)
+            var driverTrips = trips.Where(t => t.DriverId == driverId).ToList();
+            foreach (var t in driverTrips.Where(t => t.Date.Date == date.Date))
+            {
+                if (NextShift.TryGetValue(shift, out var after) && t.ShiftType == after)
+                    return $"This driver is booked for {shift} and {after} back to back on {Fmt(date)}. Give them a break.";
+                if (NextShift.TryGetValue(t.ShiftType, out var after2) && after2 == shift)
+                    return $"This driver is booked for {t.ShiftType} and {shift} back to back on {Fmt(date)}. Give them a break.";
+            }
+
+            // Evening -> next-day Morning (both directions)
+            if (shift == "Evening" && driverTrips.Any(t => t.Date.Date == date.AddDays(1).Date && t.ShiftType == "Morning"))
+                return $"This driver ends with Evening on {Fmt(date)} and starts Morning the next day. They need rest.";
+            if (shift == "Morning" && driverTrips.Any(t => t.Date.Date == date.AddDays(-1).Date && t.ShiftType == "Evening"))
+                return $"This driver works Evening the day before then Morning on {Fmt(date)}. They need rest.";
+
+            return null;
         }
 
         private async Task SyncTripStatuses(string date = null)

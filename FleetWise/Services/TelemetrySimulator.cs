@@ -77,7 +77,12 @@ public class TelemetrySimulator : BackgroundService
             .Filter("trip_status", Postgrest.Constants.Operator.Equals, "Active")
             .Get();
 
-        var activeTrips = tripsResponse.Models;
+        // Only animate the simulator's own demo trips. A trip with actual_start_time
+        // set was started by a real driver on the phone — leave it alone so we never
+        // overwrite live GPS / passenger counts on top of the real device's rows.
+        var activeTrips = tripsResponse.Models
+            .Where(t => t.ActualStartTime is null)
+            .ToList();
         if (activeTrips.Count == 0)
             return;
 

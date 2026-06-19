@@ -33,7 +33,9 @@ namespace FleetWise.Controllers
             string revenuePeriod = "This Week")
         {
             if (page < 1) page = 1;
-            var anchor = (date ?? PhClock.Today).Date;
+            // Default to the current operating cycle (06:00->05:59 next day), not raw
+            // calendar day — before 6 AM we're still inside yesterday's service day.
+            var anchor = (date ?? PhClock.OperationalDay).Date;
 
             // ── Reference data ─────────────────────────────────────
             var routesResp = await _supabase.From<BusRoute>().Get();
@@ -49,12 +51,7 @@ namespace FleetWise.Controllers
             var tripsResp = await _supabase.From<Trip>().Get();
             var allTrips = tripsResp.Models;
 
-            var telemetryResp = await _supabase.From<TelemetryData>().Get();
-            var latestPassengersByTrip = telemetryResp.Models
-                .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().TotalPassengers);
-
-            int Passengers(Trip t) => latestPassengersByTrip.TryGetValue(t.TripId, out var p) ? p : 0;
+            int Passengers(Trip t) => t.TotalBoarded;
 
             bool MatchesGlobalFilters(Trip t) =>
                 (!routeId.HasValue || routeId.Value == 0 || t.RouteId == routeId.Value) &&
@@ -307,12 +304,18 @@ namespace FleetWise.Controllers
 
             var latestTelemetry = telemetryResponse.Models.FirstOrDefault();
 
+            // Telemetry total_passengers is sparse/often 0 for real driver trips. Fall back to
+            // trips.total_boarded (source of truth) so the modal never shows 0 when the trip
+            // actually boarded passengers. (Same flat-0 bug fixed on the dashboard.)
+            var liveBoarded = latestTelemetry?.TotalPassengers ?? 0;
+            if (liveBoarded <= 0) liveBoarded = tripResponse.TotalBoarded;
+
             var result = new
             {
                 tripId = tripResponse.TripId,
                 shiftType = tripResponse.ShiftType,
-                shiftStart = PhClock.Today.Add(tripResponse.ShiftStartTime).ToString("hh:mm tt"),
-                shiftEnd = PhClock.Today.Add(tripResponse.ShiftEndTime).ToString("hh:mm tt"),
+                shiftStart = ShiftStartAt(tripResponse).ToString("hh:mm tt"),
+                shiftEnd = ShiftEndLabel(tripResponse),
                 routeName = routeResponse?.RouteName ?? "N/A",
                 vehicleType = "Bus", // vehicle_type column dropped — every unit is a bus
                 vehicleId = vehicleResponse?.VehicleId ?? "N/A",
@@ -321,7 +324,7 @@ namespace FleetWise.Controllers
                     ? $"{driverResponse.FirstName} {driverResponse.LastName}"
                     : "N/A",
                 driverId = tripResponse.DriverId,
-                totalPassengers = latestTelemetry?.TotalPassengers ?? 0,
+                totalPassengers = liveBoarded,
                 estimatedRevenue = tripResponse.EstimatedRevenue,
                 tripStatus = tripResponse.TripStatus,
                 date = tripResponse.Date.ToString("MMMM dd, yyyy")
@@ -389,7 +392,9 @@ namespace FleetWise.Controllers
             int? driverId,
             string? vehicleId)
         {
-            var anchor = (date ?? PhClock.Today).Date;
+            // Default to the current operating cycle (06:00->05:59 next day), not raw
+            // calendar day — before 6 AM we're still inside yesterday's service day.
+            var anchor = (date ?? PhClock.OperationalDay).Date;
 
             // ── Reference data ────────────────────────────────────────
             var routesResp = await _supabase.From<BusRoute>().Get();
@@ -404,12 +409,7 @@ namespace FleetWise.Controllers
             var tripsResp = await _supabase.From<Trip>().Get();
             var allTrips = tripsResp.Models;
 
-            var telemetryResp = await _supabase.From<TelemetryData>().Get();
-            var latestPassengersByTrip = telemetryResp.Models
-                .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().TotalPassengers);
-
-            int Passengers(Trip t) => latestPassengersByTrip.TryGetValue(t.TripId, out var p) ? p : 0;
+            int Passengers(Trip t) => t.TotalBoarded;
 
             // ── Apply filters ─────────────────────────────────────────
             var filtered = allTrips
@@ -421,14 +421,22 @@ namespace FleetWise.Controllers
                 .ThenBy(t => t.ShiftStartTime)
                 .ToList();
 
-            object result = reportType switch
+            object groups = reportType switch
             {
                 "Passenger" => BuildPassengerReport(filtered, routeNames, userNames, Passengers),
                 "Revenue" => BuildRevenueReport(filtered, routeNames, userNames, vehiclesById),
                 _ => BuildDailyTripReport(filtered, routeNames, userNames, vehiclesById, Passengers),
             };
 
-            return Json(result);
+            // Grand totals across all filtered trips (rendered as a clear total at the end).
+            var totals = new
+            {
+                trips = filtered.Count,
+                passengers = filtered.Sum(Passengers),
+                revenue = filtered.Sum(t => t.EstimatedRevenue),
+            };
+
+            return Json(new { groups, totals });
         }
 
         private static object BuildDailyTripReport(
@@ -451,14 +459,14 @@ namespace FleetWise.Controllers
                         userNames.TryGetValue(t.DriverId, out var dn) ? dn : "N/A",
                         vehiclesById.TryGetValue(t.VehicleId, out var v) ? v.PlateNumber : t.VehicleId,
                         t.ShiftType ?? "",
-                        $"{PhClock.Today.Add(t.ShiftStartTime):hh:mm tt} – {PhClock.Today.Add(t.ShiftEndTime):hh:mm tt}",
+                        ShiftRange(t),
                         passengers(t).ToString(),
                         $"₱{t.EstimatedRevenue:N2}"
                     }).ToList()
                 })
                 .ToList();
 
-            return new { groups };
+            return groups;
         }
 
         private static object BuildPassengerReport(
@@ -479,13 +487,13 @@ namespace FleetWise.Controllers
                         t.Date.ToString("MMM dd, yyyy"),
                         userNames.TryGetValue(t.DriverId, out var dn) ? dn : "N/A",
                         t.ShiftType ?? "",
-                        $"{PhClock.Today.Add(t.ShiftStartTime):hh:mm tt} – {PhClock.Today.Add(t.ShiftEndTime):hh:mm tt}",
+                        ShiftRange(t),
                         passengers(t).ToString()
                     }).ToList()
                 })
                 .ToList();
 
-            return new { groups };
+            return groups;
         }
 
         private static object BuildRevenueReport(
@@ -512,7 +520,7 @@ namespace FleetWise.Controllers
                 })
                 .ToList();
 
-            return new { groups };
+            return groups;
         }
 
         // ── Download report as PDF (QuestPDF) ────────────────────────
@@ -524,7 +532,9 @@ namespace FleetWise.Controllers
             int? driverId,
             string? vehicleId)
         {
-            var anchor = (date ?? PhClock.Today).Date;
+            // Default to the current operating cycle (06:00->05:59 next day), not raw
+            // calendar day — before 6 AM we're still inside yesterday's service day.
+            var anchor = (date ?? PhClock.OperationalDay).Date;
 
             var routesResp = await _supabase.From<BusRoute>().Get();
             var routeNames = routesResp.Models.ToDictionary(r => r.RouteId, r => r.RouteName);
@@ -537,12 +547,7 @@ namespace FleetWise.Controllers
 
             var tripsResp = await _supabase.From<Trip>().Get();
 
-            var telemetryResp = await _supabase.From<TelemetryData>().Get();
-            var latestPassengersByTrip = telemetryResp.Models
-                .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().TotalPassengers);
-
-            int Passengers(Trip t) => latestPassengersByTrip.TryGetValue(t.TripId, out var p) ? p : 0;
+            int Passengers(Trip t) => t.TotalBoarded;
 
             var filtered = tripsResp.Models
                 .Where(t => t.Date.Date == anchor)
@@ -572,7 +577,7 @@ namespace FleetWise.Controllers
             {
                 "Passenger" => new[] { "Trip ID", "Date", "Driver", "Route", "Shift", "Shift Time", "Passengers" },
                 "Revenue" => new[] { "Trip ID", "Date", "Driver", "Bus ID", "Route", "Shift", "Est. Revenue" },
-                _ => new[] { "Trip ID", "Date", "Driver", "Bus ID", "Route", "Shift", "Start", "End", "Passengers", "Revenue" }
+                _ => new[] { "Trip ID", "Date", "Driver", "Bus ID", "Route", "Shift", "Actual Start", "Actual End", "Passengers", "Revenue" }
             };
 
             Func<Trip, string[]> rowBuilder = reportType switch
@@ -584,7 +589,7 @@ namespace FleetWise.Controllers
                     userNames.TryGetValue(t.DriverId, out var dn) ? dn : "N/A",
                     routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A",
                     t.ShiftType ?? "",
-                    $"{PhClock.Today.Add(t.ShiftStartTime):hh:mm tt} – {PhClock.Today.Add(t.ShiftEndTime):hh:mm tt}",
+                    ShiftRange(t),
                     Passengers(t).ToString()
                 },
                 "Revenue" => t => new[]
@@ -605,8 +610,8 @@ namespace FleetWise.Controllers
                     vehiclesById.TryGetValue(t.VehicleId, out var v) ? v.PlateNumber : t.VehicleId,
                     routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A",
                     t.ShiftType ?? "",
-                    PhClock.Today.Add(t.ShiftStartTime).ToString("hh:mm tt"),
-                    PhClock.Today.Add(t.ShiftEndTime).ToString("hh:mm tt"),
+                    FmtActual(t.ActualStartTime),
+                    FmtActual(t.ActualEndTime),
                     Passengers(t).ToString(),
                     $"₱{t.EstimatedRevenue:N2}"
                 }
@@ -647,15 +652,17 @@ namespace FleetWise.Controllers
                         {
                             row.RelativeItem().Column(inner =>
                             {
-                                inner.Item().Text("FleetWise")
+                                inner.Item().Text("RouteSync")
                                     .Bold().FontSize(16).FontColor(accentColor);
                                 inner.Item().Text(reportTitle)
                                     .Bold().FontSize(11).FontColor("#2D3748");
                             });
-                            row.ConstantItem(160).AlignRight().Column(inner =>
+                            row.ConstantItem(220).AlignRight().Column(inner =>
                             {
-                                inner.Item().Text(anchor.ToString("MMMM dd, yyyy"))
-                                    .FontSize(9).FontColor("#9AA5B4");
+                                inner.Item().Text("Operational Day")
+                                    .Bold().FontSize(8).FontColor("#9AA5B4").LetterSpacing(0.06f);
+                                inner.Item().Text(OpDayLabel(anchor))
+                                    .Bold().FontSize(9.5f).FontColor("#2D3748");
                                 inner.Item().Text($"Generated: {PhClock.Now:MMM dd, yyyy hh:mm tt}")
                                     .FontSize(8).FontColor("#9AA5B4");
                             });
@@ -724,13 +731,32 @@ namespace FleetWise.Controllers
                                 }
                             });
                         }
+
+                        // ── Clear grand total at the end ──────────────
+                        var totalTrips = filtered.Count;
+                        var totalPax = filtered.Sum(Passengers);
+                        var totalRev = filtered.Sum(t => t.EstimatedRevenue);
+                        string totalsText = reportType switch
+                        {
+                            "Passenger" => $"Total Trips: {totalTrips}        Total Passengers: {totalPax:N0}",
+                            "Revenue" => $"Total Trips: {totalTrips}        Total Revenue: ₱{totalRev:N2}",
+                            _ => $"Total Trips: {totalTrips}        Total Passengers: {totalPax:N0}        Total Revenue: ₱{totalRev:N2}",
+                        };
+                        col.Item().PaddingTop(6).BorderTop(1.5f).BorderColor(accentColor)
+                            .PaddingTop(8).Row(row =>
+                            {
+                                row.RelativeItem().Text("TOTAL")
+                                    .Bold().FontSize(10).FontColor(accentColor).LetterSpacing(0.06f);
+                                row.RelativeItem().AlignRight().Text(totalsText)
+                                    .Bold().FontSize(10).FontColor("#2D3748");
+                            });
                     });
 
                     // ── Footer ────────────────────────────────────────
                     page.Footer().AlignCenter()
                         .Text(text =>
                         {
-                            text.Span("FleetWise  •  ").FontColor("#9AA5B4").FontSize(8);
+                            text.Span("RouteSync  •  ").FontColor("#9AA5B4").FontSize(8);
                             text.Span(reportTitle).FontColor("#9AA5B4").FontSize(8);
                             text.Span("  •  Page ").FontColor("#9AA5B4").FontSize(8);
                             text.CurrentPageNumber().FontColor("#9AA5B4").FontSize(8);
@@ -752,7 +778,9 @@ namespace FleetWise.Controllers
             int? driverId,
             string? vehicleId)
         {
-            var anchor = (date ?? PhClock.Today).Date;
+            // Default to the current operating cycle (06:00->05:59 next day), not raw
+            // calendar day — before 6 AM we're still inside yesterday's service day.
+            var anchor = (date ?? PhClock.OperationalDay).Date;
 
             var routesResp = await _supabase.From<BusRoute>().Get();
             var routeNames = routesResp.Models.ToDictionary(r => r.RouteId, r => r.RouteName);
@@ -765,12 +793,7 @@ namespace FleetWise.Controllers
 
             var tripsResp = await _supabase.From<Trip>().Get();
 
-            var telemetryResp = await _supabase.From<TelemetryData>().Get();
-            var latestPassengersByTrip = telemetryResp.Models
-                .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Timestamp).First().TotalPassengers);
-
-            int Passengers(Trip t) => latestPassengersByTrip.TryGetValue(t.TripId, out var p) ? p : 0;
+            int Passengers(Trip t) => t.TotalBoarded;
 
             var filtered = tripsResp.Models
                 .Where(t => t.Date.Date == anchor)
@@ -789,6 +812,17 @@ namespace FleetWise.Controllers
             var sb = new System.Text.StringBuilder();
             string fileName;
 
+            // Banner: brand + the operational day this report covers, then a blank line.
+            var reportLabel = reportType switch
+            {
+                "Passenger" => "Passenger Report",
+                "Revenue" => "Revenue Report",
+                _ => "Daily Trip Report"
+            };
+            sb.AppendLine("RouteSync - " + reportLabel);
+            sb.AppendLine("Operational Day," + CsvEscape(OpDayLabel(anchor)));
+            sb.AppendLine();
+
             switch (reportType)
             {
                 case "Passenger":
@@ -801,7 +835,7 @@ namespace FleetWise.Controllers
                             CsvEscape(userNames.TryGetValue(t.DriverId, out var dn) ? dn : "N/A"),
                             CsvEscape(routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A"),
                             CsvEscape(t.ShiftType ?? ""),
-                            CsvEscape($"{PhClock.Today.Add(t.ShiftStartTime):hh:mm tt} - {PhClock.Today.Add(t.ShiftEndTime):hh:mm tt}"),
+                            CsvEscape(ShiftRange(t, "-")),
                             Passengers(t).ToString()));
                     break;
 
@@ -821,7 +855,7 @@ namespace FleetWise.Controllers
 
                 default:
                     fileName = $"DailyTripReport_{anchor:yyyy-MM-dd}.csv";
-                    sb.AppendLine("Trip ID,Date,Driver,Bus ID,Route,Shift,Shift Time,Start Trip,End Trip,Passengers,Revenue");
+                    sb.AppendLine("Trip ID,Date,Driver,Bus ID,Route,Shift,Shift Time,Actual Start,Actual End,Passengers,Revenue");
                     foreach (var t in filtered)
                         sb.AppendLine(string.Join(",",
                             CsvEscape(t.TripId),
@@ -830,17 +864,52 @@ namespace FleetWise.Controllers
                             CsvEscape(vehiclesById.TryGetValue(t.VehicleId, out var v) ? v.PlateNumber : t.VehicleId),
                             CsvEscape(routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A"),
                             CsvEscape(t.ShiftType ?? ""),
-                            CsvEscape($"{PhClock.Today.Add(t.ShiftStartTime):hh:mm tt} - {PhClock.Today.Add(t.ShiftEndTime):hh:mm tt}"),
-                            CsvEscape(PhClock.Today.Add(t.ShiftStartTime).ToString("hh:mm tt")),
-                            CsvEscape(PhClock.Today.Add(t.ShiftEndTime).ToString("hh:mm tt")),
+                            CsvEscape(ShiftRange(t, "-")),
+                            CsvEscape(FmtActual(t.ActualStartTime)),
+                            CsvEscape(FmtActual(t.ActualEndTime)),
                             Passengers(t).ToString(),
                             t.EstimatedRevenue.ToString("F2")));
                     break;
             }
 
+            // ── Clear grand total at the end ──────────────────────────
+            sb.AppendLine();
+            sb.AppendLine("TOTAL");
+            sb.AppendLine($"Total Trips,{filtered.Count}");
+            if (reportType != "Revenue")
+                sb.AppendLine($"Total Passengers,{filtered.Sum(Passengers)}");
+            if (reportType != "Passenger")
+                sb.AppendLine($"Total Revenue,{filtered.Sum(t => t.EstimatedRevenue):F2}");
+
             var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
             return File(bytes, "text/csv", fileName);
         }
+
+        // ── Shift-time helpers ───────────────────────────────────────
+        // Trips are dated their START day. A shift whose end <= start is overnight and
+        // actually ends the NEXT calendar day, so build the times off the trip's real date
+        // (not PhClock.Today) and roll the end +1 day when overnight.
+        private static bool IsOvernight(Trip t) => t.ShiftEndTime <= t.ShiftStartTime;
+        private static DateTime ShiftStartAt(Trip t) => t.Date.Date + t.ShiftStartTime;
+        private static DateTime ShiftEndAt(Trip t) => t.Date.Date + t.ShiftEndTime
+            + (IsOvernight(t) ? TimeSpan.FromDays(1) : TimeSpan.Zero);
+
+        // Plain clock end time, e.g. "06:00 AM" — no date/"+1" suffix (the operational-day
+        // header at the top of the report already makes the service window clear).
+        private static string ShiftEndLabel(Trip t) => ShiftEndAt(t).ToString("hh:mm tt");
+
+        // Full window: "10:00 PM – 06:00 AM".
+        private static string ShiftRange(Trip t, string dash = "–") =>
+            $"{ShiftStartAt(t):hh:mm tt} {dash} {ShiftEndLabel(t)}";
+
+        // Actual logged start/end. Stored timestamptz comes back LOCAL-kind (+8h shifted),
+        // so normalize to UTC to recover the true PH wall-clock digits. "—" when not logged.
+        private static string FmtActual(DateTime? dt) =>
+            dt.HasValue ? dt.Value.ToUniversalTime().ToString("hh:mm tt") : "—";
+
+        // Operational-day banner: "June 18, 2026  •  6:00 AM – June 19, 5:59 AM".
+        private static string OpDayLabel(DateTime anchor) =>
+            $"{anchor:MMMM d, yyyy}  •  6:00 AM – {anchor.AddDays(1):MMMM d}, 5:59 AM";
 
         // ── Internal model for report groups ─────────────────────────
         private class ReportGroup
