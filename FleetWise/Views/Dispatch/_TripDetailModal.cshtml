@@ -287,6 +287,15 @@
             background: #9AA5B4;
         }
 
+    .tdm-badge--missed {
+        background: #FDE8E8;
+        color: #B42318;
+    }
+
+        .tdm-badge--missed::before {
+            background: #B42318;
+        }
+
     .tdm-badge--passed {
         background: #E8F8EE;
         color: #27AE60;
@@ -566,6 +575,7 @@
             'Assignment Issue': ['tdm-badge--issue',      'Assignment Issue'],
             'Not Yet Started':  ['tdm-badge--not-started','Not Yet Started'],
             'Pending':          ['tdm-badge--pending',    'Pending'],
+            'Missed':           ['tdm-badge--missed',     'Missed'],
             'Completed':        ['tdm-badge--completed',  'Completed'],
         };
         const [cls, label] = map[status] ?? ['tdm-badge--completed', status];
