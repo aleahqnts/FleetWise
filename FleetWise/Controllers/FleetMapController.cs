@@ -167,7 +167,10 @@ namespace FleetWise.Controllers
             var latestByTrip = new Dictionary<string, TelemetryData>();
             if (activeTripIds.Count > 0)
             {
-                var recentCutoff = PhClock.Now.AddMinutes(-RecentTelemetryMinutes);
+                // Cutoff MUST be UTC: stored timestamps are true UTC instants and PostgREST
+                // reads a naive filter string as UTC. PhClock.Now (PH wall-clock digits)
+                // would land 8h ahead and exclude every row.
+                var recentCutoff = DateTime.UtcNow.AddMinutes(-RecentTelemetryMinutes);
                 var telemetryResponse = await _supabase
                     .From<TelemetryData>()
                     .Filter("trip_id", Postgrest.Constants.Operator.In, activeTripIds.Cast<object>().ToList())
