@@ -91,6 +91,11 @@ namespace FleetWise.Controllers
                 // -> stale green on a missed trip). A submitted checklist that isn't "Passed"
                 // is a flag, and it's reported independently of the operational dot.
                 var cl = checklistDict.TryGetValue(trip.TripId, out var c0) ? c0 : null;
+                // After a bus reassignment the trip's old checklist belongs to a DIFFERENT bus
+                // — it doesn't describe the bus now on this trip, so ignore it (the new bus
+                // needs its own inspection).
+                if (cl != null && !string.Equals(cl.VehicleId, trip.VehicleId, StringComparison.OrdinalIgnoreCase))
+                    cl = null;
                 bool flagged = (cl != null && !string.Equals(cl.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase))
                                || flaggedVehicleIds.Contains(trip.VehicleId);
 
@@ -261,7 +266,12 @@ namespace FleetWise.Controllers
             var driver = driverTask.Result.Models.FirstOrDefault();
             var route = routeTask.Result.Models.FirstOrDefault();
             var availability = availabilityTask.Result.Models.FirstOrDefault();
-            var checklist = checklistTask.Result.Models.FirstOrDefault();
+            // Only the inspection of the bus CURRENTLY on this trip — after a reassignment an
+            // old checklist belongs to a different bus and must not describe the new one.
+            var checklist = checklistTask.Result.Models
+                .Where(c => string.Equals(c.VehicleId, trip.VehicleId, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(c => c.SubmittedAt)
+                .FirstOrDefault();
 
             // Resolve display statuses
             string vehicleStatus, driverStatus, resolvedTripStatus;
