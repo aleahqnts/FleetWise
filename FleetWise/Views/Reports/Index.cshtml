@@ -115,13 +115,14 @@
                     <th>Bus ID</th>
                     <th>Route</th>
                     <th>Shift</th>
+                    <th>Status</th>
                     <th>Passengers</th>
                     <th>Revenue</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="tripsTableBody">
-                <tr><td colspan="8" style="text-align:center; padding:20px; color:#9AA5B4;">Loading…</td></tr>
+                <tr><td colspan="9" style="text-align:center; padding:20px; color:#9AA5B4;">Loading…</td></tr>
             </tbody>
         </table>
     </div>
@@ -518,6 +519,18 @@
     return 'rp-shift--morning';
     }
 
+    // Derived trip status pill (Completed / Active / Missed / Not Yet Started).
+    function statusBadge(status) {
+    const map = {
+    'Completed':       ['#1E7E34', '#E6F4EA'],
+    'Active':          ['#1D6FB8', '#E3F0FB'],
+    'Missed':          ['#B42318', '#FDECEC'],
+    'Not Yet Started': ['#8A6D1B', '#FBF3DA']
+    };
+    const [fg, bg] = map[status] || ['#6B7280', '#F1F2F4'];
+    return `<span style="color:${fg};background:${bg};padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;">${status || '—'}</span>`;
+    }
+
     function deltaArrow(value) {
     return value >= 0 ? '&#x25B4;' : '&#x25BE;';
     }
@@ -666,7 +679,7 @@
     tbody.innerHTML = '';
 
     if (!table.rows || table.rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px; color:#9AA5B4;">No trips found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px; color:#9AA5B4;">No trips found.</td></tr>';
     } else {
     table.rows.forEach(row => {
     const tr = document.createElement('tr');
@@ -676,6 +689,7 @@
     <td>${row.vehicleId}<br /><span class="rp-plate">${row.plateNumber}</span></td>
     <td>${row.routeName}</td>
     <td><span class="rp-shift ${getShiftClass(row.shiftType)}">${row.shiftType || ''}</span></td>
+    <td>${statusBadge(row.status)}</td>
     <td>${formatNumber(row.passengers)}</td>
     <td>${formatCurrency(row.revenue)}</td>
     <td><button class="rp-btn-view" data-trip-id="${row.tripId}">View</button></td>
@@ -1500,6 +1514,7 @@
     color: var(--rp-text);
     font-family: 'Segoe UI', sans-serif;
     line-height: 1.1;
+    text-align: center;
     }
 
     .rp-stat-sub {
@@ -1507,12 +1522,14 @@
     color: var(--rp-muted);
     font-family: 'Segoe UI', sans-serif;
     margin-top: 4px;
+    text-align: center;
     }
 
     .rp-stat-delta {
     font-size: 0.78rem;
     font-family: 'Segoe UI', sans-serif;
     margin-top: 5px;
+    text-align: center;
     }
 
     .rp-delta--up {
