@@ -3,17 +3,17 @@
 @{
     var webPermissions = new (string Key, string Label)[]
     {
-        ("Dashboard", "Dashboard"),
-        ("FleetMap", "Fleet Map"),
-        ("Vehicles", "Vehicles"),
-        ("Dispatch", "Dispatch"),
-        ("Analytics", "Analytics"),
-        ("Reports", "Reports"),
-        ("Users", "Users"),
+        ("dashboard", "Dashboard"),
+        ("routes", "Routes"),
+        ("vehicles", "Vehicles"),
+        ("reports", "Reports"),
+        ("users", "Users"),
     };
     var mobilePermissions = new (string Key, string Label)[]
     {
-        ("FullAccess", "Full Access"),
+        ("tracking", "Tracking"),
+        ("messages", "Messages"),
+        ("checklist", "Checklist"),
     };
 }
 
@@ -38,7 +38,6 @@
                             </button>
                         }
                     </div>
-                    <button type="button" class="us-role-item us-role-item--add @(Model.RoleId == null ? "us-role-item--active" : "")" data-role-id="">+ Add Role</button>
                 </div>
                 <div class="us-roles-form">
                     <form id="roleForm" asp-action="UpdateRole" asp-controller="Users" method="post">
