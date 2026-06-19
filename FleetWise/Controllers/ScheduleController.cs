@@ -88,17 +88,37 @@ namespace FleetWise.Controllers
 
             var cells = req.Cells ?? new();
 
-            // ── Conflict validation ──────────────────────────────────
-            var conflict = ValidateConflicts(cells);
-            if (conflict != null) return BadRequest(conflict);
-
-            // Existing trips in the range
+            // Existing trips in the range (also needed to validate against locked trips the
+            // grid may not resend).
             var existingResp = await _supabase.From<Trip>()
                 .Filter("date", Operator.GreaterThanOrEqual, weekStart.ToString("yyyy-MM-dd"))
                 .Filter("date", Operator.LessThanOrEqual, weekEnd.ToString("yyyy-MM-dd"))
                 .Get();
             var existing = existingResp.Models;
             var existingById = existing.ToDictionary(t => t.TripId);
+
+            // ── Conflict validation across the EFFECTIVE schedule ─────
+            // Submitted cells PLUS any existing locked (Active/Completed) trip the grid didn't
+            // resend — those still occupy that driver/vehicle/shift, so a new cell colliding
+            // with them is a double-booking and must be rejected (the bug: a completed
+            // Afternoon let an Evening get booked for the same driver back-to-back).
+            var submittedIds = cells.Where(c => !string.IsNullOrEmpty(c.TripId)).Select(c => c.TripId).ToHashSet();
+            var effective = new List<ScheduleCellInput>(cells);
+            effective.AddRange(existing
+                .Where(t => !submittedIds.Contains(t.TripId)
+                         && (t.TripStatus == "Active" || t.TripStatus == "Completed"))
+                .Select(t => new ScheduleCellInput
+                {
+                    TripId = t.TripId,
+                    VehicleId = t.VehicleId,
+                    DriverId = t.DriverId,
+                    Shift = t.ShiftType,
+                    RouteId = t.RouteId,
+                    Date = t.Date.ToString("yyyy-MM-dd"),
+                }));
+
+            var conflict = ValidateConflicts(effective);
+            if (conflict != null) return BadRequest(conflict);
 
             // Trip ids that survive this save (existing rows kept/updated).
             var keptIds = new HashSet<string>();
