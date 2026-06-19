@@ -104,25 +104,26 @@ DELETE FROM trips WHERE trip_status='Active' AND actual_start_time IS NULL;
 - Then reset affected vehicles' `vehicle_status` to a parked state if any stuck "On Trip".
 - Note: this trims the dashboard "Passengers Boarded by Hour" only for the deleted sim rows; real phone history stays.
 
-### P2 — Prove the read path (table -> map, no phone)
-- Manually insert 2-3 `telemetry_data` rows for one real test trip (SQL or REST).
-- Confirm a pin appears + moves. Isolates "map reads table" from "phone writes table".
+### P2 — Prove the read path (table -> map, no phone)  ✅ DONE
+- Validated live during the incident: sim writes telemetry every tick, map renders it. Also caught + fixed a UTC bug (below).
 
 ### P3 — Real phone test
-- Dispatch: assign a trip to driver acct + a vehicle on a route, today.
-- App: pass checklist -> Start Trip -> walk / ride motorcycle. Watch the pin.
-- **Viewport fix (far from BGC).** Map auto-fits to BGC route waypoints (`fleetmap.js:22`) -> a far pin renders off-screen. Pick:
-  - (a) add **"Fit to buses"** button / auto-fit when live buses exist — best, permanent;
-  - (b) temp test route with waypoints near tester's location;
-  - (c) manual pan/zoom out for a quick check.
-- Verify passenger-counter key active (`trip_count_{tripId}` in SecureStorage). No key -> `LocationTrackingService` stops logging.
+- **Viewport fix ✅ DONE** — "Fit to buses" control (top-left) recenters on live moving buses; far-from-BGC pin now reachable (`fleetmap.js fitToBuses`).
+- **Phone test (manual, pending):**
+  1. Rebuild + deploy RouteSync to Android; grant Precise + Allow-all-the-time location.
+  2. Dispatch: assign a trip to your driver acct + a deployable vehicle on a route, dated today.
+  3. App: log in as that driver -> pass checklist -> Start Trip -> walk / ride. Click "Fit to buses".
+  4. Writes gate on move >=25m / pax change / 60s heartbeat — move a bit before expecting a new point.
+- Keep passenger-counter active (`trip_count_{tripId}` in SecureStorage). No key -> `LocationTrackingService` stops logging.
 
 ### P4 — Harden
-- `telemetry_data` growth: retention/cleanup + confirm `timestamp` index (`Positions` pulls newest-first, plain `.Get()` caps 1000 rows).
-- Security: `telemetry_data` is anon-writable (same publishable-key class of issue as `users`; `users` is the higher priority — see `plan.md` §5).
-- Confirm the sim toggle is admin-only (not reachable by drivers / anon).
+- **Retention ✅** — `TelemetryRetentionService` (PR #26, merged) prunes daily; window via `Telemetry:RetentionMinutes` (default 1440).
+- **Timezone ✅** — bounded read + retention cutoffs use `DateTime.UtcNow` (PostgREST reads naive filter strings as UTC; `PhClock.Now` landed 8h ahead -> empty map / over-delete). Fixed `80b713c`.
+- Pending: confirm/add a `timestamp` index on `telemetry_data`.
+- Pending: `telemetry_data` is anon-writable (same publishable-key class as `users`; `users` higher priority — `plan.md` §5).
+- Pending: confirm the sim toggle is admin-only (not reachable by drivers / anon).
 
-Recommended order: **P0 -> P1 -> P2 -> P3**, P4 later. Each phase independently testable.
+Status: **P0 ✅  P1 ✅ (incident cleanup)  P2 ✅  P3 viewport ✅ / phone test pending  P4 retention+tz ✅, index/security pending.**
 
 ---
 
