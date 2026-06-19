@@ -59,6 +59,15 @@
 <div class="fm-page">
     <div id="fleetMap" class="fm-map"></div>
 
+    <button id="fmFitBtn" class="fm-fit-btn" type="button" title="Center the map on the live (moving) buses">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
+            <circle cx="12" cy="12" r="3" />
+        </svg>
+        Fit to buses
+    </button>
+
     <div id="fmConnBadge" class="fm-conn-badge">
         <span class="fm-conn-badge__dot"></span>Connection lost — retrying…
     </div>
@@ -640,6 +649,34 @@
 
     .fm-stop-tooltip.leaflet-tooltip::before {
         display: none;
+    }
+
+    /* ── Fit-to-buses control (top-left) ── */
+    .fm-fit-btn {
+        position: absolute;
+        left: 14px;
+        top: 14px;
+        z-index: 1000;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        background: var(--fm-white);
+        color: var(--fm-text);
+        border: 1px solid var(--fm-border);
+        border-radius: 8px;
+        padding: 8px 13px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        font-family: 'Segoe UI', sans-serif;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+        transition: background .15s, color .15s;
+    }
+
+    .fm-fit-btn:hover {
+        background: var(--fm-teal);
+        color: #fff;
+        border-color: var(--fm-teal);
     }
 
     /* ── Hidden demo-simulator toggle (bottom-right, faint until hover) ── */
