@@ -15,6 +15,13 @@ namespace FleetWise.Controllers
         private readonly Supabase.Client _supabase;
         private readonly FareCalculator _fareCalculator;
 
+        // The live map only needs each active trip's newest reading. A position older
+        // than this is treated as stale (bus offline / dead zone) and the bus drops to
+        // parked, so the telemetry read can be bounded to this recent window instead of
+        // scanning the whole table. Generous enough to ride out the phone's 60s heartbeat
+        // and brief gaps without flicker.
+        private const int RecentTelemetryMinutes = 30;
+
         // Per-route terminals where non-running buses are shown parked (the JS spreads
         // each terminal's buses into a neat grid so the pills don't overlap). Routes
         // without an entry fall back to the first terminal.
@@ -141,23 +148,31 @@ namespace FleetWise.Controllers
 
             var activeTripIds = activeTrips.Select(t => t.TripId).ToHashSet();
 
-            // Newest-first: Supabase caps a plain .Get() at 1000 rows and returns the
-            // OLDEST ones, so on a table with lots of history the "latest per trip"
-            // below would be permanently stale. Ordering by timestamp descending makes
-            // .Get() return the most recent rows, which is all we need here.
-            var telemetryResponse = await _supabase
-                .From<TelemetryData>()
-                .Order("timestamp", Postgrest.Constants.Ordering.Descending)
-                .Get();
             var vehiclesResponse = await _supabase.From<Vehicle>().Get();
             var routesResponse = await _supabase.From<BusRoute>().Get();
             var usersResponse = await _supabase.From<UserModel>().Get();
 
-            // Latest telemetry row per active trip.
-            var latestByTrip = telemetryResponse.Models
-                .Where(t => activeTripIds.Contains(t.TripId))
-                .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.Timestamp).First());
+            // Bounded telemetry read: only rows belonging to the currently-active trips,
+            // and only from the recent window — instead of fetching the entire table every
+            // poll and filtering in memory. Newest-first so the latest-per-trip grouping
+            // below sees the most recent reading first. Skipped entirely when nothing's
+            // active (no IN () with an empty set).
+            var latestByTrip = new Dictionary<string, TelemetryData>();
+            if (activeTripIds.Count > 0)
+            {
+                var recentCutoff = PhClock.Now.AddMinutes(-RecentTelemetryMinutes);
+                var telemetryResponse = await _supabase
+                    .From<TelemetryData>()
+                    .Filter("trip_id", Postgrest.Constants.Operator.In, activeTripIds.Cast<object>().ToList())
+                    .Filter("timestamp", Postgrest.Constants.Operator.GreaterThanOrEqual,
+                            recentCutoff.ToString("yyyy-MM-dd HH:mm:ss"))
+                    .Order("timestamp", Postgrest.Constants.Ordering.Descending)
+                    .Get();
+
+                latestByTrip = telemetryResponse.Models
+                    .GroupBy(t => t.TripId)
+                    .ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.Timestamp).First());
+            }
 
             var vehiclesById = vehiclesResponse.Models
                 .ToDictionary(v => v.VehicleId, v => v);
