@@ -38,10 +38,11 @@
                 <div class="fm-select-wrap">
                     <select id="fmStatusFilter" class="fm-select">
                         <option value="">All</option>
-                        <option value="Active">Active (On Trip)</option>
+                        <option value="On Trip">On Trip</option>
                         <option value="Ready to Deploy">Ready to Deploy</option>
                         <option value="Pending">Pending</option>
                         <option value="Flagged">Flagged</option>
+                        <option value="Out of Service">Out of Service</option>
                     </select>
                     <span class="fm-select-arrow">
                         <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none"
@@ -57,6 +58,15 @@
 
 <div class="fm-page">
     <div id="fleetMap" class="fm-map"></div>
+
+    <button id="fmFitBtn" class="fm-fit-btn" type="button" title="Center the map on the live (moving) buses">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
+            <circle cx="12" cy="12" r="3" />
+        </svg>
+        Fit to buses
+    </button>
 
     <div id="fmConnBadge" class="fm-conn-badge">
         <span class="fm-conn-badge__dot"></span>Connection lost — retrying…
@@ -121,6 +131,12 @@
     </aside>
 
     <div class="fm-legend" id="fmLegend"></div>
+
+    <!-- Hidden demo-simulator switch. Subtle by design — operators only. OFF deletes
+         the data the simulator created (real trips/telemetry are untouched). -->
+    <button id="fmSimToggle" class="fm-sim-toggle" type="button"
+            title="Demo telemetry simulator (creates fake moving buses)">SIM ·</button>
+    @Html.AntiForgeryToken()
 </div>
 
 <style>
@@ -634,6 +650,66 @@
     .fm-stop-tooltip.leaflet-tooltip::before {
         display: none;
     }
+
+    /* ── Fit-to-buses control (top-left) ── */
+    .fm-fit-btn {
+        position: absolute;
+        left: 14px;
+        top: 14px;
+        z-index: 1000;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        background: var(--fm-white);
+        color: var(--fm-text);
+        border: 1px solid var(--fm-border);
+        border-radius: 8px;
+        padding: 8px 13px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        font-family: 'Segoe UI', sans-serif;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+        transition: background .15s, color .15s;
+    }
+
+    .fm-fit-btn:hover {
+        background: var(--fm-teal);
+        color: #fff;
+        border-color: var(--fm-teal);
+    }
+
+    /* ── Hidden demo-simulator toggle (bottom-right, faint until hover) ── */
+    .fm-sim-toggle {
+        position: absolute;
+        right: 14px;
+        bottom: 14px;
+        z-index: 1000;
+        background: var(--fm-white);
+        color: #9AA5B4;
+        border: 1px solid var(--fm-border);
+        border-radius: 8px;
+        padding: 5px 10px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        font-family: 'Segoe UI', sans-serif;
+        cursor: pointer;
+        opacity: 0.25;
+        transition: opacity .15s, color .15s, background .15s;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+    }
+
+    .fm-sim-toggle:hover {
+        opacity: 1;
+    }
+
+    .fm-sim-toggle.fm-sim-toggle--on {
+        opacity: 1;
+        background: #34C759;
+        color: #fff;
+        border-color: #34C759;
+    }
 </style>
 
 @section Scripts {
@@ -644,4 +720,48 @@
             : "null");
     </script>
     <script src="~/js/fleetmap.js" asp-append-version="true"></script>
+    <script>
+        // ── Hidden demo-simulator toggle ──────────────────────────
+        (function () {
+            var btn = document.getElementById('fmSimToggle');
+            if (!btn) return;
+            var tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
+            var token = tokenEl ? tokenEl.value : '';
+            var busy = false;
+
+            function render(on) {
+                btn.classList.toggle('fm-sim-toggle--on', !!on);
+                btn.textContent = on ? 'SIM ● ON' : 'SIM ·';
+                btn.dataset.on = on ? '1' : '0';
+            }
+
+            function post(url) {
+                return fetch(url, {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': token }
+                }).then(function (r) { return r.json(); });
+            }
+
+            // Initial state.
+            fetch('/Simulator/Status').then(function (r) { return r.json(); })
+                .then(function (d) { render(d.enabled); })
+                .catch(function () { render(false); });
+
+            btn.addEventListener('click', function () {
+                if (busy) return;
+                var on = btn.dataset.on === '1';
+                if (on && !confirm('Stop the demo simulator and DELETE all simulated trips + their telemetry? Real trips are kept.'))
+                    return;
+                busy = true;
+                btn.style.pointerEvents = 'none';
+                post(on ? '/Simulator/Stop' : '/Simulator/Start')
+                    .then(function (d) {
+                        render(d.enabled);
+                        if (d.removed != null) console.info('Simulator removed ' + d.removed + ' simulated trips.');
+                    })
+                    .catch(function () { alert('Simulator toggle failed.'); })
+                    .finally(function () { busy = false; btn.style.pointerEvents = ''; });
+            });
+        })();
+    </script>
 }

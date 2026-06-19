@@ -72,10 +72,11 @@
     }
 
     function statusColor(status) {
-        if (status === 'Active') return '#34C759'; // green — moving / on trip
+        if (status === 'On Trip') return '#34C759'; // green — moving / on trip
         if (status === 'Flagged') return '#DC2626'; // red
+        if (status === 'Out of Service') return '#6B7280'; // slate — grounded
         if (status === 'Offline') return '#9CA3AF'; // grey
-        return '#F59E0B'; // amber — Ready to Deploy / Pending / Idle / other parked
+        return '#F59E0B'; // amber — Ready to Deploy / Pending / other parked
     }
 
     // Server timestamps are UTC but serialized without a 'Z', so append one before parsing.
@@ -195,7 +196,7 @@
                 // buses out in a stable grid (sorted by id so slots don't reshuffle).
                 var parkedGroups = {};
                 buses.forEach(function (b) {
-                    if (b.status === 'Active') return;
+                    if (b.status === 'On Trip') return;
                     var key = b.terminalName || (b.lat + ',' + b.lng);
                     if (!parkedGroups[key]) parkedGroups[key] = { name: b.terminalName, lat: b.lat, lng: b.lng, list: [] };
                     parkedGroups[key].list.push(b);
@@ -314,6 +315,26 @@
         loadStops(routeId);
         fetchPositions();
     }
+
+    // Recenter the map on the live (moving) buses — the fix for testing far from the BGC
+    // routes, where a real GPS pin sits outside the route-fitted view. Prefers moving buses
+    // (a phone on a trip); falls back to every visible bus marker if none are moving yet.
+    function fitToBuses() {
+        var moving = [], all = [];
+        Object.keys(busMarkers).forEach(function (id) {
+            var m = busMarkers[id];
+            if (!m || !busLayer.hasLayer(m)) return;        // skip hidden (search-filtered)
+            all.push(m.getLatLng());
+            if (m._bus && (m._bus.status === 'On Trip' || m._bus.status === 'Active'))
+                moving.push(m.getLatLng());
+        });
+        var pts = moving.length ? moving : all;
+        if (!pts.length) return;
+        if (pts.length === 1) map.setView(pts[0], 16);
+        else map.fitBounds(L.latLngBounds(pts), { padding: [80, 80], maxZoom: 16 });
+    }
+    var fitBtn = document.getElementById('fmFitBtn');
+    if (fitBtn) fitBtn.addEventListener('click', fitToBuses);
 
     routeSelect.addEventListener('change', refetch);
     statusSelect.addEventListener('change', refetch);

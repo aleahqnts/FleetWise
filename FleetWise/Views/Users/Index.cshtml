@@ -118,8 +118,8 @@
         });
 
         // Manage Roles — switch the right pane based on the selected role
-        const WEB_PERMISSION_KEYS = ['Dashboard', 'FleetMap', 'Vehicles', 'Dispatch', 'Analytics', 'Reports', 'Users'];
-        const MOBILE_PERMISSION_KEYS = ['FullAccess'];
+        const WEB_PERMISSION_KEYS = ['dashboard', 'routes', 'vehicles', 'reports', 'users'];
+        const MOBILE_PERMISSION_KEYS = ['tracking', 'messages', 'checklist'];
 
         function applyRolePermissions(webPerms, mobilePerms) {
             WEB_PERMISSION_KEYS.forEach(k => document.getElementById('perm_web_' + k).checked = !!webPerms[k]);

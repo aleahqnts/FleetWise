@@ -45,7 +45,7 @@
         <div class="db-stat-value">@Model.ActiveTrips</div>
     </div>
 
-    <div class="db-stat-card">
+    <a href="/Vehicles?status=Flagged" class="db-stat-card db-stat-card--click" style="text-decoration:none;color:inherit;" title="View flagged vehicles">
         <div class="db-stat-header">
             <span class="db-stat-icon db-stat-icon--red">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none"
@@ -57,7 +57,7 @@
             <span class="db-stat-label">Flagged Vehicles</span>
         </div>
         <div class="db-stat-value">@Model.FlaggedVehicles</div>
-    </div>
+    </a>
 
     <div class="db-stat-card db-stat-card--click" onclick="dbToggleBreakdown()" title="Click for per-trip breakdown">
         <div class="db-stat-header">
@@ -106,17 +106,21 @@
 <!-- TOTAL PASSENGERS MODAL (opened by the card) -->
 <div class="db-modal-overlay" id="dbBreakdown" style="display:none;" onclick="if(event.target===this)dbCloseModal()">
     <div class="db-modal">
+        @{
+            // Only trips that actually boarded — not-yet-started (0) rows add no signal.
+            var boardedRows = Model.ActiveTripBreakdown.Where(r => r.Passengers > 0).ToList();
+        }
         <div class="db-modal-head">
             <div>
                 <div class="db-modal-title">Total Boarded Breakdown</div>
-                <div class="db-modal-sub">All trips this service day (@Model.ActiveTripBreakdown.Count) &bull; @Model.TotalPassengers boarded</div>
+                <div class="db-modal-sub">Trips with boarding (@boardedRows.Count) &bull; @Model.TotalPassengers boarded</div>
             </div>
             <button class="db-modal-close" onclick="dbCloseModal()" aria-label="Close">&times;</button>
         </div>
         <div class="db-modal-body">
-            @if (Model.ActiveTripBreakdown.Count == 0)
+            @if (boardedRows.Count == 0)
             {
-                <div class="db-breakdown-empty">No trips this service day.</div>
+                <div class="db-breakdown-empty">No boarded trips this service day yet.</div>
             }
             else
             {
@@ -125,7 +129,7 @@
                         <tr><th>Trip</th><th>Route</th><th>Vehicle</th><th>Shift</th><th>Status</th><th class="db-num">Boarded</th></tr>
                     </thead>
                     <tbody>
-                        @foreach (var row in Model.ActiveTripBreakdown)
+                        @foreach (var row in boardedRows)
                         {
                             <tr>
                                 <td>@row.TripId</td>
@@ -465,33 +469,34 @@
         .db-date-badge {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        padding: 8px 14px;
+        gap: 8px;
+        padding: 8px 16px;
         border-radius: 30px;
-        background: var(--db-teal-light);
-        color: var(--db-teal);
-        font-size: .82rem;
+        background: #EAF7F5;
+        color: #2e7d72;
+        font-size: .86rem;
         font-weight: 700;
         font-family: 'Segoe UI', sans-serif;
         border: 1px solid #CDE9E4;
+        white-space: nowrap;
         }
 
         .db-btn-refresh {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        padding: 8px 16px;
+        padding: 9px 16px;
         border-radius: 8px;
         background: #fff;
-        color: var(--db-teal);
+        color: #2e7d72;
         border: 1px solid #CDE9E4;
         font-weight: 700;
-        font-size: .84rem;
+        font-size: .86rem;
         font-family: 'Segoe UI', sans-serif;
         cursor: pointer;
         }
 
-        .db-btn-refresh:hover { background: var(--db-teal-light); }
+        .db-btn-refresh:hover { background: #EAF7F5; }
         .db-btn-refresh.spinning .db-refresh-ico { display:inline-block; animation: dbSpin .7s linear infinite; }
         .db-refresh-ico { font-size: 1rem; line-height: 1; }
         @@keyframes dbSpin { to { transform: rotate(360deg); } }
@@ -641,12 +646,14 @@
         color: var(--db-text);
         font-family: 'Segoe UI', sans-serif;
         line-height: 1.1;
+        text-align: center;
         }
 
         .db-stat-delta {
         font-size: 0.78rem;
         font-family: 'Segoe UI', sans-serif;
         margin-top: 6px;
+        text-align: center;
         }
 
         .db-stat-delta--up {

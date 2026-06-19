@@ -22,6 +22,10 @@ public class Vehicle : BaseModel
     [Column("vehicle_status")]
     public string VehicleStatus { get; set; }
 
+    // Admin grounded the bus -> driver must not start a trip on it.
+    [Column("out_of_service")]
+    public bool OutOfService { get; set; }
+
     [Column("last_maintenance_date")]
     public DateTime? LastMaintenanceDate { get; set; }
 

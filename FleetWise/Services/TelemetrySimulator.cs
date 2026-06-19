@@ -18,11 +18,22 @@ public class TelemetrySimulator : BackgroundService
     private const double MinSpeedKmh = 20.0;
     private const double MaxSpeedKmh = 40.0;
 
-    // Per-tick passenger drift bounds (clamped to [0, vehicle capacity]).
+    // Passenger drift bounds (clamped to [0, vehicle capacity]). Drift is applied on a
+    // realistic cadence rather than every 5s tick, so cumulative boardings (and therefore
+    // the map's revenue) accrue at a believable pace instead of ballooning over a day.
     private const int MaxPassengerDelta = 3;
+    private static readonly TimeSpan PassengerDriftInterval = TimeSpan.FromSeconds(30);
+
+    // Write throttle — mirrors the phone (LocationTrackingService): a tick only inserts a
+    // telemetry row when the bus moved far enough, the passenger count changed, or the
+    // heartbeat elapsed. Positions still advance every tick in memory; only the DB write
+    // is gated, so the table stops accruing a row every 5s per bus.
+    private const double MinWriteMeters = 25.0;
+    private static readonly TimeSpan WriteHeartbeat = TimeSpan.FromSeconds(60);
 
     private readonly Supabase.Client _supabase;
     private readonly ILogger<TelemetrySimulator> _logger;
+    private readonly SimulatorControl _control;
     private readonly Random _rng = new();
 
     // Route geometry never changes mid-run, so it's cached after the first read.
@@ -34,10 +45,11 @@ public class TelemetrySimulator : BackgroundService
     // A driver to attach to auto-created trips (driver_id is NOT NULL); resolved once.
     private int? _cachedDriverId;
 
-    public TelemetrySimulator(Supabase.Client supabase, ILogger<TelemetrySimulator> logger)
+    public TelemetrySimulator(Supabase.Client supabase, ILogger<TelemetrySimulator> logger, SimulatorControl control)
     {
         _supabase = supabase;
         _logger = logger;
+        _control = control;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -67,21 +79,29 @@ public class TelemetrySimulator : BackgroundService
 
     private async Task TickAsync(CancellationToken ct)
     {
-        // Keep the registry and the map in agreement: a vehicle marked 'On Trip' should
-        // actually be running. Auto-create an Active trip for any On-Trip vehicle that
-        // lacks one, so every On-Trip bus moves.
-        await EnsureActiveTripsForOnTripVehiclesAsync();
+        // OFF by default and toggled at runtime from the Fleet Map. When off, the simulator
+        // produces nothing — no auto-created trips, no telemetry — so real data stands alone.
+        if (!_control.Enabled)
+            return;
+
+        // Close out any demo trip left over from an earlier operational day so boardings
+        // (and the map's revenue) reset each cycle instead of growing forever. Runs before
+        // the spawn below so the fresh trip it creates is dated today.
+        await RollOverStaleDemoTripsAsync();
+
+        // Ensure one tagged demo trip per route so toggling ON always yields moving buses,
+        // independent of any vehicle's stored status.
+        await EnsureDemoTripsAsync();
 
         var tripsResponse = await _supabase
             .From<Trip>()
             .Filter("trip_status", Postgrest.Constants.Operator.Equals, "Active")
             .Get();
 
-        // Only animate the simulator's own demo trips. A trip with actual_start_time
-        // set was started by a real driver on the phone — leave it alone so we never
-        // overwrite live GPS / passenger counts on top of the real device's rows.
+        // Animate ONLY the simulator's own tagged trips. Real driver trips (is_simulated
+        // false) are never touched, so live GPS / passenger counts are never overwritten.
         var activeTrips = tripsResponse.Models
-            .Where(t => t.ActualStartTime is null)
+            .Where(t => t.IsSimulated)
             .ToList();
         if (activeTrips.Count == 0)
             return;
@@ -104,18 +124,27 @@ public class TelemetrySimulator : BackgroundService
 
             var state = AdvanceTrip(trip.TripId, geometry, capacity, trip.TotalBoarded);
 
-            var telemetry = new TelemetryData
+            if (ShouldWrite(state))
             {
-                TripId = trip.TripId,
-                Latitude = (decimal)state.Lat,
-                Longitude = (decimal)state.Lng,
-                TotalPassengers = state.Passengers,
-                Speed = Math.Round((decimal)state.SpeedKmh, 1),
-                Heading = (float)state.Heading,
-                Timestamp = PhClock.Now
-            };
+                var telemetry = new TelemetryData
+                {
+                    TripId = trip.TripId,
+                    Latitude = (decimal)state.Lat,
+                    Longitude = (decimal)state.Lng,
+                    TotalPassengers = state.Passengers,
+                    Speed = Math.Round((decimal)state.SpeedKmh, 1),
+                    Heading = (float)state.Heading,
+                    Timestamp = PhClock.Now
+                };
 
-            await _supabase.From<TelemetryData>().Insert(telemetry);
+                await _supabase.From<TelemetryData>().Insert(telemetry);
+
+                state.LastWriteUtc = DateTime.UtcNow;
+                state.LastWrittenLat = state.Lat;
+                state.LastWrittenLng = state.Lng;
+                state.LastWrittenPassengers = state.Passengers;
+                state.HasWritten = true;
+            }
 
             // Persist the cumulative boardings so the map's revenue (total_boarded × fare)
             // grows and never drops when passengers alight. Column-targeted update — only
@@ -131,18 +160,52 @@ public class TelemetrySimulator : BackgroundService
     }
 
     /// <summary>
-    /// Reconcile vehicle_status with the trips table: every 'On Trip' vehicle that has a
-    /// route but no Active trip gets a fresh Active trip, so the Vehicles registry's On-Trip
-    /// count and the Fleet Map's moving buses always agree. Idempotent — once a trip exists
-    /// the vehicle is skipped on later ticks.
+    /// Demo trips loop forever, so a single trip would keep accruing boardings across days
+    /// and inflate the map's revenue (total_boarded × fare) without bound. At each
+    /// operational-day boundary (06:00), finalize any simulated trip left over from an
+    /// earlier operational day. EnsureDemoTripsAsync then starts a fresh trip dated today,
+    /// so boardings reset to a realistic per-day count. Real driver trips are never touched.
     /// </summary>
-    private async Task EnsureActiveTripsForOnTripVehiclesAsync()
+    private async Task RollOverStaleDemoTripsAsync()
     {
-        var vehicles = (await _supabase.From<Vehicle>().Get()).Models;
-        var onTrip = vehicles
-            .Where(v => string.Equals(v.VehicleStatus?.Trim(), "On Trip", StringComparison.OrdinalIgnoreCase))
+        var opDay = PhClock.OperationalDay.Date;
+
+        var staleTrips = (await _supabase
+            .From<Trip>()
+            .Filter("trip_status", Postgrest.Constants.Operator.Equals, "Active")
+            .Get()).Models
+            .Where(t => t.IsSimulated && t.Date.Date < opDay)
             .ToList();
-        if (onTrip.Count == 0)
+
+        foreach (var trip in staleTrips)
+        {
+            // Finalize under its own (older) date so that day's history keeps its totals;
+            // the route then has no demo trip, so a fresh one is created on the next tick.
+            await _supabase.From<Trip>()
+                .Where(t => t.TripId == trip.TripId)
+                .Set(t => t.TripStatus, "Completed")
+                .Set(t => t.ActualEndTime, PhClock.Now)
+                .Update();
+
+            _states.Remove(trip.TripId); // drop its in-memory animation/boarding state
+            _logger.LogInformation(
+                "Rolled over demo trip {TripId} (dated {Date:yyyy-MM-dd}) at the operational-day boundary.",
+                trip.TripId, trip.Date);
+        }
+    }
+
+    /// <summary>
+    /// Ensure one tagged demo trip exists per route that has geometry, so toggling the
+    /// simulator ON always produces moving buses — independent of any vehicle's stored
+    /// status. Picks a deployable bus on the route (not out of service, not already on an
+    /// Active trip). Idempotent: once a route has its is_simulated trip it is skipped.
+    /// </summary>
+    private async Task EnsureDemoTripsAsync()
+    {
+        var routes = (await _supabase.From<BusRoute>().Get()).Models
+            .Where(r => !string.IsNullOrWhiteSpace(r.WaypointsJson))
+            .ToList();
+        if (routes.Count == 0)
             return;
 
         var activeTrips = (await _supabase
@@ -150,27 +213,35 @@ public class TelemetrySimulator : BackgroundService
             .Filter("trip_status", Postgrest.Constants.Operator.Equals, "Active")
             .Get()).Models;
 
-        var vehiclesWithActiveTrip = activeTrips
+        // Routes that already have a demo bus, and vehicles already committed to any
+        // Active trip (real or demo) — never double-book a bus.
+        var routesWithDemo = activeTrips.Where(t => t.IsSimulated).Select(t => t.RouteId).ToHashSet();
+        var busyVehicleIds = activeTrips
             .Where(t => t.VehicleId != null)
             .Select(t => t.VehicleId)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        // A vehicle needs a route (with geometry) to be animated; skip routeless ones.
-        var missing = onTrip
-            .Where(v => v.RouteId.HasValue && !vehiclesWithActiveTrip.Contains(v.VehicleId))
-            .ToList();
-        if (missing.Count == 0)
-            return;
+        var vehicles = (await _supabase.From<Vehicle>().Get()).Models;
 
         var driverId = await GetAnyDriverIdAsync();
         if (driverId is null)
         {
-            _logger.LogWarning("No driver found to attach auto-created trips; skipping reconcile.");
+            _logger.LogWarning("No driver found to attach demo trips; skipping.");
             return;
         }
 
-        foreach (var v in missing)
+        foreach (var route in routes)
         {
+            if (routesWithDemo.Contains(route.RouteId))
+                continue;
+
+            var v = vehicles.FirstOrDefault(x => x.RouteId == route.RouteId
+                                              && !x.OutOfService
+                                              && !busyVehicleIds.Contains(x.VehicleId));
+            if (v is null)
+                continue; // no free, deployable bus on this route
+            busyVehicleIds.Add(v.VehicleId);
+
             // trip_id is auto-generated by the DB (sequence default) — do NOT supply it.
             var trip = new Trip
             {
@@ -178,15 +249,16 @@ public class TelemetrySimulator : BackgroundService
                 ShiftType = "Morning",
                 ShiftStartTime = new TimeSpan(6, 0, 0),
                 ShiftEndTime = new TimeSpan(14, 0, 0),
-                RouteId = v.RouteId!.Value,
+                RouteId = route.RouteId,
                 VehicleId = v.VehicleId,
                 DriverId = driverId.Value,
                 TripStatus = "Active",
                 EstimatedRevenue = 0,
+                IsSimulated = true, // tag so the OFF switch deletes exactly what we made
             };
 
             await _supabase.From<Trip>().Insert(trip);
-            _logger.LogInformation("Auto-created an Active trip for On-Trip vehicle {VehicleId}.", v.VehicleId);
+            _logger.LogInformation("Created demo trip on route {RouteId} with vehicle {VehicleId}.", route.RouteId, v.VehicleId);
         }
     }
 
@@ -237,18 +309,51 @@ public class TelemetrySimulator : BackgroundService
         state.Lng = lng;
         state.Heading = heading;
 
-        // Drift passengers by a small random delta, clamped to the vehicle's capacity.
-        var delta = _rng.Next(-MaxPassengerDelta, MaxPassengerDelta + 1);
-        var newPassengers = Math.Clamp(state.Passengers + delta, 0, capacity);
+        // Drift passengers only every PassengerDriftInterval — not every 5s tick — so the
+        // bus keeps moving smoothly on the map while boardings accrue at a believable pace.
+        var now = DateTime.UtcNow;
+        if (now - state.LastDriftUtc >= PassengerDriftInterval)
+        {
+            state.LastDriftUtc = now;
 
-        // Count only boardings (positive change) toward the cumulative total.
-        var boarded = newPassengers - state.Passengers;
-        if (boarded > 0)
-            state.TotalBoarded += boarded;
+            // Drift passengers by a small random delta, clamped to the vehicle's capacity.
+            var delta = _rng.Next(-MaxPassengerDelta, MaxPassengerDelta + 1);
+            var newPassengers = Math.Clamp(state.Passengers + delta, 0, capacity);
 
-        state.Passengers = newPassengers;
+            // Count only boardings (positive change) toward the cumulative total.
+            var boarded = newPassengers - state.Passengers;
+            if (boarded > 0)
+                state.TotalBoarded += boarded;
+
+            state.Passengers = newPassengers;
+        }
 
         return state;
+    }
+
+    /// <summary>
+    /// Mirror of the phone's write gate: emit a row only on the first sighting, when the
+    /// passenger count changed (a boarding/alighting, even while stopped), once the
+    /// heartbeat elapses, or once the bus has moved far enough since the last written row.
+    /// </summary>
+    private static bool ShouldWrite(TripState s)
+    {
+        if (!s.HasWritten) return true;                                       // first row for this trip
+        if (s.Passengers != s.LastWrittenPassengers) return true;            // boarding / alighting
+        if (DateTime.UtcNow - s.LastWriteUtc >= WriteHeartbeat) return true; // heartbeat
+        var moved = MetersBetween(s.LastWrittenLat, s.LastWrittenLng, s.Lat, s.Lng);
+        return moved >= MinWriteMeters;                                       // moved enough
+    }
+
+    private static double MetersBetween(double lat1, double lng1, double lat2, double lng2)
+    {
+        const double earthRadius = 6_371_000; // metres
+        var dLat = (lat2 - lat1) * Math.PI / 180.0;
+        var dLng = (lng2 - lng1) * Math.PI / 180.0;
+        var h = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(lat1 * Math.PI / 180.0) * Math.Cos(lat2 * Math.PI / 180.0) *
+                Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+        return earthRadius * 2 * Math.Atan2(Math.Sqrt(h), Math.Sqrt(1 - h));
     }
 
     private async Task<RouteGeometry?> GetGeometryAsync(int routeId)
@@ -278,6 +383,16 @@ public class TelemetrySimulator : BackgroundService
         public double SpeedKmh { get; set; }
         public int Passengers { get; set; }
         public int TotalBoarded { get; set; }
+
+        // When passengers last drifted — gates boarding accrual to PassengerDriftInterval.
+        public DateTime LastDriftUtc { get; set; } = DateTime.MinValue;
+
+        // Last row actually written to the DB — drives the write throttle (see ShouldWrite).
+        public bool HasWritten { get; set; }
+        public DateTime LastWriteUtc { get; set; } = DateTime.MinValue;
+        public double LastWrittenLat { get; set; }
+        public double LastWrittenLng { get; set; }
+        public int LastWrittenPassengers { get; set; } = int.MinValue;
     }
 
     /// <summary>An ordered polyline with cumulative segment distances for interpolation.</summary>

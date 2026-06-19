@@ -15,6 +15,13 @@ namespace FleetWise.Controllers
         private readonly Supabase.Client _supabase;
         private readonly FareCalculator _fareCalculator;
 
+        // The live map only needs each active trip's newest reading. A position older
+        // than this is treated as stale (bus offline / dead zone) and the bus drops to
+        // parked, so the telemetry read can be bounded to this recent window instead of
+        // scanning the whole table. Generous enough to ride out the phone's 60s heartbeat
+        // and brief gaps without flicker.
+        private const int RecentTelemetryMinutes = 30;
+
         // Per-route terminals where non-running buses are shown parked (the JS spreads
         // each terminal's buses into a neat grid so the pills don't overlap). Routes
         // without an entry fall back to the first terminal.
@@ -141,23 +148,41 @@ namespace FleetWise.Controllers
 
             var activeTripIds = activeTrips.Select(t => t.TripId).ToHashSet();
 
-            // Newest-first: Supabase caps a plain .Get() at 1000 rows and returns the
-            // OLDEST ones, so on a table with lots of history the "latest per trip"
-            // below would be permanently stale. Ordering by timestamp descending makes
-            // .Get() return the most recent rows, which is all we need here.
-            var telemetryResponse = await _supabase
-                .From<TelemetryData>()
-                .Order("timestamp", Postgrest.Constants.Ordering.Descending)
-                .Get();
             var vehiclesResponse = await _supabase.From<Vehicle>().Get();
             var routesResponse = await _supabase.From<BusRoute>().Get();
             var usersResponse = await _supabase.From<UserModel>().Get();
+            var maintenanceResponse = await _supabase.From<MaintenanceLog>().Get();
 
-            // Latest telemetry row per active trip.
-            var latestByTrip = telemetryResponse.Models
-                .Where(t => activeTripIds.Contains(t.TripId))
-                .GroupBy(t => t.TripId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.Timestamp).First());
+            // Flagged = open incident — same definition as Dashboard/Dispatch/Vehicles.
+            var flaggedVehicleIds = maintenanceResponse.Models
+                .Where(l => l.ResolvedAt == null && l.VehicleId != null)
+                .Select(l => l.VehicleId)
+                .ToHashSet();
+
+            // Bounded telemetry read: only rows belonging to the currently-active trips,
+            // and only from the recent window — instead of fetching the entire table every
+            // poll and filtering in memory. Newest-first so the latest-per-trip grouping
+            // below sees the most recent reading first. Skipped entirely when nothing's
+            // active (no IN () with an empty set).
+            var latestByTrip = new Dictionary<string, TelemetryData>();
+            if (activeTripIds.Count > 0)
+            {
+                // Cutoff MUST be UTC: stored timestamps are true UTC instants and PostgREST
+                // reads a naive filter string as UTC. PhClock.Now (PH wall-clock digits)
+                // would land 8h ahead and exclude every row.
+                var recentCutoff = DateTime.UtcNow.AddMinutes(-RecentTelemetryMinutes);
+                var telemetryResponse = await _supabase
+                    .From<TelemetryData>()
+                    .Filter("trip_id", Postgrest.Constants.Operator.In, activeTripIds.Cast<object>().ToList())
+                    .Filter("timestamp", Postgrest.Constants.Operator.GreaterThanOrEqual,
+                            recentCutoff.ToString("yyyy-MM-dd HH:mm:ss"))
+                    .Order("timestamp", Postgrest.Constants.Ordering.Descending)
+                    .Get();
+
+                latestByTrip = telemetryResponse.Models
+                    .GroupBy(t => t.TripId)
+                    .ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.Timestamp).First());
+            }
 
             var vehiclesById = vehiclesResponse.Models
                 .ToDictionary(v => v.VehicleId, v => v);
@@ -184,8 +209,6 @@ namespace FleetWise.Controllers
                     continue; // no telemetry yet (simulator hasn't ticked for this trip)
 
                 vehiclesById.TryGetValue(trip.VehicleId, out var vehicle);
-                if (DisplayStatus(vehicle?.VehicleStatus) != "Active")
-                    continue; // only "On Trip" buses run on the map; the rest park (below)
 
                 if (movingByVehicle.TryGetValue(trip.VehicleId, out var existing) &&
                     existing.Timestamp >= telemetry.Timestamp)
@@ -214,7 +237,7 @@ namespace FleetWise.Controllers
                     RouteName = route?.RouteName ?? "—",
                     Shift = FormatShift(trip),
                     DriverName = FormatDriverName(driver),
-                    Status = "Active",
+                    Status = "On Trip",
                     Lat = (double)telemetry.Latitude,
                     Lng = (double)telemetry.Longitude,
                     Heading = telemetry.Heading ?? 0,
@@ -235,13 +258,15 @@ namespace FleetWise.Controllers
             // Flagged / Idle / Offline …), shown stationary at the terminal.
             foreach (var vehicle in vehiclesResponse.Models)
             {
-                var vehicleStatus = DisplayStatus(vehicle.VehicleStatus);
-                if (vehicleStatus == "Active")
-                    continue; // on-trip buses are shown moving, not parked
                 if (movingVehicleIds.Contains(vehicle.VehicleId))
                     continue;
                 if (routeId.HasValue && vehicle.RouteId != routeId.Value)
                     continue;
+
+                // Grounded wins over flag, else the operational status — registry's rules.
+                var vehicleStatus = vehicle.OutOfService ? "Out of Service"
+                    : flaggedVehicleIds.Contains(vehicle.VehicleId) ? "Flagged"
+                    : NormalizeParked(vehicle.VehicleStatus);
 
                 routesById.TryGetValue(vehicle.RouteId ?? -1, out var route);
                 var terminal = TerminalFor(vehicle.RouteId);
@@ -294,17 +319,22 @@ namespace FleetWise.Controllers
             return string.IsNullOrEmpty(name) ? "Unassigned" : name;
         }
 
-        // Normalize the stored vehicle_status to the labels the Status filter shows
-        // ("Active" / "Idle" / "Offline"). Buses on the map are on live trips, so the
-        // running state reads "Active".
-        private static string DisplayStatus(string? vehicleStatus) => vehicleStatus switch
+        // Parked bus's operational status in the registry's vocabulary. A parked bus has no
+        // live trip, so any stale "moving"/"Flagged" label reads as Ready to Deploy.
+        private static string NormalizeParked(string? vehicleStatus)
         {
-            null or "" => "Active",
-            "OnTrip" or "On Trip" or "Active" => "Active",
-            "Idle" => "Idle",
-            "Offline" => "Offline",
-            _ => vehicleStatus
-        };
+            var s = (vehicleStatus ?? "").Trim();
+            if (s.Length == 0) return "Ready to Deploy";
+            if (s.Equals("Pending", StringComparison.OrdinalIgnoreCase)) return "Pending";
+            if (s.Equals("OnTrip", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("On Trip", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("Active", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("Flagged", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("Ready", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("Ready to Deploy", StringComparison.OrdinalIgnoreCase))
+                return "Ready to Deploy";
+            return s;
+        }
 
         private class WaypointDto
         {
