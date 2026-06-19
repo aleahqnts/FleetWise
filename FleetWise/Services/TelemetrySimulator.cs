@@ -18,8 +18,18 @@ public class TelemetrySimulator : BackgroundService
     private const double MinSpeedKmh = 20.0;
     private const double MaxSpeedKmh = 40.0;
 
-    // Per-tick passenger drift bounds (clamped to [0, vehicle capacity]).
+    // Passenger drift bounds (clamped to [0, vehicle capacity]). Drift is applied on a
+    // realistic cadence rather than every 5s tick, so cumulative boardings (and therefore
+    // the map's revenue) accrue at a believable pace instead of ballooning over a day.
     private const int MaxPassengerDelta = 3;
+    private static readonly TimeSpan PassengerDriftInterval = TimeSpan.FromSeconds(30);
+
+    // Write throttle — mirrors the phone (LocationTrackingService): a tick only inserts a
+    // telemetry row when the bus moved far enough, the passenger count changed, or the
+    // heartbeat elapsed. Positions still advance every tick in memory; only the DB write
+    // is gated, so the table stops accruing a row every 5s per bus.
+    private const double MinWriteMeters = 25.0;
+    private static readonly TimeSpan WriteHeartbeat = TimeSpan.FromSeconds(60);
 
     private readonly Supabase.Client _supabase;
     private readonly ILogger<TelemetrySimulator> _logger;
@@ -74,6 +84,11 @@ public class TelemetrySimulator : BackgroundService
         if (!_control.Enabled)
             return;
 
+        // Close out any demo trip left over from an earlier operational day so boardings
+        // (and the map's revenue) reset each cycle instead of growing forever. Runs before
+        // the spawn below so the fresh trip it creates is dated today.
+        await RollOverStaleDemoTripsAsync();
+
         // Ensure one tagged demo trip per route so toggling ON always yields moving buses,
         // independent of any vehicle's stored status.
         await EnsureDemoTripsAsync();
@@ -109,18 +124,27 @@ public class TelemetrySimulator : BackgroundService
 
             var state = AdvanceTrip(trip.TripId, geometry, capacity, trip.TotalBoarded);
 
-            var telemetry = new TelemetryData
+            if (ShouldWrite(state))
             {
-                TripId = trip.TripId,
-                Latitude = (decimal)state.Lat,
-                Longitude = (decimal)state.Lng,
-                TotalPassengers = state.Passengers,
-                Speed = Math.Round((decimal)state.SpeedKmh, 1),
-                Heading = (float)state.Heading,
-                Timestamp = PhClock.Now
-            };
+                var telemetry = new TelemetryData
+                {
+                    TripId = trip.TripId,
+                    Latitude = (decimal)state.Lat,
+                    Longitude = (decimal)state.Lng,
+                    TotalPassengers = state.Passengers,
+                    Speed = Math.Round((decimal)state.SpeedKmh, 1),
+                    Heading = (float)state.Heading,
+                    Timestamp = PhClock.Now
+                };
 
-            await _supabase.From<TelemetryData>().Insert(telemetry);
+                await _supabase.From<TelemetryData>().Insert(telemetry);
+
+                state.LastWriteUtc = DateTime.UtcNow;
+                state.LastWrittenLat = state.Lat;
+                state.LastWrittenLng = state.Lng;
+                state.LastWrittenPassengers = state.Passengers;
+                state.HasWritten = true;
+            }
 
             // Persist the cumulative boardings so the map's revenue (total_boarded × fare)
             // grows and never drops when passengers alight. Column-targeted update — only
@@ -132,6 +156,41 @@ public class TelemetrySimulator : BackgroundService
                     .Set(t => t.TotalBoarded, state.TotalBoarded)
                     .Update();
             }
+        }
+    }
+
+    /// <summary>
+    /// Demo trips loop forever, so a single trip would keep accruing boardings across days
+    /// and inflate the map's revenue (total_boarded × fare) without bound. At each
+    /// operational-day boundary (06:00), finalize any simulated trip left over from an
+    /// earlier operational day. EnsureDemoTripsAsync then starts a fresh trip dated today,
+    /// so boardings reset to a realistic per-day count. Real driver trips are never touched.
+    /// </summary>
+    private async Task RollOverStaleDemoTripsAsync()
+    {
+        var opDay = PhClock.OperationalDay.Date;
+
+        var staleTrips = (await _supabase
+            .From<Trip>()
+            .Filter("trip_status", Postgrest.Constants.Operator.Equals, "Active")
+            .Get()).Models
+            .Where(t => t.IsSimulated && t.Date.Date < opDay)
+            .ToList();
+
+        foreach (var trip in staleTrips)
+        {
+            // Finalize under its own (older) date so that day's history keeps its totals;
+            // the route then has no demo trip, so a fresh one is created on the next tick.
+            await _supabase.From<Trip>()
+                .Where(t => t.TripId == trip.TripId)
+                .Set(t => t.TripStatus, "Completed")
+                .Set(t => t.ActualEndTime, PhClock.Now)
+                .Update();
+
+            _states.Remove(trip.TripId); // drop its in-memory animation/boarding state
+            _logger.LogInformation(
+                "Rolled over demo trip {TripId} (dated {Date:yyyy-MM-dd}) at the operational-day boundary.",
+                trip.TripId, trip.Date);
         }
     }
 
@@ -250,18 +309,51 @@ public class TelemetrySimulator : BackgroundService
         state.Lng = lng;
         state.Heading = heading;
 
-        // Drift passengers by a small random delta, clamped to the vehicle's capacity.
-        var delta = _rng.Next(-MaxPassengerDelta, MaxPassengerDelta + 1);
-        var newPassengers = Math.Clamp(state.Passengers + delta, 0, capacity);
+        // Drift passengers only every PassengerDriftInterval — not every 5s tick — so the
+        // bus keeps moving smoothly on the map while boardings accrue at a believable pace.
+        var now = DateTime.UtcNow;
+        if (now - state.LastDriftUtc >= PassengerDriftInterval)
+        {
+            state.LastDriftUtc = now;
 
-        // Count only boardings (positive change) toward the cumulative total.
-        var boarded = newPassengers - state.Passengers;
-        if (boarded > 0)
-            state.TotalBoarded += boarded;
+            // Drift passengers by a small random delta, clamped to the vehicle's capacity.
+            var delta = _rng.Next(-MaxPassengerDelta, MaxPassengerDelta + 1);
+            var newPassengers = Math.Clamp(state.Passengers + delta, 0, capacity);
 
-        state.Passengers = newPassengers;
+            // Count only boardings (positive change) toward the cumulative total.
+            var boarded = newPassengers - state.Passengers;
+            if (boarded > 0)
+                state.TotalBoarded += boarded;
+
+            state.Passengers = newPassengers;
+        }
 
         return state;
+    }
+
+    /// <summary>
+    /// Mirror of the phone's write gate: emit a row only on the first sighting, when the
+    /// passenger count changed (a boarding/alighting, even while stopped), once the
+    /// heartbeat elapses, or once the bus has moved far enough since the last written row.
+    /// </summary>
+    private static bool ShouldWrite(TripState s)
+    {
+        if (!s.HasWritten) return true;                                       // first row for this trip
+        if (s.Passengers != s.LastWrittenPassengers) return true;            // boarding / alighting
+        if (DateTime.UtcNow - s.LastWriteUtc >= WriteHeartbeat) return true; // heartbeat
+        var moved = MetersBetween(s.LastWrittenLat, s.LastWrittenLng, s.Lat, s.Lng);
+        return moved >= MinWriteMeters;                                       // moved enough
+    }
+
+    private static double MetersBetween(double lat1, double lng1, double lat2, double lng2)
+    {
+        const double earthRadius = 6_371_000; // metres
+        var dLat = (lat2 - lat1) * Math.PI / 180.0;
+        var dLng = (lng2 - lng1) * Math.PI / 180.0;
+        var h = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(lat1 * Math.PI / 180.0) * Math.Cos(lat2 * Math.PI / 180.0) *
+                Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+        return earthRadius * 2 * Math.Atan2(Math.Sqrt(h), Math.Sqrt(1 - h));
     }
 
     private async Task<RouteGeometry?> GetGeometryAsync(int routeId)
@@ -291,6 +383,16 @@ public class TelemetrySimulator : BackgroundService
         public double SpeedKmh { get; set; }
         public int Passengers { get; set; }
         public int TotalBoarded { get; set; }
+
+        // When passengers last drifted — gates boarding accrual to PassengerDriftInterval.
+        public DateTime LastDriftUtc { get; set; } = DateTime.MinValue;
+
+        // Last row actually written to the DB — drives the write throttle (see ShouldWrite).
+        public bool HasWritten { get; set; }
+        public DateTime LastWriteUtc { get; set; } = DateTime.MinValue;
+        public double LastWrittenLat { get; set; }
+        public double LastWrittenLng { get; set; }
+        public int LastWrittenPassengers { get; set; } = int.MinValue;
     }
 
     /// <summary>An ordered polyline with cumulative segment distances for interpolation.</summary>
