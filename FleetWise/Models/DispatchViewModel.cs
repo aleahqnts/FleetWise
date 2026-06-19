@@ -28,6 +28,7 @@
         public string ShiftType { get; set; }
         public string ShiftStartTime { get; set; }
         public string ShiftEndTime { get; set; }
+        public bool IsOvernight { get; set; }
         public List<TripRow> Trips { get; set; } = new();
     }
 

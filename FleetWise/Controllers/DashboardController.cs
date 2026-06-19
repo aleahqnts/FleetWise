@@ -113,8 +113,12 @@ namespace FleetWise.Controllers
                 var schedStart = t.Date.Date + t.ShiftStartTime;
                 var schedEnd = t.Date.Date + t.ShiftEndTime
                     + (t.ShiftEndTime <= t.ShiftStartTime ? TimeSpan.FromDays(1) : TimeSpan.Zero);
-                var start = t.ActualStartTime ?? schedStart;
-                var end = t.ActualEndTime ?? (t.TripStatus == "Active" ? now : schedEnd);
+                // Postgrest deserializes timestamptz to a LOCAL-kind DateTime, shifting the
+                // stored PH wall-clock digits +8h. Normalize back to UTC so the raw digits
+                // (true PH time) line up with the Unspecified-kind hour marks — otherwise an
+                // overnight trip shifts past the cycle window and vanishes from the chart.
+                var start = t.ActualStartTime?.ToUniversalTime() ?? schedStart;
+                var end = t.ActualEndTime?.ToUniversalTime() ?? (t.TripStatus == "Active" ? now : schedEnd);
                 // Guard against clock skew / future timestamps (mobile may write a start
                 // ahead of server time): never let the window start after "now", and floor
                 // to the hour so the starting bucket is included. End can't exceed now.
@@ -139,7 +143,7 @@ namespace FleetWise.Controllers
                     // (monotonic), capped at the trip's total. The trip's CURRENT hour is
                     // anchored to total_boarded so the line matches the KPI exactly.
                     int boarded = todayTelemetry
-                        .Where(x => x.TripId == w.Trip.TripId && x.Timestamp <= mark)
+                        .Where(x => x.TripId == w.Trip.TripId && x.Timestamp.ToUniversalTime() <= mark)
                         .Select(x => x.TotalPassengers)
                         .DefaultIfEmpty(0)
                         .Max();
