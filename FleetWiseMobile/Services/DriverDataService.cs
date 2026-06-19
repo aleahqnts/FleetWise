@@ -28,6 +28,17 @@ public class DriverDataService
         res.EnsureSuccessStatusCode();
     }
 
+    // Raw Supabase REST POST (insert). Same Android-safe rationale as PatchAsync.
+    private static async Task PostAsync(string path, object body)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{FleetWiseMobile.SupabaseConfig.Url}/rest/v1/{path}");
+        req.Headers.TryAddWithoutValidation("apikey", FleetWiseMobile.SupabaseConfig.Key);
+        req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {FleetWiseMobile.SupabaseConfig.Key}");
+        req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+        var res = await _http.SendAsync(req);
+        res.EnsureSuccessStatusCode();
+    }
+
     public async Task<string> GetAvailabilityAsync(int userId)
     {
         var r = await _supabase.From<DriverAvailability>()
@@ -224,9 +235,29 @@ public class DriverDataService
     public async Task UpdatePasswordAsync(int userId, string newHash)
         => await PatchAsync($"users?user_id=eq.{userId}", new { password_hash = newHash, updated_at = PhTime.Now });
 
-    public async Task SubmitChecklistAsync(BusChecklist checklist)
+    // Returns the inserted row so the caller has the generated checklist_id (needed to
+    // link a maintenance incident when the inspection fails).
+    public async Task<BusChecklist?> SubmitChecklistAsync(BusChecklist checklist)
     {
-        await _supabase.From<BusChecklist>().Insert(checklist);
+        var r = await _supabase.From<BusChecklist>().Insert(checklist);
+        return r.Models.FirstOrDefault();
+    }
+
+    // A failed inspection opens a maintenance incident (an unresolved maintenance_log) so the
+    // flag becomes a permanent, reviewable record — surviving the bus later going On Trip —
+    // instead of only flipping the volatile vehicle_status. checklist_id links it back to the
+    // submitted inspection.
+    public async Task OpenInspectionIncidentAsync(int checklistId, string vehicleId, string tripId, List<string> issues)
+    {
+        await PostAsync("maintenance_logs", new
+        {
+            checklist_id = checklistId,
+            vehicle_id = vehicleId,
+            trip_id = tripId,
+            issue_details = new { issues },
+            maintenance_status = "Needs Attention",
+            created_at = PhTime.Now
+        });
     }
 
     public async Task UpdateVehicleStatusAsync(string vehicleId, string status)

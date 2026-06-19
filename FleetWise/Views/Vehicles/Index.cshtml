@@ -33,7 +33,9 @@
         </div>
     </div>
 
-    <div class="vh-card">
+    <a href="@Url.Action("Index", new { status = "Flagged", route = Model.SelectedRoute, search = Model.SearchTerm })"
+       class="vh-card vh-card--click @(Model.SelectedStatus == "Flagged" ? "vh-card--active" : "")"
+       title="Show only flagged vehicles">
         <div class="vh-card-icon vh-card-icon--red">
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -44,7 +46,7 @@
             <span class="vh-card-label">Flagged Vehicles</span>
             <span class="vh-card-value">@Model.FlaggedVehicles</span>
         </div>
-    </div>
+    </a>
 
     <div class="vh-card">
         <div class="vh-card-icon vh-card-icon--amber">
@@ -121,6 +123,26 @@
 @await Html.PartialAsync("_ViewVehicleModal")
 @await Html.PartialAsync("_EditVehicleModal")
 
+@* Antiforgery token for the View-modal fetch POSTs (add note / resolve / out-of-service). *@
+@Html.AntiForgeryToken()
+
+@* Reusable action overlay — schedule maintenance / take out of service. Custom (not
+   Bootstrap) so it stacks above the View modal without nesting issues. *@
+<div id="vhActionModal" class="vh-action-overlay" style="display:none;">
+    <div class="vh-action-box">
+        <h3 id="vhActionTitle" class="vh-action-title"></h3>
+        <p id="vhActionDesc" class="vh-action-desc"></p>
+        <textarea id="vhActionNote" class="vh-form-input vh-action-note" rows="3" placeholder="Reason / details…"></textarea>
+        <label id="vhActionMaintWrap" class="vh-action-maint" style="display:none;">
+            <input type="checkbox" id="vhActionMaint" /> Send to maintenance (Under Repair)
+        </label>
+        <div class="vh-action-btns">
+            <button type="button" class="vh-btn vh-btn--outline" onclick="vhActionCancel()">Cancel</button>
+            <button type="button" class="vh-btn vh-btn--primary" id="vhActionConfirm">Confirm</button>
+        </div>
+    </div>
+</div>
+
 <script>
     // Load the vehicle table rows in the background so the page itself renders instantly
     // (server-rendered HTML fetched into the table body).
@@ -151,6 +173,7 @@
     });
 
     function loadVehicleDetails(id) {
+        window.__vhCurrentVehicle = id;
         const content = document.getElementById('viewVehicleContent');
         content.innerHTML = '<div class="vh-modal-loading"><div class="vh-spinner"></div></div>';
         fetch('@Url.Action("Details", "Vehicles")?id=' + encodeURIComponent(id))
@@ -186,6 +209,103 @@
             .catch(function () {
                 tbody.innerHTML = '<tr><td colspan="6" class="vh-empty">Failed to load vehicles.</td></tr>';
             });
+    }
+
+    // ── Flag review actions (buttons live inside the fetched View-modal partial) ──
+    function vhToken() {
+        const el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+
+    async function vhPost(url, params) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'RequestVerificationToken': vhToken(), 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(params)
+        });
+        return res.ok;
+    }
+
+    function vhReloadModal() { loadVehicleDetails(window.__vhCurrentVehicle); }
+
+    async function vhAddNote(logId) {
+        const ta = document.getElementById('vhNoteInput');
+        const note = ta ? ta.value.trim() : '';
+        if (!note) { if (ta) ta.focus(); return; }
+        if (await vhPost('@Url.Action("AddNote", "Vehicles")', { logId: logId, note: note })) {
+            vhReloadModal();
+        } else { alert('Failed to add note.'); }
+    }
+
+    async function vhResolve(logId) {
+        if (!confirm('Resolve this incident and return the bus to Ready?')) return;
+        const note = (document.getElementById('vhNoteInput')?.value || '').trim();
+        if (await vhPost('@Url.Action("ResolveIncident", "Vehicles")', { logId: logId, note: note })) {
+            vhReloadModal(); loadVehicleRows();
+        } else { alert('Failed to resolve.'); }
+    }
+
+    // Reusable action overlay (schedule maintenance / take out of service). Custom overlay,
+    // not Bootstrap, so it stacks cleanly above the View modal.
+    function vhOpenAction(opts) {
+        document.getElementById('vhActionTitle').textContent = opts.title;
+        document.getElementById('vhActionDesc').textContent = opts.desc || '';
+        const ta = document.getElementById('vhActionNote'); ta.value = '';
+        document.getElementById('vhActionMaintWrap').style.display = opts.showMaint ? 'flex' : 'none';
+        document.getElementById('vhActionMaint').checked = !!opts.maintDefault;
+        const btn = document.getElementById('vhActionConfirm');
+        btn.textContent = opts.confirmLabel || 'Confirm';
+        btn.className = 'vh-btn ' + (opts.danger ? 'vh-btn--danger' : 'vh-btn--primary');
+        btn.onclick = async function () {
+            const note = ta.value.trim();
+            const maint = document.getElementById('vhActionMaint').checked;
+            await opts.onConfirm(note, maint);
+        };
+        document.getElementById('vhActionModal').style.display = 'flex';
+        setTimeout(function () { ta.focus(); }, 50);
+    }
+    function vhActionCancel() { document.getElementById('vhActionModal').style.display = 'none'; }
+
+    function vhScheduleMaintenance(vehicleId) {
+        vhOpenAction({
+            title: 'Schedule Maintenance',
+            desc: 'Send this bus to the shop. It will be taken out of service until the work is resolved.',
+            confirmLabel: 'Schedule Maintenance',
+            onConfirm: async function (note) {
+                if (await vhPost('@Url.Action("ScheduleMaintenance", "Vehicles")', { vehicleId: vehicleId, note: note })) {
+                    vhActionCancel(); vhReloadModal(); loadVehicleRows();
+                } else { alert('Failed to schedule maintenance.'); }
+            }
+        });
+    }
+
+    function vhMarkOutOfService(vehicleId, logId) {
+        vhOpenAction({
+            title: 'Take Out of Service',
+            desc: 'The bus stays flagged and cannot be deployed until it is returned to service or resolved.',
+            confirmLabel: 'Mark Out of Service', danger: true, showMaint: true,
+            onConfirm: async function (note, maint) {
+                const params = { vehicleId: vehicleId, outOfService: true };
+                if (logId !== null && logId !== undefined) params.logId = logId;
+                if (note) params.note = note;
+                params.maintenanceStatus = maint ? 'Under Repair' : 'Needs Attention';
+                if (await vhPost('@Url.Action("SetServiceState", "Vehicles")', params)) {
+                    vhActionCancel(); vhReloadModal(); loadVehicleRows();
+                } else { alert('Failed to update service state.'); }
+            }
+        });
+    }
+
+    async function vhSetService(vehicleId, outOfService, logId) {
+        const verb = outOfService ? 'take this bus OUT of service' : 'return this bus to service';
+        if (!confirm('Are you sure you want to ' + verb + '?')) return;
+        const note = (document.getElementById('vhNoteInput')?.value || '').trim();
+        const params = { vehicleId: vehicleId, outOfService: outOfService };
+        if (logId !== null && logId !== undefined) params.logId = logId;
+        if (note) params.note = note;
+        if (await vhPost('@Url.Action("SetServiceState", "Vehicles")', params)) {
+            vhReloadModal(); loadVehicleRows();
+        } else { alert('Failed to update service state.'); }
     }
 </script>
 
@@ -295,6 +415,11 @@
     .vh-card-icon--green { background: #E8F8EE; color: #27AE60; }
     .vh-card-icon--red   { background: #FDECEC; color: #E53E3E; }
     .vh-card-icon--amber { background: #FEF6E0; color: #D69E2E; }
+
+    /* Clickable flagged KPI -> filters the table to flagged vehicles. */
+    .vh-card--click { cursor: pointer; text-decoration: none; transition: box-shadow .15s, transform .15s; }
+    .vh-card--click:hover { box-shadow: 0 6px 18px rgba(229,62,62,.18); transform: translateY(-2px); }
+    .vh-card--active { border-color: #E53E3E; box-shadow: 0 0 0 2px rgba(229,62,62,.18); }
 
     .vh-card-text {
         display: flex;
@@ -738,6 +863,70 @@
         border-radius: 50%;
         background: currentColor;
     }
+
+    /* ── Flag review (View modal) ───────────────────────────── */
+    .vh-badge--oos { background: #4B5563; color: #fff; }
+
+    .vh-maint-head-right { display: inline-flex; align-items: center; gap: 10px; }
+    .vh-btn-mini {
+        padding: 4px 12px;
+        border: 1.5px solid var(--vh-border);
+        border-radius: 20px;
+        background: #fff;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .vh-btn-mini:hover { border-color: var(--vh-teal); color: var(--vh-teal); }
+
+    /* ── Action overlay (schedule maintenance / out of service) ─ */
+    .vh-action-overlay { position: fixed; inset: 0; background: rgba(13,28,40,.5); z-index: 4000; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .vh-action-box { background: #fff; border-radius: 14px; width: 100%; max-width: 440px; padding: 22px; box-shadow: 0 14px 44px rgba(0,0,0,.28); font-family: 'Segoe UI', sans-serif; }
+    .vh-action-title { margin: 0 0 6px; font-size: 1.1rem; font-weight: 800; color: var(--vh-navy); }
+    .vh-action-desc { margin: 0 0 14px; font-size: 0.85rem; color: var(--vh-muted); line-height: 1.45; }
+    .vh-action-note { width: 100%; resize: vertical; }
+    .vh-action-maint { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: var(--vh-text); cursor: pointer; }
+    .vh-action-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+
+    .vh-oos-banner {
+        background: #FDECEC;
+        border: 1px solid #F5B5B5;
+        color: #9B2C2C;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 12px;
+    }
+
+    .vh-review-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+
+    .vh-btn--resolve { background: #27AE60; border-color: #27AE60; color: #fff; }
+    .vh-btn--resolve:hover { background: #229152; }
+    .vh-btn--danger { background: #E53E3E; border-color: #E53E3E; color: #fff; }
+    .vh-btn--danger:hover { background: #C53030; }
+
+    .vh-note-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+    .vh-note-form textarea { resize: vertical; }
+    .vh-note-form .vh-btn { align-self: flex-end; }
+
+    .vh-thread-label {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--vh-muted);
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        margin: 4px 0 8px;
+    }
+
+    .vh-thread { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+    .vh-thread li { border-left: 3px solid var(--vh-border); padding: 2px 0 2px 12px; }
+    .vh-thread-action { font-weight: 700; font-size: 0.78rem; color: var(--vh-navy); margin-right: 6px; }
+    .vh-thread-note { font-size: 0.85rem; color: var(--vh-text); }
+    .vh-thread-meta { display: block; font-size: 0.72rem; color: var(--vh-muted); margin-top: 2px; }
 
     /* ── Responsive ─────────────────────────────────────────── */
     @@media (max-width: 900px) {

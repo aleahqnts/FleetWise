@@ -28,6 +28,11 @@ public class Vehicle : BaseModel
     [Column("vehicle_status")]
     public string VehicleStatus { get; set; }
 
+    // Admin-set road-safety gate, independent of the volatile vehicle_status. When true the
+    // bus is grounded -> dispatch won't let it be assigned. Mobile never writes this.
+    [Column("out_of_service")]
+    public bool OutOfService { get; set; }
+
     [Column("last_maintenance_date")]
     public DateTime? LastMaintenanceDate { get; set; }
 

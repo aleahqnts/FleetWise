@@ -109,7 +109,7 @@
             <div class="dp-route-header-right">
                 @if (route.NeedsAssignment)
                 {
-                    <span class="dp-needs-badge"><span class="dp-needs-dot"></span> Needs Assignment</span>
+                    <span class="dp-needs-badge"><span class="dp-needs-dot"></span> Needs Reassignment</span>
                 }
                 <button class="dp-btn-route-msg" onclick="openRouteMessageModal(@route.RouteId, '@route.RouteName')"><i class="ti ti-message-2"></i> Route Message</button>
             </div>
@@ -151,15 +151,21 @@
                             {
                                 var trip = shiftTrips[i];
 
-                                // Vehicle status icon
-                                var (vDotClass, vTooltip) = trip.VehicleStatus switch
-                                {
-                                    "On Trip" => ("dp-dot--green", "On trip"),
-                                    "Ready to Deploy" => ("dp-dot--blue", "Ready to deploy"),
-                                    "Flagged" => ("dp-dot--red", "Flagged"),
-                                    "Pending" => ("dp-dot--yellow", "Pending checklist"),
-                                    _ => ("dp-dot--gray", trip.VehicleStatus)
-                                };
+                                // Operational/readiness dot — trip-derived, so a bus used by
+                                // another shift can never bleed a stale colour here. A missed
+                                // trip is grey (not green), completed is slate. Roadworthiness
+                                // shows as a SEPARATE flag marker, never overwriting this dot.
+                                var (vDotClass, vTooltip) =
+                                    trip.TripStatus == "Missed" ? ("dp-dot--missed", "Missed — bus not used") :
+                                    trip.VehicleStatus switch
+                                    {
+                                        "On Trip" => ("dp-dot--green", "On trip"),
+                                        "Completed" => ("dp-dot--slate", "Trip completed"),
+                                        "Ready to Deploy" => ("dp-dot--blue", "Ready to deploy"),
+                                        "Flagged" => ("dp-dot--red", "Flagged on inspection"),
+                                        "Pending" => ("dp-dot--yellow", "Pending checklist"),
+                                        _ => ("dp-dot--gray", trip.VehicleStatus)
+                                    };
 
                                 // Driver status icon
                                 var (dDotClass, dTooltip) = trip.DriverStatus switch
@@ -202,6 +208,10 @@
                                             <span class="dp-tooltip">@vTooltip</span>
                                             <strong>@trip.VehicleId</strong>
                                             <span class="rp-plate">| @trip.PlateNumber</span>
+                                            @if (trip.Flagged)
+                                            {
+                                                <span class="dp-flag" title="Flagged on inspection — see Trip Detail / Vehicles"><i class="ti ti-flag-filled"></i></span>
+                                            }
                                         </div>
                                     </td>
                                     <td>
@@ -212,7 +222,14 @@
                                         </div>
                                     </td>
                                     <td>
-                                        <span class="dp-badge @badgeClass">@badgeLabel</span>
+                                        @if (trip.TripStatus == "Assignment Issue" && !string.IsNullOrEmpty(trip.AssignmentIssueReason))
+                                        {
+                                            <span class="dp-badge @badgeClass dp-badge--hint" title="@trip.AssignmentIssueReason">@badgeLabel</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="dp-badge @badgeClass">@badgeLabel</span>
+                                        }
                                     </td>
                                     <td>
                                         <div class="dp-actions-cell">
@@ -249,6 +266,8 @@
         <span class="dp-legend-item"><span class="dp-status-dot dp-dot--blue"></span> Bus: ready to deploy &nbsp;|&nbsp; Driver: available</span>
         <span class="dp-legend-item"><span class="dp-status-dot dp-dot--yellow"></span> Bus: pending checklist</span>
         <span class="dp-legend-item"><span class="dp-status-dot dp-dot--red"></span> Bus: flagged &nbsp;|&nbsp; Driver: unavailable</span>
+        <span class="dp-legend-item"><span class="dp-status-dot dp-dot--slate"></span> Trip completed</span>
+        <span class="dp-legend-item"><span class="dp-status-dot dp-dot--missed"></span> Missed Trip</span>
     </div>
 </div>
 
@@ -842,6 +861,24 @@
         background: var(--rp-muted);
     }
 
+    .dp-dot--slate {
+        background: #6B7280;
+    }
+
+    .dp-dot--missed {
+        background: #B42318;
+    }
+
+    /* Roadworthiness flag — independent of the operational dot, so an on-trip bus
+       still shows it. */
+    .dp-flag {
+        display: inline-flex;
+        align-items: center;
+        color: #E74C3C;
+        font-size: 0.95rem;
+        margin-left: 2px;
+    }
+
     .dp-tooltip {
         position: absolute;
         bottom: calc(100% + 6px);
@@ -903,6 +940,12 @@
         background: #FDE8E8;
         color: #B42318;
         border: 1px solid #F5C2C0;
+    }
+
+    .dp-badge--hint {
+        cursor: help;
+        text-decoration: underline dotted;
+        text-underline-offset: 3px;
     }
 
     /* ── Action buttons ─────────────────────────────────────── */

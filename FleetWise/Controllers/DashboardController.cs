@@ -21,13 +21,16 @@ namespace FleetWise.Controllers
             var today = PhClock.OperationalDay;
             var yesterday = today.AddDays(-1);
 
-            // ── Flagged Vehicles (unaffected by filters) ──────────────
-            var flaggedResponse = await _supabase
-                .From<Vehicle>()
-                .Filter("vehicle_status", Postgrest.Constants.Operator.Equals, "Flagged")
-                .Get();
-
-            int flaggedVehicles = flaggedResponse.Models.Count;
+            // ── Flagged Vehicles (unaffected by filters) = buses with an OPEN incident
+            //    (unresolved maintenance_log). The old vehicle_status=="Flagged" count read 0
+            //    because the next shift's start/end overwrites that column. Matches the
+            //    Dispatch + Vehicles definition. ─────────────────────────
+            var maintResponse = await _supabase.From<MaintenanceLog>().Get();
+            int flaggedVehicles = maintResponse.Models
+                .Where(l => l.ResolvedAt == null && l.VehicleId != null)
+                .Select(l => l.VehicleId)
+                .Distinct()
+                .Count();
 
             // ── Today's & yesterday's trips (base queries) ────────────
             var todayTripsResponse = await _supabase
