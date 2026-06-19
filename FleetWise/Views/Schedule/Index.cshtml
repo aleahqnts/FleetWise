@@ -331,7 +331,27 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cells, weekStart: SCH_WEEK_START, weekEnd: SCH_WEEK_END })
         }).then(async res => {
-            if (!res.ok) { schShowConflicts([await res.text()]); return; }
+            if (!res.ok) {
+                // Server rejects with { conflicts: [{ message, cells:[{routeId,shift,date}] }] }.
+                // Highlight the offending (editable) cells in red and list the reasons.
+                let data = null;
+                try { data = await res.json(); } catch { /* not JSON */ }
+                if (data && Array.isArray(data.conflicts)) {
+                    const msgs = [];
+                    data.conflicts.forEach(cf => {
+                        msgs.push(cf.message);
+                        (cf.cells || []).forEach(ref => {
+                            document.querySelectorAll(
+                                `.sch-cell[data-route="${ref.routeId}"][data-shift="${ref.shift}"][data-date="${ref.date}"]`
+                            ).forEach(flag);
+                        });
+                    });
+                    schShowConflicts([...new Set(msgs)]);
+                } else {
+                    schShowConflicts([(data && data.message) || 'Save failed. Please review the schedule.']);
+                }
+                return;
+            }
             sessionStorage.setItem('sch_saved', '1'); // survive the reload -> show toast
             window.location.reload();
         }).catch(err => schShowConflicts(['Save failed: ' + err.message]))
