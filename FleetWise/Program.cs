@@ -39,6 +39,10 @@ builder.Services.AddSingleton(provider => {
     return client;
 });
 
+// Prunes old telemetry_data rows on a daily schedule so the table can't grow without
+// bound — useful in every environment (real device data accrues in production too).
+builder.Services.AddHostedService<TelemetryRetentionService>();
+
 // Simulated live telemetry producer — Development only, so it never runs in production.
 if (builder.Environment.IsDevelopment())
 {
