@@ -224,7 +224,7 @@
                                     <td>
                                         @if (trip.TripStatus == "Assignment Issue" && !string.IsNullOrEmpty(trip.AssignmentIssueReason))
                                         {
-                                            <span class="dp-badge @badgeClass dp-badge--hint" title="@trip.AssignmentIssueReason">@badgeLabel</span>
+                                            <span class="dp-badge @badgeClass dp-badge--hint" data-tip="@trip.AssignmentIssueReason">@badgeLabel</span>
                                         }
                                         else
                                         {
@@ -238,7 +238,7 @@
                                                     data-trip-id="@trip.TripId"
                                                     data-status="@trip.TripStatus"
                                                     onclick="handleReassignClick(this)"
-                                                @(trip.TripStatus == "Active" || trip.TripStatus == "Completed" ? "disabled" : "")>
+                                                @(trip.TripStatus == "Active" || trip.TripStatus == "Completed" || trip.TripStatus == "Missed" ? "disabled" : "")>
                                                 Reassign
                                             </button>
                                             <button class="dp-btn-msg" title="Message" onclick="openTripMessageModal('@trip.TripId', '@trip.VehicleId', '@trip.DriverName')"><i class="ti ti-message"></i></button>
@@ -299,6 +299,52 @@
         rows.forEach(r => r.classList.add('dp-row-flag'));
         rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+
+    // ── Assignment-Issue hover popup ───────────────────────────
+    // Floating element on document body (delegated, immune to the route card's
+    // overflow:hidden). A live-refresh can swap the hovered badge out from under the
+    // cursor so mouseout never fires — a mousemove fallback kills the ghost.
+    (function () {
+        let tip = null, current = null;
+        function ensure() {
+            if (!tip) {
+                tip = document.createElement('div');
+                tip.className = 'dp-tip';
+                document.body.appendChild(tip);
+            }
+            return tip;
+        }
+        function show(badge) {
+            const text = badge.getAttribute('data-tip');
+            if (!text) return;
+            current = badge;
+            ensure().textContent = text;
+            const r = badge.getBoundingClientRect();
+            tip.style.opacity = '0';
+            tip.classList.add('dp-tip--show');
+            const tw = tip.offsetWidth, th = tip.offsetHeight;   // measure after text set
+            let left = r.left + r.width / 2 - tw / 2;
+            left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+            tip.style.left = left + 'px';
+            tip.style.top = (r.top - th - 9) + 'px';
+            tip.style.opacity = '1';
+        }
+        function hide() {
+            current = null;
+            if (tip) { tip.remove(); tip = null; }   // fully remove -> no ghost
+        }
+        document.addEventListener('mouseover', e => {
+            const b = e.target.closest && e.target.closest('.dp-badge--hint');
+            if (b && b !== current) show(b);
+        });
+        // Fallback: any pointer move that isn't over the current badge clears it.
+        document.addEventListener('mousemove', e => {
+            if (!current) return;
+            const b = e.target.closest && e.target.closest('.dp-badge--hint');
+            if (b !== current) hide();
+        });
+        window.addEventListener('scroll', hide, true);
+    })();
 
     // ── Live refresh ───────────────────────────────────────────
     // Re-fetch THIS page (current date in the URL) and swap only the stats +
@@ -944,8 +990,39 @@
 
     .dp-badge--hint {
         cursor: help;
-        text-decoration: underline dotted;
-        text-underline-offset: 3px;
+    }
+
+    /* Floating tooltip (appended to document body so card overflow:hidden can't clip it). */
+    .dp-tip {
+        position: fixed;
+        z-index: 9999;
+        max-width: 240px;
+        background: #2D3748;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 500;
+        line-height: 1.4;
+        text-align: center;
+        padding: 7px 10px;
+        border-radius: 7px;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, .18);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity .12s ease;
+    }
+
+    .dp-tip::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border: 5px solid transparent;
+        border-top-color: #2D3748;
+    }
+
+    .dp-tip--show {
+        opacity: 1;
     }
 
     /* ── Action buttons ─────────────────────────────────────── */
