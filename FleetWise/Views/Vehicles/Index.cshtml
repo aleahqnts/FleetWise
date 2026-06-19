@@ -33,7 +33,9 @@
         </div>
     </div>
 
-    <div class="vh-card">
+    <a href="@Url.Action("Index", new { status = "Flagged", route = Model.SelectedRoute, search = Model.SearchTerm })"
+       class="vh-card vh-card--click @(Model.SelectedStatus == "Flagged" ? "vh-card--active" : "")"
+       title="Show only flagged vehicles">
         <div class="vh-card-icon vh-card-icon--red">
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -44,7 +46,7 @@
             <span class="vh-card-label">Flagged Vehicles</span>
             <span class="vh-card-value">@Model.FlaggedVehicles</span>
         </div>
-    </div>
+    </a>
 
     <div class="vh-card">
         <div class="vh-card-icon vh-card-icon--amber">
@@ -295,6 +297,11 @@
     .vh-card-icon--green { background: #E8F8EE; color: #27AE60; }
     .vh-card-icon--red   { background: #FDECEC; color: #E53E3E; }
     .vh-card-icon--amber { background: #FEF6E0; color: #D69E2E; }
+
+    /* Clickable flagged KPI -> filters the table to flagged vehicles. */
+    .vh-card--click { cursor: pointer; text-decoration: none; transition: box-shadow .15s, transform .15s; }
+    .vh-card--click:hover { box-shadow: 0 6px 18px rgba(229,62,62,.18); transform: translateY(-2px); }
+    .vh-card--active { border-color: #E53E3E; box-shadow: 0 0 0 2px rgba(229,62,62,.18); }
 
     .vh-card-text {
         display: flex;
