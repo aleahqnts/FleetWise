@@ -22,13 +22,29 @@ public class SimulatorControl
     // Read every tick by the simulator. volatile so the toggle is seen across threads.
     public volatile bool Enabled;
 
+    // Serializes a simulator tick against a stop/cleanup. Without it, a tick already past
+    // its Enabled check can re-create a demo trip AFTER cleanup deleted it -> an orphan
+    // sim trip survives while the switch is OFF. The simulator must take this around its
+    // whole tick body and re-check Enabled once held.
+    public readonly SemaphoreSlim TickGate = new(1, 1);
+
     public void Start() => Enabled = true;
 
-    // Turn the producer off, then wipe everything it made so only real data remains.
+    // Turn the producer off, then wipe everything it made so only real data remains. The
+    // cleanup runs under TickGate so it can't race a tick mid-create; once it releases,
+    // any waiting tick sees Enabled=false and bails before creating anything.
     public async Task<int> StopAndCleanupAsync()
     {
         Enabled = false;
-        return await CleanupSimDataAsync();
+        await TickGate.WaitAsync();
+        try
+        {
+            return await CleanupSimDataAsync();
+        }
+        finally
+        {
+            TickGate.Release();
+        }
     }
 
     /// <summary>

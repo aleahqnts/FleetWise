@@ -79,11 +79,30 @@ public class TelemetrySimulator : BackgroundService
 
     private async Task TickAsync(CancellationToken ct)
     {
-        // OFF by default and toggled at runtime from the Fleet Map. When off, the simulator
-        // produces nothing — no auto-created trips, no telemetry — so real data stands alone.
+        // Cheap pre-check before taking the gate — avoids contending with a stop/cleanup
+        // when we're already off.
         if (!_control.Enabled)
             return;
 
+        // Hold the gate for the whole tick so a stop/cleanup can't run concurrently. Re-check
+        // Enabled INSIDE the gate: if a stop+cleanup just completed, we must bail before
+        // creating any trip, or we'd resurrect a demo trip while the switch is OFF.
+        await _control.TickGate.WaitAsync(ct);
+        try
+        {
+            if (!_control.Enabled)
+                return;
+
+            await TickBodyAsync(ct);
+        }
+        finally
+        {
+            _control.TickGate.Release();
+        }
+    }
+
+    private async Task TickBodyAsync(CancellationToken ct)
+    {
         // Close out any demo trip left over from an earlier operational day so boardings
         // (and the map's revenue) reset each cycle instead of growing forever. Runs before
         // the spawn below so the fresh trip it creates is dated today.
