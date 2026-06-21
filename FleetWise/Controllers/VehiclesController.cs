@@ -18,11 +18,6 @@ namespace FleetWise.Controllers
         private static readonly string[] ConditionFilterOptions =
             { "No Issues", "Needs Attention", "Under Repair" };
 
-        // The Edit modal's "Change Status" dropdown — exactly the maintenance_status_enum
-        // labels. Selecting "No Issues" is the resolve action.
-        private static readonly string[] MaintenanceStatusOptions =
-            { "Needs Attention", "Under Repair", "No Issues" };
-
         private readonly Supabase.Client _supabase;
 
         public VehiclesController(Supabase.Client supabase) => _supabase = supabase;
@@ -233,39 +228,12 @@ namespace FleetWise.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // "Resolve" = the operator set the maintenance status to "No Issues".
-            var resolving = string.Equals(model.MaintenanceStatus?.Trim(), "No Issues", OIC);
-
-            // Update the maintenance log the modal was editing (a vehicle may have none).
-            if (model.LogId is int logId && logId > 0 && !string.IsNullOrWhiteSpace(model.MaintenanceStatus))
-            {
-                var logResp = await _supabase.From<MaintenanceLog>()
-                    .Filter("log_id", Postgrest.Constants.Operator.Equals, logId)
-                    .Get();
-                var log = logResp.Models.FirstOrDefault();
-                if (log != null)
-                {
-                    log.MaintenanceStatus = model.MaintenanceStatus.Trim();
-                    log.VerifiedBy = string.IsNullOrWhiteSpace(model.VerifiedBy) ? null : model.VerifiedBy.Trim();
-                    if (resolving && log.ResolvedAt == null)
-                        log.ResolvedAt = PhClock.Now;
-                    await _supabase.From<MaintenanceLog>().Update(log);
-                }
-            }
-
-            // Update the Vehicle Profile (vehicle_type is left as-is — every unit is a bus).
+            // Profile-only edit (vehicle_type is left as-is — every unit is a bus). The
+            // maintenance/incident lifecycle is owned exclusively by the View modal's actions
+            // (resolve / schedule / out-of-service), so Edit never touches maintenance state.
             vehicle.PlateNumber = model.PlateNumber.Trim();
             vehicle.RouteId = model.RouteId;
             vehicle.UpdatedAt = PhClock.Now;
-
-            if (resolving)
-            {
-                // Stamp the last maintenance date and clear a Flagged badge so the registry
-                // reflects the fix.
-                vehicle.LastMaintenanceDate = PhClock.Today;
-                if (string.Equals(vehicle.VehicleStatus?.Trim(), "Flagged", OIC))
-                    vehicle.VehicleStatus = "Ready to Deploy";
-            }
 
             await _supabase.From<Vehicle>().Update(vehicle);
 
@@ -584,9 +552,8 @@ namespace FleetWise.Controllers
             return View("Index", vm);
         }
 
-        // Builds the Edit Vehicle modal's view model: the vehicle profile, the maintenance log
-        // it edits (latest unresolved, else latest overall), and self-contained dropdown data.
-        // `posted` preserves the operator's input when re-rendering after a failed POST.
+        // Builds the Edit Vehicle modal's view model: the editable vehicle profile + route
+        // dropdown. `posted` preserves the operator's input when re-rendering after a failed POST.
         private async Task<EditVehicleViewModel?> BuildEditViewModelAsync(string id, EditVehicleViewModel? posted)
         {
             var vehicleResp = await _supabase.From<Vehicle>()
@@ -599,42 +566,14 @@ namespace FleetWise.Controllers
             var routes = (await _supabase.From<BusRoute>()
                 .Order("route_name", Postgrest.Constants.Ordering.Ascending)
                 .Get()).Models;
-            var vehicles = (await _supabase.From<Vehicle>().Get()).Models;
 
-            var logs = (await _supabase.From<MaintenanceLog>()
-                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, id)
-                .Order("created_at", Postgrest.Constants.Ordering.Descending)
-                .Get()).Models;
-            // Edit the open issue if there is one, otherwise the most recent log.
-            var log = logs.FirstOrDefault(l => l.ResolvedAt == null) ?? logs.FirstOrDefault();
-
-            var vm = new EditVehicleViewModel
+            return new EditVehicleViewModel
             {
                 VehicleId = vehicle.VehicleId,
                 PlateNumber = posted?.PlateNumber ?? vehicle.PlateNumber ?? "",
                 RouteId = posted?.RouteId ?? vehicle.RouteId ?? 0,
                 RouteOptions = BuildRouteOptions(routes),
-                StatusOptions = MaintenanceStatusOptions.ToList(),
-                CurrentStatus = DeriveMaintenance(logs),
             };
-
-            if (log != null)
-            {
-                vm.HasMaintenance = true;
-                vm.LogId = log.LogId;
-                vm.DateReported = log.CreatedAt.ToString("MM/dd/yy hh:mm tt");
-                vm.IssueSummary = DeriveIssueSummary(log);
-                vm.MaintenanceStatus = posted?.MaintenanceStatus ?? NormalizeMaintenance(log.MaintenanceStatus);
-                vm.VerifiedBy = posted?.VerifiedBy ?? log.VerifiedBy;
-            }
-            else
-            {
-                vm.LogId = posted?.LogId;
-                vm.MaintenanceStatus = posted?.MaintenanceStatus;
-                vm.VerifiedBy = posted?.VerifiedBy;
-            }
-
-            return vm;
         }
 
         // Re-render the registry with the Edit modal re-opened and its validation errors shown
