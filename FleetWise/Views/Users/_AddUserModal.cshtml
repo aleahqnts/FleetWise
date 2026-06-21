@@ -32,10 +32,9 @@
                             <span asp-validation-for="Email" class="us-field-error"></span>
                         </div>
                         <div class="us-form-row">
-                            <label asp-for="InitialPassword">Initial Password:</label>
-                            <input asp-for="InitialPassword" id="auGeneratedPassword" readonly class="us-form-input us-form-input--mono" />
-                            <span class="us-field-hint">Auto-generated Password</span>
-                            <span asp-validation-for="InitialPassword" class="us-field-error"></span>
+                            <label>Temporary Password:</label>
+                            <input value="@FleetWise.Services.PasswordPolicy.TemporaryPassword" readonly class="us-form-input us-form-input--mono" />
+                            <span class="us-field-hint">Set automatically. User must change it on first login.</span>
                         </div>
                     </div>
                     <div class="us-section-header">Role Assignment</div>

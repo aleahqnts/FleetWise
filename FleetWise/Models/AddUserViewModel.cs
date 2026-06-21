@@ -16,9 +16,6 @@ namespace FleetWise.Models
         [Required, EmailAddress]
         public string Email { get; set; } = string.Empty;
 
-        [Required]
-        public string InitialPassword { get; set; } = string.Empty;
-
         [Required, Range(1, int.MaxValue, ErrorMessage = "Please select a role.")]
         public int RoleId { get; set; }
     }
