@@ -310,7 +310,12 @@ else
         }
         catch (Exception ex)
         {
-            statusMsg = "Couldn't load. Check your connection.";
+            // Show the real failure reason instead of a blanket "network" message — a
+            // deserialization/parse error is NOT a connectivity problem and was being
+            // misreported as one.
+            statusMsg = ex is System.Net.Http.HttpRequestException or System.Threading.Tasks.TaskCanceledException
+                ? "Couldn't load. Check your connection."
+                : $"Couldn't load: {ex.GetType().Name} — {ex.Message}";
             System.Diagnostics.Debug.WriteLine($"[Home.Load] {ex}");
         }
         finally

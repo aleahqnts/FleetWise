@@ -46,4 +46,9 @@ public class Trip : BaseModel
 
     [Column("actual_end_time")]
     public DateTime? ActualEndTime { get; set; }
+
+    // Web added this column (demo telemetry simulator). Mapped here so reads of a trip
+    // row stay in sync with the schema.
+    [Column("is_simulated")]
+    public bool IsSimulated { get; set; }
 }
