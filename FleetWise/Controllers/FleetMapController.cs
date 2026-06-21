@@ -146,6 +146,19 @@ namespace FleetWise.Controllers
             if (routeId.HasValue)
                 activeTrips = activeTrips.Where(t => t.RouteId == routeId.Value).ToList();
 
+            // Scope to the current operational cycle (06:00→06:00). Trips dated today already
+            // span the whole cycle (a night shift is dated its start day); also keep a
+            // yesterday-dated trip ONLY if it was genuinely started (a real overnight run that
+            // hasn't been ended yet). A null-start Active trip dated in the past is a ghost —
+            // junk an outdated build instance left on the shared DB — and must never render
+            // here (this map has no date filter, which is how those ghosts leaked in before).
+            // The TripReaperService deletes them outright; this is the belt-and-suspenders so
+            // they're invisible even in the gap before the next sweep.
+            var opDay = PhClock.OperationalDay.Date;
+            activeTrips = activeTrips.Where(t =>
+                t.Date.Date == opDay
+                || (t.Date.Date == opDay.AddDays(-1) && t.ActualStartTime is not null)).ToList();
+
             var activeTripIds = activeTrips.Select(t => t.TripId).ToHashSet();
 
             var vehiclesResponse = await _supabase.From<Vehicle>().Get();

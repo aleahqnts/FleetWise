@@ -43,6 +43,10 @@ builder.Services.AddSingleton(provider => {
 // useful in every environment (real device data accrues in production too).
 builder.Services.AddHostedService<TelemetryRetentionService>();
 
+// Self-heals the shared DB: deletes ghost trips (Active + no real start + not our sim) that
+// an outdated build instance leaves behind, so they never linger on the map/dashboard.
+builder.Services.AddHostedService<TripReaperService>();
+
 // Simulated live telemetry producer. Registered in every environment but OFF by default —
 // SimulatorControl gates it, and an operator turns it on from the Fleet Map only when a
 // demo is wanted. Turning it off deletes the data it produced.
