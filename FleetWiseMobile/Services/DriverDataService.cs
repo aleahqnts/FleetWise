@@ -49,27 +49,22 @@ public class DriverDataService
 
     public async Task SetAvailabilityAsync(int userId, string status, string? reason = null)
     {
+        // Reads via postgrest-csharp are fine; WRITES go through raw REST like every other
+        // write in this service — postgrest-csharp Insert/Upsert is unreliable on MAUI and
+        // was silently failing here (new drivers could never flip to Available).
         var existing = await _supabase.From<DriverAvailability>()
             .Filter("user_id", Operator.Equals, userId.ToString())
             .Get();
-        var row = existing.Models.FirstOrDefault();
 
-        if (row is not null)
+        if (existing.Models.Any())
         {
-            row.AvailabilityStatus = status;
-            row.Reason = reason;
-            row.UpdatedAt = PhTime.Now;
-            await _supabase.From<DriverAvailability>().Upsert(row);
+            await PatchAsync($"driver_availability?user_id=eq.{userId}",
+                new { availability_status = status, reason, updated_at = PhTime.Now });
         }
         else
         {
-            await _supabase.From<DriverAvailability>().Insert(new DriverAvailability
-            {
-                UserId = userId,
-                AvailabilityStatus = status,
-                Reason = reason,
-                UpdatedAt = PhTime.Now
-            });
+            await PostAsync("driver_availability",
+                new { user_id = userId, availability_status = status, reason, updated_at = PhTime.Now });
         }
     }
 
