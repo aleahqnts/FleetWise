@@ -73,6 +73,26 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// While a user still carries the temp-password flag, lock them to the change page
+// (and logout/static assets) so they can't reach the rest of the dashboard first.
+app.Use(async (context, next) =>
+{
+    var user = context.User;
+    if (user?.Identity?.IsAuthenticated == true && user.HasClaim(PasswordPolicy.MustChangeClaim, "1"))
+    {
+        var path = context.Request.Path.Value ?? "";
+        bool isChangePage = path.StartsWith("/Home/ChangePassword", StringComparison.OrdinalIgnoreCase);
+        bool isLogout = path.StartsWith("/Home/Logout", StringComparison.OrdinalIgnoreCase);
+        bool isStatic = path.Contains('.');   // css/js/images carry file extensions
+        if (!isChangePage && !isLogout && !isStatic)
+        {
+            context.Response.Redirect("/Home/ChangePassword");
+            return;
+        }
+    }
+    await next();
+});
+
 app.MapStaticAssets();
 
 app.MapControllerRoute(

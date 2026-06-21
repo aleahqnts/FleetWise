@@ -95,14 +95,6 @@
             new bootstrap.Modal(document.getElementById(modalIds[openModal])).show();
         }
 
-        // Add User — generate a random initial password
-        document.getElementById('addUserModal').addEventListener('show.bs.modal', function () {
-            const field = document.getElementById('auGeneratedPassword');
-            if (!field.value) {
-                field.value = generatePassword();
-            }
-        });
-
         // Edit User — populate fields from the clicked row's data-* attributes
         document.getElementById('editUserModal').addEventListener('show.bs.modal', function (event) {
             const btn = event.relatedTarget;
@@ -162,15 +154,6 @@
             .catch(function () {
                 tbody.innerHTML = '<tr><td colspan="5" class="us-empty">Failed to load users.</td></tr>';
             });
-    }
-
-    function generatePassword() {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@@#$%';
-        let result = '';
-        for (let i = 0; i < 9; i++) {
-            result += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return result;
     }
 </script>
 

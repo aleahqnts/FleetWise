@@ -9,6 +9,11 @@ namespace FleetWiseMobile.Services;
 public class AuthService
 {
     private const int DriverRoleId = 2;
+
+    // Shared temp password new accounts start on (mirrors web PasswordPolicy). A login that
+    // used exactly this value means the driver hasn't set their own password yet.
+    public const string TemporaryPassword = "@Temp123";
+
     private readonly Supabase.Client _supabase;
 
     public AuthService(Supabase.Client supabase) => _supabase = supabase;

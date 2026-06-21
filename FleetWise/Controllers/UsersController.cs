@@ -78,11 +78,12 @@ namespace FleetWise.Controllers
                 CreatedAt = PhClock.Now,
             };
             var hasher = new PasswordHasher<UserModel>();
-            user.PasswordHash = hasher.HashPassword(user, model.InitialPassword);
+            // Every new account starts on the shared temp password. First login forces a change.
+            user.PasswordHash = hasher.HashPassword(user, PasswordPolicy.TemporaryPassword);
 
             await _supabase.From<UserModel>().Insert(user);
 
-            TempData["Success"] = $"User \"{model.FirstName} {model.LastName}\" was created successfully.";
+            TempData["Success"] = $"User \"{model.FirstName} {model.LastName}\" created. Temporary password: {PasswordPolicy.TemporaryPassword} — they'll be asked to change it on first login.";
             return RedirectToAction(nameof(Index));
         }
 

@@ -39,6 +39,24 @@ namespace FleetWise.Services
                 roleName);
         }
 
+        // Hashes and stores a new password for the given user. Used by the forced
+        // first-login change flow.
+        public async Task UpdatePasswordAsync(int userId, string newPassword)
+        {
+            var resp = await _supabase
+                .From<UserModel>()
+                .Filter("user_id", Postgrest.Constants.Operator.Equals, userId.ToString())
+                .Get();
+
+            var user = resp.Models.FirstOrDefault();
+            if (user is null) return;
+
+            var hasher = new PasswordHasher<UserModel>();
+            user.PasswordHash = hasher.HashPassword(user, newPassword);
+            user.UpdatedAt = PhClock.Now;
+            await _supabase.From<UserModel>().Update(user);
+        }
+
         private static string FormatDisplayName(string? firstName, string? middleName, string? lastName)
         {
             var middleInitial = string.IsNullOrWhiteSpace(middleName) ? "" : $" {middleName.Trim()[0]}.";
