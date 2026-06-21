@@ -3,9 +3,10 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace FleetWise.Models
 {
-    // Backs the Edit Vehicle modal: the editable Vehicle Profile plus the latest Maintenance
-    // Log's Change Status / Verified by. Carries its own dropdown + display data so the partial
-    // is self-sufficient whether it's fetched (GET EditForm) or re-rendered on a failed POST.
+    // Backs the Edit Vehicle modal: the editable Vehicle Profile (Plate Number + Route) only.
+    // The maintenance/incident lifecycle lives entirely in the View modal (resolve / schedule /
+    // out-of-service + audit notes) so there's a single source of truth. Carries its own
+    // dropdown data so the partial is self-sufficient whether fetched or re-rendered on a failed POST.
     public class EditVehicleViewModel
     {
         // Read-only — the PK can't change.
@@ -20,25 +21,7 @@ namespace FleetWise.Models
         [Display(Name = "Route")]
         public int RouteId { get; set; }
 
-        // ── Maintenance Log (latest; optional — a vehicle may have none) ──
-        public int? LogId { get; set; }
-
-        [Display(Name = "Change Status")]
-        public string? MaintenanceStatus { get; set; }
-
-        [StringLength(100)]
-        [Display(Name = "Verified by")]
-        public string? VerifiedBy { get; set; }
-
-        // ── Display-only (rebuilt server-side; not authoritative on POST) ──
-        public bool HasMaintenance { get; set; }
-        public string DateReported { get; set; } = "—";
-        public string IssueSummary { get; set; } = "—";
-        /// <summary>Current maintenance badge: No Issues / Needs Attention / Under Repair.</summary>
-        public string CurrentStatus { get; set; } = "No Issues";
-
         // ── Dropdown data ──
         public List<SelectListItem> RouteOptions { get; set; } = new();
-        public List<string> StatusOptions { get; set; } = new();
     }
 }
