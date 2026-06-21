@@ -104,8 +104,18 @@ namespace FleetWise.Controllers
             // trips is immutable history the dispatcher can't fix, so it must never block the
             // save (that was the false flag). A conflict is reported only when at least one
             // side is editable, and only the editable cells are returned for highlighting.
+            // A resent cell that matches its stored trip exactly (same bus + driver) is
+            // UNCHANGED this save — already-accepted history, not a fresh decision. Treat it
+            // as locked so it can't, on its own, re-raise a conflict the dispatcher already
+            // overrode. Only a genuinely changed/new cell counts as editable.
             var submittedIds = cells.Where(c => !string.IsNullOrEmpty(c.TripId)).Select(c => c.TripId).ToHashSet();
-            var effective = cells.Select(c => (cell: c, locked: false)).ToList();
+            var effective = cells.Select(c =>
+            {
+                bool unchanged = !string.IsNullOrEmpty(c.TripId)
+                    && existingById.TryGetValue(c.TripId, out var et)
+                    && et.VehicleId == c.VehicleId && et.DriverId == c.DriverId;
+                return (cell: c, locked: unchanged);
+            }).ToList();
             effective.AddRange(existing
                 .Where(t => !submittedIds.Contains(t.TripId)
                          && (t.TripStatus == "Active" || t.TripStatus == "Completed"))
@@ -119,8 +129,10 @@ namespace FleetWise.Controllers
                     Date = t.Date.ToString("yyyy-MM-dd"),
                 }, locked: true)));
 
+            // Conflicts are advisory: the dispatcher can override them via the confirmation
+            // modal (req.Override). Only block when they have NOT acknowledged the override.
             var conflicts = FindConflicts(effective);
-            if (conflicts.Count > 0) return BadRequest(new { conflicts });
+            if (!req.Override && conflicts.Count > 0) return BadRequest(new { conflicts });
 
             // Trip ids that survive this save (existing rows kept/updated).
             var keptIds = new HashSet<string>();
