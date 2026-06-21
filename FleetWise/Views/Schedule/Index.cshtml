@@ -120,7 +120,26 @@
             </div>
             <p class="sch-modal-sub">Please fix the cells in red before saving.</p>
             <ul id="sch-conflict-list" class="sch-modal-list"></ul>
-            <button class="sch-modal-btn" onclick="schCloseConflicts()">Got it</button>
+            <div class="sch-modal-actions">
+                <button class="sch-modal-btn" onclick="schCloseConflicts()">Go back &amp; fix</button>
+                <button id="sch-override-btn" class="sch-modal-btn sch-modal-btn-override" style="display:none;" onclick="schConfirmOverride()">Override &amp; save anyway</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Override confirmation (second modal) -->
+    <div id="sch-override-modal" class="sch-modal-overlay" style="display:none;">
+        <div class="sch-modal">
+            <div class="sch-modal-head">
+                <span class="sch-modal-ico">&#9888;</span>
+                <h3>Override these conflicts?</h3>
+            </div>
+            <p class="sch-modal-sub">You are saving a schedule that breaks the booking rules below. This is intentional — confirm only if you mean to.</p>
+            <ul id="sch-override-list" class="sch-modal-list"></ul>
+            <div class="sch-modal-actions">
+                <button class="sch-modal-btn" onclick="schCancelOverride()">Cancel</button>
+                <button class="sch-modal-btn sch-modal-btn-override" onclick="schSave(true)">Yes, override</button>
+            </div>
         </div>
     </div>
 </div>
@@ -171,8 +190,11 @@
     .sch-modal-sub { margin:0 0 12px; font-size:.85rem; color:#6B7C93; }
     .sch-modal-list { margin:0 0 18px; padding-left:18px; display:flex; flex-direction:column; gap:7px; }
     .sch-modal-list li { font-size:.85rem; color:#41505e; line-height:1.4; }
-    .sch-modal-btn { width:100%; border:none; border-radius:10px; padding:11px; font-size:.9rem; font-weight:800; color:#fff; background:#E74C3C; cursor:pointer; }
+    .sch-modal-actions { display:flex; gap:10px; }
+    .sch-modal-btn { flex:1; border:none; border-radius:10px; padding:11px; font-size:.9rem; font-weight:800; color:#fff; background:#E74C3C; cursor:pointer; }
     .sch-modal-btn:hover { background:#cf3d2e; }
+    .sch-modal-btn-override { background:#fff; color:#B7791F; border:1.5px solid #E6B800; }
+    .sch-modal-btn-override:hover { background:#FFF8E6; }
 
     .sch-toast {
         position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px);
@@ -249,16 +271,35 @@
         return `${SCH_MONTHS[m - 1]} ${d}, ${y}`;
     }
 
-    function schShowConflicts(messages) {
+    let schLastConflicts = [];   // remembered for the override confirmation modal
+
+    // allowOverride = soft scheduling rule (double-booking / back-to-back) the dispatcher
+    // may force past. Partial slots (missing bus/driver) pass false -> no override offered.
+    function schShowConflicts(messages, allowOverride) {
+        schLastConflicts = messages;
         const ul = document.getElementById('sch-conflict-list');
         ul.innerHTML = messages.map(m => `<li>${m}</li>`).join('');
+        document.getElementById('sch-override-btn').style.display = allowOverride ? '' : 'none';
         document.getElementById('sch-conflict-modal').style.display = 'flex';
     }
     function schCloseConflicts() {
         document.getElementById('sch-conflict-modal').style.display = 'none';
     }
+    // Step 1 -> 2: leave the conflict list, ask for explicit confirmation.
+    function schConfirmOverride() {
+        document.getElementById('sch-conflict-modal').style.display = 'none';
+        const ul = document.getElementById('sch-override-list');
+        ul.innerHTML = schLastConflicts.map(m => `<li>${m}</li>`).join('');
+        document.getElementById('sch-override-modal').style.display = 'flex';
+    }
+    function schCancelOverride() {
+        document.getElementById('sch-override-modal').style.display = 'none';
+    }
 
-    function schSave() {
+    // force = dispatcher confirmed override -> skip the client-side block and tell the
+    // server to ignore conflicts too.
+    function schSave(force) {
+        document.getElementById('sch-override-modal').style.display = 'none';
         const btn = document.getElementById('sch-save');
         const cells = [];        // payload for server
         const filled = [];       // {el, route, shift, date, veh, drv}
@@ -272,7 +313,10 @@
             const veh = c.querySelector('.sch-veh').value;
             const drv = c.querySelector('.sch-drv').value;
             if (veh && drv) {
-                const rec = { el: c, route: c.dataset.route, shift: c.dataset.shift, date: c.dataset.date, veh, drv };
+                // dirty = changed this session. An untouched persisted cell is already-decided
+                // history (incl. an override already saved) -> must not re-trigger the modal.
+                const rec = { el: c, route: c.dataset.route, shift: c.dataset.shift, date: c.dataset.date, veh, drv,
+                              dirty: c.classList.contains('sch-dirty') };
                 filled.push(rec);
                 cells.push({ tripId: c.dataset.tripid || null, routeId: parseInt(c.dataset.route),
                              shift: c.dataset.shift, date: c.dataset.date, vehicleId: veh, driverId: parseInt(drv) });
@@ -281,7 +325,8 @@
             }
         });
         if (partial) {
-            schShowConflicts(['Each slot needs both a bus and a driver. Pick both or leave it blank.']);
+            // Data integrity, not a scheduling rule -> never overridable.
+            schShowConflicts(['Each slot needs both a bus and a driver. Pick both or leave it blank.'], false);
             return;
         }
 
@@ -293,7 +338,8 @@
                 const seen = {};
                 group.forEach(r => (seen[r[field]] ??= []).push(r));
                 Object.values(seen).forEach(dups => {
-                    if (dups.length > 1) {
+                    // Skip if every colliding cell is untouched (already decided).
+                    if (dups.length > 1 && dups.some(r => r.dirty)) {
                         dups.forEach(r => flag(r.el));
                         const what = field === 'drv' ? 'driver' : 'bus';
                         messages.push(`This ${what} is already booked for the ${dups[0].shift} shift on ${schFmtDate(dups[0].date)}.`);
@@ -310,7 +356,7 @@
             list.forEach(r => map[r.date + '|' + r.shift] = r);
             list.forEach(r => {
                 const next = SHIFT_ADJ[r.shift];
-                if (next && map[r.date + '|' + next]) {
+                if (next && map[r.date + '|' + next] && (r.dirty || map[r.date + '|' + next].dirty)) {
                     flag(r.el); flag(map[r.date + '|' + next].el);
                     messages.push(`This driver is booked for ${r.shift} and ${next} back to back on ${schFmtDate(r.date)}. Give them a break.`);
                 }
@@ -318,18 +364,19 @@
                 if (r.shift === 'Evening') {
                     const tomo = new Date(r.date); tomo.setDate(tomo.getDate() + 1);
                     const tk = tomo.toISOString().slice(0, 10) + '|Morning';
-                    if (map[tk]) { flag(r.el); flag(map[tk].el); messages.push(`This driver ends with Evening on ${schFmtDate(r.date)} and starts Morning the next day. They need rest.`); }
+                    if (map[tk] && (r.dirty || map[tk].dirty)) { flag(r.el); flag(map[tk].el); messages.push(`This driver ends with Evening on ${schFmtDate(r.date)} and starts Morning the next day. They need rest.`); }
                 }
             });
         });
 
-        if (messages.length) { schShowConflicts([...new Set(messages)]); return; }
+        // Soft conflicts -> offer override, unless the dispatcher already confirmed (force).
+        if (!force && messages.length) { schShowConflicts([...new Set(messages)], true); return; }
 
         btn.disabled = true; btn.textContent = 'Saving…';
         fetch('/Schedule/Save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cells, weekStart: SCH_WEEK_START, weekEnd: SCH_WEEK_END })
+            body: JSON.stringify({ cells, weekStart: SCH_WEEK_START, weekEnd: SCH_WEEK_END, override: !!force })
         }).then(async res => {
             if (!res.ok) {
                 // Server rejects with { conflicts: [{ message, cells:[{routeId,shift,date}] }] }.
@@ -346,9 +393,11 @@
                             ).forEach(flag);
                         });
                     });
-                    schShowConflicts([...new Set(msgs)]);
+                    // Server-side backstop conflict (e.g. a locked trip the grid didn't
+                    // resend) -> still overridable.
+                    schShowConflicts([...new Set(msgs)], true);
                 } else {
-                    schShowConflicts([(data && data.message) || 'Save failed. Please review the schedule.']);
+                    schShowConflicts([(data && data.message) || 'Save failed. Please review the schedule.'], false);
                 }
                 return;
             }

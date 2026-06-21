@@ -170,6 +170,13 @@ public class DriverDataService
     {
         var cutoff = PhTime.Now.AddDays(-14);
 
+        // Never surface messages sent before this account existed. Without this a brand
+        // new driver inherits the whole 14-day broadcast/route backlog (broadcasts match
+        // everyone; route msgs match any route they're assigned to). Clamp cutoff up to
+        // the account's creation time.
+        var user = await GetUserAsync(userId);
+        if (user is not null && user.CreatedAt > cutoff) cutoff = user.CreatedAt;
+
         // route ids this driver runs (all-time; small set)
         var trips = await _supabase.From<Trip>()
             .Filter("driver_id", Operator.Equals, userId.ToString())

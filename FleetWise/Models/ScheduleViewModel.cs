@@ -34,6 +34,8 @@ namespace FleetWise.ViewModels
         public List<ScheduleCellInput> Cells { get; set; } = new();
         public string WeekStart { get; set; }
         public string WeekEnd { get; set; }
+        // Dispatcher acknowledged the conflict modal and chose to save anyway.
+        public bool Override { get; set; }
     }
 
     public class ScheduleCellInput
