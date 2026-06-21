@@ -256,10 +256,22 @@
         const btn = document.getElementById('vhActionConfirm');
         btn.textContent = opts.confirmLabel || 'Confirm';
         btn.className = 'vh-btn ' + (opts.danger ? 'vh-btn--danger' : 'vh-btn--primary');
+        btn.disabled = false;
+        let inFlight = false;   // block button-spam -> duplicate POSTs / maintenance logs
         btn.onclick = async function () {
-            const note = ta.value.trim();
-            const maint = document.getElementById('vhActionMaint').checked;
-            await opts.onConfirm(note, maint);
+            if (inFlight) return;
+            inFlight = true;
+            btn.disabled = true;
+            try {
+                const note = ta.value.trim();
+                const maint = document.getElementById('vhActionMaint').checked;
+                await opts.onConfirm(note, maint);
+            } finally {
+                // On success the overlay is hidden by onConfirm; re-enable so a failed
+                // attempt can be retried.
+                inFlight = false;
+                btn.disabled = false;
+            }
         };
         document.getElementById('vhActionModal').style.display = 'flex';
         setTimeout(function () { ta.focus(); }, 50);
