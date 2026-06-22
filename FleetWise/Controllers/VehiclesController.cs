@@ -153,15 +153,30 @@ namespace FleetWise.Controllers
                 vm.ReportedBy = DriverName(driver, checklist.DriverId);
                 vm.TimeOfReport = checklist.SubmittedAt.ToString("MM/dd/yy hh:mm tt");
                 vm.Issue = DeriveInspectionIssue(checklist);
-                vm.Remarks = checklist.Notes;
+                vm.InspectionSections = DeriveInspectionSections(checklist);
                 vm.InspectionBadge = DeriveInspectionBadge(checklist.ChecklistStatus);
+
+                // The inspection flag is the driver's report — resolving maintenance never
+                // edits the checklist, so a fixed bus kept showing the old red "Flagged"
+                // badge + failed-item list forever. Once every incident is closed (and the
+                // bus is back in service), the flag has been addressed: clear it. The
+                // maintenance timeline still preserves the history.
+                // Require a closed incident (logs exist, none open, not grounded): a failed
+                // checklist with NO maintenance log was never resolved -> keep it flagged.
+                bool hadIncident = logs.Count > 0;
+                bool hasOpenIncident = logs.Any(l => l.ResolvedAt == null) || vehicle.OutOfService;
+                if (hadIncident && !hasOpenIncident && vm.InspectionBadge == "Flagged")
+                {
+                    vm.InspectionBadge = "Resolved";
+                    vm.Issue = "Resolved — issues addressed";
+                    vm.InspectionSections = new();
+                }
             }
 
             vm.CurrentStatus = DeriveMaintenance(logs);
             if (logs.Count > 0)
             {
                 vm.HasMaintenance = true;
-                vm.IssueSummary = DeriveIssueSummary(logs[0]);
                 vm.MaintenanceEntries = logs.Select(FormatMaintenanceEntry).ToList();
             }
 
@@ -181,15 +196,24 @@ namespace FleetWise.Controllers
                 var notesResp = await _supabase.From<MaintenanceNote>()
                     .Order("created_at", Postgrest.Constants.Ordering.Descending)
                     .Get();
-                vm.Notes = notesResp.Models
+                // Group by log_id so each incident's lifecycle (flagged → … → resolved) is one
+                // block. Newest incident first; newest note first within each.
+                vm.IncidentThreads = notesResp.Models
                     .Where(n => logIds.Contains(n.LogId))
-                    .Select(n => new VehicleNoteViewModel
+                    .GroupBy(n => n.LogId)
+                    .OrderByDescending(g => g.Max(n => n.CreatedAt))
+                    .Select(g => new VehicleIncidentThreadViewModel
                     {
-                        Action = string.IsNullOrWhiteSpace(n.Action) ? "Comment" : n.Action,
-                        Note = n.Note ?? "",
-                        AuthorName = string.IsNullOrWhiteSpace(n.AuthorName) ? "—" : n.AuthorName,
-                        // Stored PH wall-clock digits tagged Utc -> postgrest reads +8; normalize back.
-                        When = n.CreatedAt.ToUniversalTime().ToString("MM/dd/yy hh:mm tt"),
+                        LogId = g.Key,
+                        Notes = g.OrderByDescending(n => n.CreatedAt)
+                            .Select(n => new VehicleNoteViewModel
+                            {
+                                Action = string.IsNullOrWhiteSpace(n.Action) ? "Comment" : n.Action,
+                                Note = n.Note ?? "",
+                                AuthorName = string.IsNullOrWhiteSpace(n.AuthorName) ? "—" : n.AuthorName,
+                                // Stored PH wall-clock digits tagged Utc -> postgrest reads +8; normalize back.
+                                When = n.CreatedAt.ToUniversalTime().ToString("MM/dd/yy hh:mm tt"),
+                            }).ToList()
                     }).ToList();
             }
 
@@ -264,7 +288,8 @@ namespace FleetWise.Controllers
             return Ok();
         }
 
-        // Resolve the incident -> close the log, clear the flag + out-of-service, record it.
+        // Resolve the incident -> close ALL of the bus's open logs, clear the flag +
+        // out-of-service, record it.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ResolveIncident(int logId, string? note)
@@ -274,24 +299,43 @@ namespace FleetWise.Controllers
             var logResp = await _supabase.From<MaintenanceLog>()
                 .Filter("log_id", Postgrest.Constants.Operator.Equals, logId.ToString())
                 .Get();
-            var log = logResp.Models.FirstOrDefault();
-            if (log is null) return NotFound();
+            var clicked = logResp.Models.FirstOrDefault();
+            if (clicked is null) return NotFound();
 
             var (uid, uname) = CurrentUser();
+            var vehicleId = clicked.VehicleId;
 
-            if (log.ResolvedAt is null)
+            // Close EVERY unresolved log on this vehicle, not just the clicked one — a bus can
+            // hold more than one open incident, and "Return to Ready" means no open issues.
+            if (!string.IsNullOrEmpty(vehicleId))
             {
-                log.ResolvedAt = PhClock.Now;
-                log.MaintenanceStatus = "No Issues";
-                if (string.IsNullOrWhiteSpace(log.VerifiedBy)) log.VerifiedBy = uname;
-                await _supabase.From<MaintenanceLog>().Update(log);
+                var open = (await _supabase.From<MaintenanceLog>()
+                        .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
+                        .Get()).Models
+                    .Where(l => l.ResolvedAt == null)
+                    .ToList();
+
+                foreach (var l in open)
+                {
+                    l.ResolvedAt = PhClock.Now;
+                    l.MaintenanceStatus = "No Issues";
+                    if (string.IsNullOrWhiteSpace(l.VerifiedBy)) l.VerifiedBy = uname;
+                    await _supabase.From<MaintenanceLog>().Update(l);
+                }
+            }
+            else if (clicked.ResolvedAt is null)
+            {
+                clicked.ResolvedAt = PhClock.Now;
+                clicked.MaintenanceStatus = "No Issues";
+                if (string.IsNullOrWhiteSpace(clicked.VerifiedBy)) clicked.VerifiedBy = uname;
+                await _supabase.From<MaintenanceLog>().Update(clicked);
             }
 
             // Un-flag + un-ground the vehicle.
-            if (!string.IsNullOrEmpty(log.VehicleId))
+            if (!string.IsNullOrEmpty(vehicleId))
             {
                 var vResp = await _supabase.From<Vehicle>()
-                    .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, log.VehicleId)
+                    .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
                     .Get();
                 var vehicle = vResp.Models.FirstOrDefault();
                 if (vehicle != null)
@@ -479,14 +523,26 @@ namespace FleetWise.Controllers
             var (vehicles, routes, maintenance) = await LoadVehicleDataAsync();
             var routeNames = routes.ToDictionary(r => r.RouteId, r => r.RouteName);
 
+            // A bus is "On Trip" only when it actually has an Active trip right now. The stored
+            // vehicle_status column is volatile — set on trip start, only cleared by the mobile
+            // end-trip — so a trip that's removed/rolled-over/finished off-app leaves it stuck
+            // "On Trip". Deriving from live trips (like Dispatch + FleetMap already do) self-heals
+            // that stale state instead of trusting the column.
+            var activeVehicleIds = (await _supabase.From<Trip>()
+                    .Filter("trip_status", Postgrest.Constants.Operator.Equals, "Active")
+                    .Get()).Models
+                .Where(t => t.VehicleId != null)
+                .Select(t => t.VehicleId)
+                .ToHashSet();
+
             // Roadworthiness wins the registry's Status: an open incident shows as "Flagged"
-            // (persistent, can't be erased by the next shift), otherwise the operational
-            // status — and a stale vehicle_status of "Flagged" with no open incident is read
-            // as Ready (the flag was resolved).
+            // (persistent), otherwise On Trip (live) or the bus's non-trip operational status.
+            // A stale "Flagged"/"On Trip" stored value with no backing incident/trip reads as Ready.
             string RoadStatus(Vehicle v) =>
                 v.OutOfService ? "Out of Service"
                 : maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues" ? "Flagged"
-                : DisplayStatus(string.Equals(v.VehicleStatus, "Flagged", OIC) ? "Ready to Deploy" : v.VehicleStatus);
+                : activeVehicleIds.Contains(v.VehicleId) ? "On Trip"
+                : NonTripStatus(v.VehicleStatus);
 
             IEnumerable<Vehicle> filtered = vehicles;
 
@@ -676,23 +732,50 @@ namespace FleetWise.Controllers
         private static string RephraseIssue(string issue) =>
             IssuePhrase.TryGetValue(issue?.Trim() ?? "", out var p) ? p : issue;
 
-        // "Issue Summary" for the maintenance section: the latest log's issue_details list,
-        // falling back to its remarks, then a dash.
-        private static string DeriveIssueSummary(MaintenanceLog latest)
+        // Failed checklist items (rephrased) grouped by section — the collapsible flag detail
+        // under the inspection's "Issue" areas. Only sections with a failure appear.
+        private static List<InspectionSectionViewModel> DeriveInspectionSections(BusChecklist c)
         {
-            if (latest.IssueDetails?.Issues is { Count: > 0 } issues)
-                return string.Join(", ", issues.Select(RephraseIssue));
-            return string.IsNullOrWhiteSpace(latest.Remarks) ? "—" : latest.Remarks;
+            var sections = new (string Name, Dictionary<string, string> Map)[]
+            {
+                ("Exterior Inspection", c.ExteriorInspection),
+                ("Engine Compartment", c.EngineCompartment),
+                ("Interior Inspection", c.InteriorInspection),
+                ("Brake & Safety Systems", c.BrakeSafety),
+                ("Passenger & Fare Systems", c.PassengerSystems),
+            };
+
+            var result = new List<InspectionSectionViewModel>();
+            foreach (var s in sections)
+            {
+                if (s.Map is null) continue;
+                var failed = s.Map
+                    .Where(kv => !string.Equals(kv.Value?.Trim(), "Pass", OIC))
+                    .Select(kv => RephraseIssue(kv.Key))
+                    .ToList();
+                if (failed.Count > 0)
+                    result.Add(new InspectionSectionViewModel { Section = s.Name, Items = failed });
+            }
+            return result;
         }
 
-        // One timeline line per log: "MM/dd/yy – ML-## – Status" (Resolved once resolved_at is set).
-        private static string FormatMaintenanceEntry(MaintenanceLog log)
+        // One timeline line per log: when, WHAT the issue was (plain words), and the outcome.
+        // The opaque "ML-##" code is dropped — it told the operator nothing.
+        private static MaintenanceEntryViewModel FormatMaintenanceEntry(MaintenanceLog log)
         {
-            var date = (log.ResolvedAt ?? log.CreatedAt).ToString("MM/dd/yy");
-            var status = log.ResolvedAt != null
-                ? "Resolved"
-                : (string.IsNullOrWhiteSpace(log.MaintenanceStatus) ? "Open" : log.MaintenanceStatus.Trim());
-            return $"{date} – ML-{log.LogId:D2} – {status}";
+            var summary = log.IssueDetails?.Issues is { Count: > 0 } issues
+                ? string.Join(", ", issues.Select(RephraseIssue))
+                : (string.IsNullOrWhiteSpace(log.Remarks) ? "Maintenance" : log.Remarks.Trim());
+
+            return new MaintenanceEntryViewModel
+            {
+                Date = (log.ResolvedAt ?? log.CreatedAt).ToString("MM/dd/yy"),
+                Summary = summary,
+                Status = log.ResolvedAt != null
+                    ? "Resolved"
+                    : (string.IsNullOrWhiteSpace(log.MaintenanceStatus) ? "Open" : log.MaintenanceStatus.Trim()),
+                IsResolved = log.ResolvedAt != null,
+            };
         }
 
         private static string DriverName(UserModel driver, int driverId)
@@ -701,6 +784,17 @@ namespace FleetWise.Controllers
             var name = string.Join(" ",
                 new[] { driver.FirstName, driver.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
             return string.IsNullOrWhiteSpace(name) ? $"Driver #{driverId}" : name;
+        }
+
+        // The bus's status when it has NO live Active trip: a stored "On Trip"/"Flagged" here is
+        // stale (trip ended/removed or flag resolved) and collapses to Ready; everything else
+        // maps through DisplayStatus.
+        private static string NonTripStatus(string? vehicleStatus)
+        {
+            var s = (vehicleStatus ?? "").Trim();
+            if (s.Equals("Flagged", OIC) || s.Equals("OnTrip", OIC) || s.Equals("On Trip", OIC) || s.Equals("Active", OIC))
+                return "Ready to Deploy";
+            return DisplayStatus(s);
         }
 
         // Normalize the stored vehicle_status to the registry's display labels. Matches

@@ -8,6 +8,7 @@
     {
         "Flagged" => "vh-badge--flagged",
         "Passed" => "vh-badge--ok",
+        "Resolved" => "vh-badge--ok",
         "Pending" => "vh-badge--pending",
         _ => "vh-badge--default"
     };
@@ -48,8 +49,24 @@
             <div class="vh-detail-row"><strong>Reported By:</strong> @Model.ReportedBy</div>
             <div class="vh-detail-row"><strong>Time of Report:</strong> @Model.TimeOfReport</div>
             <div class="vh-detail-row"><strong>Issue:</strong> @Model.Issue</div>
-            <div class="vh-detail-row"><strong>Remarks:</strong></div>
-            <div class="vh-remarks">@(string.IsNullOrWhiteSpace(Model.Remarks) ? "No remarks." : Model.Remarks)</div>
+            @if (Model.InspectionSections.Count > 0)
+            {
+                <details class="vh-flag-details">
+                    <summary>Flagged items (@Model.InspectionSections.Sum(s => s.Items.Count))</summary>
+                    @foreach (var grp in Model.InspectionSections)
+                    {
+                        <div class="vh-flag-group">
+                            <div class="vh-flag-group-label">@grp.Section</div>
+                            <ul class="vh-flag-list">
+                                @foreach (var item in grp.Items)
+                                {
+                                    <li>@item</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </details>
+            }
         }
         else
         {
@@ -69,11 +86,16 @@
         <div class="vh-detail-row"><strong>Current Status:</strong> @Model.CurrentStatus</div>
         @if (Model.HasMaintenance)
         {
-            <div class="vh-detail-row"><strong>Issue Summary:</strong> @Model.IssueSummary</div>
             <ul class="vh-timeline">
                 @foreach (var entry in Model.MaintenanceEntries)
                 {
-                    <li>@entry</li>
+                    <li>
+                        <div class="vh-tl-top">
+                            <span class="vh-tl-summary">@entry.Summary</span>
+                            <span class="vh-tl-status @(entry.IsResolved ? "vh-tl--resolved" : "vh-tl--open")">@entry.Status</span>
+                        </div>
+                        <span class="vh-tl-date">@entry.Date</span>
+                    </li>
                 }
             </ul>
         }
@@ -84,7 +106,7 @@
     </div>
 
     <!-- Flag Review / Actions -->
-    @if (Model.OpenLogId.HasValue || Model.OutOfService || Model.Notes.Count > 0)
+    @if (Model.OpenLogId.HasValue || Model.OutOfService || Model.IncidentThreads.Count > 0)
     {
         <div class="vh-section-header">
             <span>Flag Review</span>
@@ -126,22 +148,27 @@
                 </div>
             }
 
-            @if (Model.Notes.Count > 0)
+            @if (Model.IncidentThreads.Count > 0)
             {
                 <div class="vh-thread-label">History</div>
-                <ul class="vh-thread">
-                    @foreach (var n in Model.Notes)
-                    {
-                        <li>
-                            <span class="vh-thread-action">@n.Action</span>
-                            @if (!string.IsNullOrWhiteSpace(n.Note))
+                @foreach (var thread in Model.IncidentThreads)
+                {
+                    <div class="vh-thread-group">
+                        <ul class="vh-thread">
+                            @foreach (var n in thread.Notes)
                             {
-                                <span class="vh-thread-note">@n.Note</span>
+                                <li>
+                                    <span class="vh-thread-action">@n.Action</span>
+                                    @if (!string.IsNullOrWhiteSpace(n.Note))
+                                    {
+                                        <span class="vh-thread-note">@n.Note</span>
+                                    }
+                                    <span class="vh-thread-meta">@n.AuthorName · @n.When</span>
+                                </li>
                             }
-                            <span class="vh-thread-meta">@n.AuthorName · @n.When</span>
-                        </li>
-                    }
-                </ul>
+                        </ul>
+                    </div>
+                }
             }
             else
             {
