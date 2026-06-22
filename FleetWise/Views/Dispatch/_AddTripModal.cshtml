@@ -92,7 +92,44 @@
     </div>
 </div>
 
+<!-- Override confirmation (step 2): shown when CreateTrip reports an overridable conflict -->
+<div id="atm-override-modal" class="atm-overlay" style="display:none; z-index:1100;">
+    <div class="atm-dialog" style="max-width:430px;">
+        <div class="atm-header">
+            <h2 class="atm-title">Override schedule conflict?</h2>
+            <button class="atm-close" onclick="atmCancelOverride()">&times;</button>
+        </div>
+        <div class="atm-section atm-section--last" style="gap:10px;">
+            <div id="atm-override-msg" class="atm-override-msg"></div>
+            <p style="margin:0; font-size:0.88rem; color:#4A5568;">
+                Create this trip anyway? This double-books against the rule above.
+            </p>
+        </div>
+        <div class="atm-footer">
+            <button class="atm-btn-cancel" onclick="atmCancelOverride()">Cancel</button>
+            <button class="atm-btn-create atm-btn-override" onclick="atmConfirmOverride()">Yes, override</button>
+        </div>
+    </div>
+</div>
+
 <style>
+    .atm-override-msg {
+        background: #FFF8E1;
+        border: 1px solid #F0D88A;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.86rem;
+        color: #8A6D1B;
+    }
+
+    .atm-btn-override {
+        background: #E6B800;
+    }
+
+        .atm-btn-override:hover {
+            background: #CFA600;
+        }
+
     .atm-overlay {
         position: fixed;
         inset: 0;
@@ -488,7 +525,11 @@
     }
 
     // ── Submit ────────────────────────────────────────────────────────
-    async function submitAddTrip() {
+    // Holds the payload of an attempt blocked by an overridable conflict, so the
+    // override confirmation can re-send it with override:true.
+    let _atmPending = null;
+
+    async function submitAddTrip(force) {
         const shiftType  = document.getElementById('atm-shift-type').value;
         const shiftTime  = document.getElementById('atm-shift-time').value;   // "HH:mm|HH:mm"
         const routeId    = parseInt(document.getElementById('atm-route').value);
@@ -501,6 +542,7 @@
         }
 
         const [startTime, endTime] = shiftTime.split('|');
+        const payload = { shiftType, shiftStartTime: startTime, shiftEndTime: endTime, routeId, vehicleId, driverId, override: !!force };
 
         const btn = document.getElementById('atm-create-btn');
         btn.disabled = true;
@@ -511,8 +553,16 @@
             const res = await fetch('/Dispatch/CreateTrip', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ shiftType, shiftStartTime: startTime, shiftEndTime: endTime, routeId, vehicleId, driverId })
+                body: JSON.stringify(payload)
             });
+
+            // 409 = overridable schedule conflict -> let the dispatcher confirm + force.
+            if (res.status === 409) {
+                const data = await res.json().catch(() => ({}));
+                _atmPending = payload;
+                showAtmOverride(data.conflict || 'This assignment conflicts with an existing booking.');
+                return;
+            }
 
             if (!res.ok) {
                 closeAddTripModal();
@@ -529,5 +579,23 @@
             document.getElementById('atm-create-label').style.display  = 'inline';
             document.getElementById('atm-create-spinner').style.display = 'none';
         }
+    }
+
+    // ── Override confirmation (step 2) ────────────────────────────────
+    function showAtmOverride(message) {
+        document.getElementById('atm-override-msg').textContent = message;
+        document.getElementById('atm-override-modal').style.display = 'flex';
+    }
+
+    function atmCancelOverride() {
+        document.getElementById('atm-override-modal').style.display = 'none';
+        _atmPending = null;   // dispatcher backed out -> drop the blocked attempt
+    }
+
+    function atmConfirmOverride() {
+        document.getElementById('atm-override-modal').style.display = 'none';
+        if (!_atmPending) return;
+        _atmPending = null;
+        submitAddTrip(true);   // re-send with override:true (skips the conflict gate)
     }
 </script>

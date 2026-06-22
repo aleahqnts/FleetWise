@@ -40,6 +40,8 @@ namespace FleetWise.ViewModels
         public int RouteId { get; set; }
         public string VehicleId { get; set; }
         public int DriverId { get; set; }
+        // Dispatcher acknowledged the conflict and chose to create the trip anyway.
+        public bool Override { get; set; }
     }
 
     // Posted by POST /Dispatch/ReassignTrip
@@ -48,6 +50,15 @@ namespace FleetWise.ViewModels
         public string TripId { get; set; }
         public string VehicleId { get; set; }   // null = keep existing
         public int? DriverId { get; set; }   // null = keep existing
+        // Dispatcher acknowledged the conflict and chose to save the reassignment anyway.
+        public bool Override { get; set; }
+    }
+
+    // Posted by POST /Dispatch/RemoveTrip — clearing both bus + driver in Reassign deletes
+    // the trip (mirrors clearing a cell in the schedule planner).
+    public class RemoveTripRequest
+    {
+        public string TripId { get; set; }
     }
 
     // Posted by POST /Dispatch/BroadcastMessage
