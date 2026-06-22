@@ -251,9 +251,12 @@ namespace FleetWise.Controllers
                     (u.EmailAddress?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false));
             }
 
+            // Deterministic, grouped order: by role (Admin, Dispatcher, Driver…), then
+            // alphabetically by name. Case-insensitive so casing/nulls don't scramble it.
             var items = users
-                .OrderBy(u => u.LastName)
-                .ThenBy(u => u.FirstName)
+                .OrderBy(u => roleNames.TryGetValue(u.RoleId, out var rn) ? rn : "￿", StringComparer.OrdinalIgnoreCase)
+                .ThenBy(u => u.LastName ?? "", StringComparer.OrdinalIgnoreCase)
+                .ThenBy(u => u.FirstName ?? "", StringComparer.OrdinalIgnoreCase)
                 .Select(u => new UserListItemViewModel
                 {
                     UserId = u.UserId,
