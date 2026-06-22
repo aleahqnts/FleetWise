@@ -67,7 +67,8 @@ namespace FleetWise.Controllers
                 userId,
                 User.FindFirstValue(ClaimTypes.Name) ?? "",
                 User.FindFirstValue(ClaimTypes.Email) ?? "",
-                User.FindFirstValue(ClaimTypes.Role) ?? "");
+                User.FindFirstValue(ClaimTypes.Role) ?? "",
+                User.FindAll("perm").Select(c => c.Value).ToList());
             await SignInUserAsync(authed, mustChange: false);
 
             TempData["Success"] = "Password updated. Welcome aboard!";
@@ -85,6 +86,11 @@ namespace FleetWise.Controllers
             };
             if (mustChange)
                 claims.Add(new Claim(PasswordPolicy.MustChangeClaim, "1"));
+
+            // One "perm" claim per web section the role may see — read by the sidebar (hide
+            // links) and RequirePermissionAttribute (block direct access).
+            foreach (var p in user.Permissions ?? new List<string>())
+                claims.Add(new Claim("perm", p));
 
             var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
             await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);

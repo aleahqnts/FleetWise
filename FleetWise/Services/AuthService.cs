@@ -5,6 +5,10 @@ namespace FleetWise.Services
 {
     public class AuthService
     {
+        // Drivers (role_id = 2) belong to the RouteSync mobile app, never the web dashboard —
+        // mirrors the mobile AuthService, which only admits this role.
+        private const int DriverRoleId = 2;
+
         private readonly Supabase.Client _supabase;
 
         public AuthService(Supabase.Client supabase) => _supabase = supabase;
@@ -20,6 +24,10 @@ namespace FleetWise.Services
             if (user is null || user.PasswordHash is null || user.AccountStatus != "Activated")
                 return null;
 
+            // Web dashboard is for operators (admin/dispatcher) only — drivers use the app.
+            if (user.RoleId == DriverRoleId)
+                return null;
+
             var hasher = new PasswordHasher<UserModel>();
             var result = hasher.VerifyHashedPassword(user, user.PasswordHash, password);
             if (result == PasswordVerificationResult.Failed)
@@ -30,13 +38,18 @@ namespace FleetWise.Services
                 .Filter("role_id", Postgrest.Constants.Operator.Equals, user.RoleId.ToString())
                 .Get();
 
-            var roleName = rolesResponse.Models.FirstOrDefault()?.RoleName ?? "Unknown";
+            var role = rolesResponse.Models.FirstOrDefault();
+            var roleName = role?.RoleName ?? "Unknown";
+            // The web-dashboard sections this role may see (e.g. "dashboard","routes","reports").
+            var permissions = role?.WebPermissions?
+                .Where(kv => kv.Value).Select(kv => kv.Key).ToList() ?? new List<string>();
 
             return new AuthenticatedUser(
                 user.UserId,
                 FormatDisplayName(user.FirstName, user.MiddleName, user.LastName),
                 user.EmailAddress ?? "",
-                roleName);
+                roleName,
+                permissions);
         }
 
         // Hashes and stores a new password for the given user. Used by the forced
@@ -64,5 +77,5 @@ namespace FleetWise.Services
         }
     }
 
-    public record AuthenticatedUser(int UserId, string FullName, string Email, string RoleName);
+    public record AuthenticatedUser(int UserId, string FullName, string Email, string RoleName, List<string> Permissions);
 }

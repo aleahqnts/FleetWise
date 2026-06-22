@@ -9,6 +9,7 @@ using static Postgrest.Constants;
 namespace FleetWise.Controllers
 {
     [Authorize]
+    [RequirePermission("routes")]
     public class DispatchController : Controller
     {
         private readonly Supabase.Client _supabase;
