@@ -474,8 +474,14 @@ namespace FleetWise.Controllers
              || !TimeSpan.TryParse(req.ShiftEndTime, out var endTime))
                 return BadRequest("Invalid shift times.");
 
-            var conflict = await ValidateAssignmentAsync(PhClock.OperationalDay, req.ShiftType, req.VehicleId, req.DriverId, null);
-            if (conflict != null) return BadRequest(conflict);
+            // Soft scheduling conflicts (double-booking, back-to-back) are overridable: a
+            // dispatcher who confirms the warning can force the trip. 409 = overridable
+            // conflict (distinct from a 400 validation error, which the client can't bypass).
+            if (!req.Override)
+            {
+                var conflict = await ValidateAssignmentAsync(PhClock.OperationalDay, req.ShiftType, req.VehicleId, req.DriverId, null);
+                if (conflict != null) return Conflict(new { conflict });
+            }
 
             var newTrip = new Trip
             {
@@ -609,8 +615,15 @@ namespace FleetWise.Controllers
             if (req.DriverId.HasValue && req.DriverId.Value > 0)
                 trip.DriverId = req.DriverId.Value;
 
-            var conflict = await ValidateAssignmentAsync(trip.Date, trip.ShiftType, trip.VehicleId, trip.DriverId, trip.TripId);
-            if (conflict != null) return BadRequest(conflict);
+            // Overridable conflict gate (mirrors CreateTrip). Without this an already-
+            // double-booked trip can never be saved — reassign always re-validated its own
+            // pre-existing conflict, so even editing the bus alone was blocked. 409 lets the
+            // dispatcher confirm + force.
+            if (!req.Override)
+            {
+                var conflict = await ValidateAssignmentAsync(trip.Date, trip.ShiftType, trip.VehicleId, trip.DriverId, trip.TripId);
+                if (conflict != null) return Conflict(new { conflict });
+            }
 
             // Use Update with filter to avoid inserting a duplicate row
             await _supabase.From<Trip>()
@@ -622,6 +635,31 @@ namespace FleetWise.Controllers
             await SyncTripStatuses();
 
             return Ok(new { tripId = trip.TripId });
+        }
+
+        // ── POST remove trip ──────────────────────────────────────────
+        // Clearing both bus + driver in the Reassign modal removes the trip, exactly like
+        // clearing a cell in the schedule planner. Never deletes a started/finished trip.
+        [HttpPost]
+        public async Task<IActionResult> RemoveTrip([FromBody] RemoveTripRequest req)
+        {
+            if (req == null || string.IsNullOrEmpty(req.TripId))
+                return BadRequest("Trip ID is required.");
+
+            var tripResp = await _supabase.From<Trip>()
+                .Filter("trip_id", Operator.Equals, req.TripId)
+                .Get();
+            var trip = tripResp.Models.FirstOrDefault();
+            if (trip == null) return NotFound("Trip not found.");
+
+            if (trip.TripStatus == "Active" || trip.TripStatus == "Completed")
+                return BadRequest("This trip has already started or completed and can't be removed.");
+
+            await _supabase.From<Trip>()
+                .Filter("trip_id", Operator.Equals, req.TripId)
+                .Delete();
+
+            return Ok();
         }
 
         // ── GET driver count (all routes, or filtered by routeId) ─────

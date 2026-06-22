@@ -93,7 +93,72 @@
     </div>
 </div>
 
+<!-- Override confirmation (step 2): shown when ReassignTrip reports an overridable conflict -->
+<div id="rtm-override-modal" class="rtm-overlay" style="display:none; z-index:1200;">
+    <div class="rtm-dialog" style="max-width:430px;">
+        <div class="rtm-header">
+            <h2 class="rtm-title">Override schedule conflict?</h2>
+            <button class="rtm-close" onclick="rtmCancelOverride()">&times;</button>
+        </div>
+        <div class="rtm-section rtm-section--last" style="gap:10px;">
+            <div id="rtm-override-msg" class="rtm-override-msg"></div>
+            <p style="margin:0; font-size:0.88rem; color:#4A5568;">
+                Save this reassignment anyway? It breaks the rule above.
+            </p>
+        </div>
+        <div class="rtm-footer">
+            <button class="rtm-btn-cancel" onclick="rtmCancelOverride()">Cancel</button>
+            <button class="rtm-btn-save rtm-btn-override" onclick="rtmConfirmOverride()">Yes, override</button>
+        </div>
+    </div>
+</div>
+
+<!-- Remove confirmation: shown when both bus AND driver are cleared (delete the trip) -->
+<div id="rtm-remove-modal" class="rtm-overlay" style="display:none; z-index:1200;">
+    <div class="rtm-dialog" style="max-width:430px;">
+        <div class="rtm-header">
+            <h2 class="rtm-title">Remove this trip?</h2>
+            <button class="rtm-close" onclick="rtmCancelRemove()">&times;</button>
+        </div>
+        <div class="rtm-section rtm-section--last">
+            <p style="margin:0; font-size:0.9rem; color:#4A5568;">
+                You cleared both the bus and driver. This deletes the trip from the schedule.
+                This can't be undone.
+            </p>
+        </div>
+        <div class="rtm-footer">
+            <button class="rtm-btn-cancel" onclick="rtmCancelRemove()">Cancel</button>
+            <button class="rtm-btn-save rtm-btn-danger" onclick="rtmConfirmRemove()">Remove trip</button>
+        </div>
+    </div>
+</div>
+
 <style>
+    .rtm-btn-danger {
+        background: #E74C3C;
+    }
+
+        .rtm-btn-danger:hover:not(:disabled) {
+            background: #CF3F2E;
+        }
+
+    .rtm-override-msg {
+        background: #FFF8E1;
+        border: 1px solid #F0D88A;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.86rem;
+        color: #8A6D1B;
+    }
+
+    .rtm-btn-override {
+        background: #E6B800;
+    }
+
+        .rtm-btn-override:hover:not(:disabled) {
+            background: #CFA600;
+        }
+
     /* ── Overlay & dialog ───────────────────────────────────── */
     .rtm-overlay {
         position: fixed;
@@ -494,15 +559,22 @@
         }
 
         // ── Submit ────────────────────────────────────────────
-        window.submitReassign = async function () {
+        // Holds a reassignment blocked by an overridable conflict, so the override
+        // confirmation can re-send it with override:true.
+        let _rtmPending = null;
+
+        window.submitReassign = async function (force) {
+            // Both explicitly cleared -> remove the trip (mirrors clearing a schedule cell).
+            if (!vehicleSel.value && !driverSel.value) {
+                document.getElementById('rtm-remove-modal').style.display = 'flex';
+                return;
+            }
+
             // Use selected value, falling back to the current assignment
             const vehicleId = vehicleSel.value || _rtmOptions.tripInfo.currentVehicleId;
             const driverId  = parseInt(driverSel.value) || _rtmOptions.tripInfo.currentDriverId;
 
-            if (!vehicleId && !driverId) {
-                dpShowMsg(['Please select a vehicle and/or driver to reassign.'], 'Nothing to change');
-                return;
-            }
+            const payload = { tripId: _rtmTripId, vehicleId: vehicleId || null, driverId, override: !!force };
 
             saveBtn.disabled = true;
             document.getElementById('rtm-save-label').style.display  = 'none';
@@ -512,12 +584,16 @@
                 const res = await fetch('/Dispatch/ReassignTrip', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        tripId:    _rtmTripId,
-                        vehicleId: vehicleId || null,
-                        driverId:  driverId
-                    })
+                    body: JSON.stringify(payload)
                 });
+
+                // 409 = overridable schedule conflict -> let the dispatcher confirm + force.
+                if (res.status === 409) {
+                    const data = await res.json().catch(() => ({}));
+                    _rtmPending = payload;
+                    rtmShowOverride(data.conflict || 'This assignment conflicts with an existing booking.');
+                    return;
+                }
 
                 if (!res.ok) { closeReassignModal(); dpShowMsg([await res.text() || 'Failed to reassign trip. Please try again.']); return; }
 
@@ -526,6 +602,57 @@
 
             } catch {
                 dpShowMsg(['Failed to reassign trip. Please try again.']);
+            } finally {
+                saveBtn.disabled = false;
+                document.getElementById('rtm-save-label').style.display  = 'inline';
+                document.getElementById('rtm-save-spinner').style.display = 'none';
+            }
+        };
+
+        // ── Override confirmation (step 2) ────────────────────
+        function rtmShowOverride(message) {
+            document.getElementById('rtm-override-msg').textContent = message;
+            document.getElementById('rtm-override-modal').style.display = 'flex';
+        }
+
+        window.rtmCancelOverride = function () {
+            document.getElementById('rtm-override-modal').style.display = 'none';
+            _rtmPending = null;   // dispatcher backed out -> drop the blocked attempt
+        };
+
+        window.rtmConfirmOverride = function () {
+            document.getElementById('rtm-override-modal').style.display = 'none';
+            if (!_rtmPending) return;
+            _rtmPending = null;
+            submitReassign(true);   // re-send with override:true (skips the conflict gate)
+        };
+
+        // ── Remove trip (both bus + driver cleared) ───────────
+        window.rtmCancelRemove = function () {
+            document.getElementById('rtm-remove-modal').style.display = 'none';
+        };
+
+        window.rtmConfirmRemove = async function () {
+            document.getElementById('rtm-remove-modal').style.display = 'none';
+
+            saveBtn.disabled = true;
+            document.getElementById('rtm-save-label').style.display  = 'none';
+            document.getElementById('rtm-save-spinner').style.display = 'inline-flex';
+
+            try {
+                const res = await fetch('/Dispatch/RemoveTrip', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tripId: _rtmTripId })
+                });
+
+                if (!res.ok) { closeReassignModal(); dpShowMsg([await res.text() || 'Failed to remove trip. Please try again.']); return; }
+
+                closeReassignModal();
+                window.location.reload();
+
+            } catch {
+                dpShowMsg(['Failed to remove trip. Please try again.']);
             } finally {
                 saveBtn.disabled = false;
                 document.getElementById('rtm-save-label').style.display  = 'inline';

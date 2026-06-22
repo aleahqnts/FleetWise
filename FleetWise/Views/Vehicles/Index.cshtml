@@ -237,12 +237,17 @@
         } else { alert('Failed to add note.'); }
     }
 
-    async function vhResolve(logId) {
-        if (!confirm('Resolve this incident and return the bus to Ready?')) return;
-        const note = (document.getElementById('vhNoteInput')?.value || '').trim();
-        if (await vhPost('@Url.Action("ResolveIncident", "Vehicles")', { logId: logId, note: note })) {
-            vhReloadModal(); loadVehicleRows();
-        } else { alert('Failed to resolve.'); }
+    function vhResolve(logId) {
+        vhOpenAction({
+            title: 'Resolve & Return to Ready',
+            desc: 'Close every open issue on this bus and return it to Ready. Add a note (optional).',
+            confirmLabel: 'Resolve & Return to Ready',
+            onConfirm: async function (note) {
+                if (await vhPost('@Url.Action("ResolveIncident", "Vehicles")', { logId: logId, note: note })) {
+                    vhActionCancel(); vhReloadModal(); loadVehicleRows();
+                } else { alert('Failed to resolve.'); }
+            }
+        });
     }
 
     // Reusable action overlay (schedule maintenance / take out of service). Custom overlay,
@@ -308,16 +313,23 @@
         });
     }
 
-    async function vhSetService(vehicleId, outOfService, logId) {
-        const verb = outOfService ? 'take this bus OUT of service' : 'return this bus to service';
-        if (!confirm('Are you sure you want to ' + verb + '?')) return;
-        const note = (document.getElementById('vhNoteInput')?.value || '').trim();
-        const params = { vehicleId: vehicleId, outOfService: outOfService };
-        if (logId !== null && logId !== undefined) params.logId = logId;
-        if (note) params.note = note;
-        if (await vhPost('@Url.Action("SetServiceState", "Vehicles")', params)) {
-            vhReloadModal(); loadVehicleRows();
-        } else { alert('Failed to update service state.'); }
+    function vhSetService(vehicleId, outOfService, logId) {
+        vhOpenAction({
+            title: outOfService ? 'Take Out of Service' : 'Return to Service',
+            desc: outOfService
+                ? 'The bus stays flagged and cannot be deployed until it is returned to service or resolved.'
+                : 'Return this bus to service so dispatch can assign it again. Add a note (optional).',
+            confirmLabel: outOfService ? 'Mark Out of Service' : 'Return to Service',
+            danger: outOfService,
+            onConfirm: async function (note) {
+                const params = { vehicleId: vehicleId, outOfService: outOfService };
+                if (logId !== null && logId !== undefined) params.logId = logId;
+                if (note) params.note = note;
+                if (await vhPost('@Url.Action("SetServiceState", "Vehicles")', params)) {
+                    vhActionCancel(); vhReloadModal(); loadVehicleRows();
+                } else { alert('Failed to update service state.'); }
+            }
+        });
     }
 </script>
 
@@ -821,14 +833,74 @@
         font-size: 0.875rem;
     }
 
-    .vh-remarks {
-        background: #FEF9E7;
-        border-radius: 8px;
-        padding: 10px 12px;
+    .vh-flag-details {
+        margin-top: 8px;
+    }
+
+    .vh-flag-details > summary {
+        cursor: pointer;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--vh-text);
+        list-style: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        user-select: none;
+    }
+
+    .vh-flag-details > summary::-webkit-details-marker { display: none; }
+
+    .vh-flag-details > summary::before {
+        content: "\25B8";   /* ▸ */
+        color: var(--vh-muted);
+        transition: transform 0.15s ease;
+    }
+
+    .vh-flag-details[open] > summary::before { transform: rotate(90deg); }
+
+    .vh-flag-group {
+        padding: 8px 0 6px;
+    }
+
+    /* Clear-but-subtle divider between inspection sections. */
+    .vh-flag-group + .vh-flag-group {
+        border-top: 1px solid #E6E6EC;
+    }
+
+    .vh-flag-group-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--vh-muted);
+        margin-bottom: 5px;
+    }
+
+    .vh-flag-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .vh-flag-list li {
+        position: relative;
+        padding-left: 16px;
         font-size: 0.85rem;
-        color: #6B5D1B;
+        color: #B23B3B;
         font-family: 'Segoe UI', sans-serif;
-        margin-top: 6px;
+        margin-bottom: 5px;
+    }
+
+    .vh-flag-list li::before {
+        content: "";
+        position: absolute;
+        left: 2px;
+        top: 7px;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #E57373;
     }
 
     .vh-timeline {
@@ -843,7 +915,7 @@
         font-size: 0.85rem;
         color: var(--vh-text);
         font-family: 'Segoe UI', sans-serif;
-        margin-bottom: 7px;
+        margin-bottom: 11px;
     }
 
     .vh-timeline li::before {
@@ -855,6 +927,35 @@
         height: 8px;
         border-radius: 50%;
         background: var(--vh-muted);
+    }
+
+    .vh-tl-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .vh-tl-summary {
+        font-weight: 600;
+        color: var(--vh-text);
+    }
+
+    .vh-tl-status {
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 1px 9px;
+        border-radius: 10px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .vh-tl--resolved { background: #E6F4EA; color: #1E7E34; }
+    .vh-tl--open { background: #FDECEA; color: #C0392B; }
+
+    .vh-tl-date {
+        font-size: 0.72rem;
+        color: var(--vh-muted);
     }
 
     /* ── Modal footer / badge inside section header ─────────── */
@@ -933,6 +1034,16 @@
         letter-spacing: .04em;
         margin: 4px 0 8px;
     }
+
+    /* One incident lifecycle (flagged → resolved) = one separated block. */
+    .vh-thread-group {
+        background: #F7F8FA;
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+    }
+
+        .vh-thread-group:last-child { margin-bottom: 0; }
 
     .vh-thread { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
     .vh-thread li { border-left: 3px solid var(--vh-border); padding: 2px 0 2px 12px; }
