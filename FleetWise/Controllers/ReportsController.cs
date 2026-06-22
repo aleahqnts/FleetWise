@@ -11,6 +11,7 @@ using static Postgrest.Constants;
 namespace FleetWise.Controllers
 {
     [Authorize]
+    [RequirePermission("reports")]
     public class ReportsController : Controller
     {
         private readonly Supabase.Client _supabase;

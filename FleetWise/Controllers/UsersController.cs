@@ -8,6 +8,7 @@ using FleetWise.Services;
 namespace FleetWise.Controllers
 {
     [Authorize]
+    [RequirePermission("users")]
     public class UsersController : Controller
     {
         // Keys match the stored web_permissions / mobile_permissions JSON exactly (lowercase).

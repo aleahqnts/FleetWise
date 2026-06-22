@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace FleetWise.Controllers
 {
     [Authorize]
+    [RequirePermission("routes")]
     public class FleetMapController : Controller
     {
         private readonly Supabase.Client _supabase;

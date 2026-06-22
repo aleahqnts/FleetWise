@@ -82,14 +82,16 @@
 }
 
 @{
+    // Perm = the web_permissions key that unlocks this link. Fleet Map + Dispatch are the
+    // route-operations screens, both gated by "routes".
     var navItems = new[]
     {
-        new { Label = "Dashboard", Controller = "Dashboard", Action = "Index", IconKey = "dashboard" },
-        new { Label = "Fleet Map", Controller = "FleetMap",  Action = "Index", IconKey = "map"       },
-        new { Label = "Vehicles",  Controller = "Vehicles",  Action = "Index", IconKey = "vehicles"  },
-        new { Label = "Dispatch",  Controller = "Dispatch",  Action = "Index", IconKey = "dispatch"  },
-        new { Label = "Reports",   Controller = "Reports",   Action = "Index", IconKey = "reports"   },
-        new { Label = "Users",     Controller = "Users",     Action = "Index", IconKey = "users"     },
+        new { Label = "Dashboard", Controller = "Dashboard", Action = "Index", IconKey = "dashboard", Perm = "dashboard" },
+        new { Label = "Fleet Map", Controller = "FleetMap",  Action = "Index", IconKey = "map",       Perm = "routes"    },
+        new { Label = "Vehicles",  Controller = "Vehicles",  Action = "Index", IconKey = "vehicles",  Perm = "vehicles"  },
+        new { Label = "Dispatch",  Controller = "Dispatch",  Action = "Index", IconKey = "dispatch",  Perm = "routes"    },
+        new { Label = "Reports",   Controller = "Reports",   Action = "Index", IconKey = "reports",   Perm = "reports"   },
+        new { Label = "Users",     Controller = "Users",     Action = "Index", IconKey = "users",     Perm = "users"     },
     };
 }
 
@@ -111,6 +113,8 @@
         <ul class="fw-sidebar__list">
             @foreach (var item in navItems)
             {
+                // Only render links the signed-in role is permitted to see.
+                if (!User.HasClaim("perm", item.Perm)) { continue; }
                 var active = IsActive(item.Controller, item.Action);
                 <li class="fw-sidebar__item">
                     <a asp-controller="@item.Controller"

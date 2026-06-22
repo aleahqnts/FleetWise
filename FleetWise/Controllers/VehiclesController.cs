@@ -7,6 +7,7 @@ using FleetWise.Services;
 namespace FleetWise.Controllers
 {
     [Authorize]
+    [RequirePermission("vehicles")]
     public class VehiclesController : Controller
     {
         private const StringComparison OIC = StringComparison.OrdinalIgnoreCase;
