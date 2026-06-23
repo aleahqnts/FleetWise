@@ -10,7 +10,6 @@ using Microsoft.AspNetCore.Mvc;
 namespace FleetWise.Controllers
 {
     [Authorize]
-    [RequirePermission("routes")]
     public class FleetMapController : Controller
     {
         private readonly Supabase.Client _supabase;
@@ -41,6 +40,10 @@ namespace FleetWise.Controllers
             _fareCalculator = fareCalculator;
         }
 
+        // Only the full map PAGE is gated by "routes". The read-only data endpoints below
+        // (Positions/Routes/Stops) stay open to any authed user so the Dashboard's Fleet Map
+        // preview card works for dashboard-permitted roles that lack "routes".
+        [RequirePermission("routes")]
         public async Task<IActionResult> Index()
         {
             var routesResponse = await _supabase.From<BusRoute>().Get();
