@@ -13,7 +13,9 @@ on first sync (no wrapper committed). Min SDK 26, Kotlin + Jetpack Compose.
 
 ## Status
 
-- **Phase 0 (this):** scaffold + Supabase REST client (`data/SupabaseApi.kt`) + in-app
-  "Test DB connection" smoke check.
-- Phase 1: vehicle bind + 3–5s trip poll + fake `+1` counter proving the DB bridge.
+- **Phase 0 — done:** scaffold + Supabase REST client (`data/SupabaseApi.kt`); DB
+  `count_heartbeat` column live, curl acceptance passed.
+- **Phase 1 — code done, untested on device:** vehicle bind + passcode (`data/Prefs.kt`),
+  4s trip poll + 5s count/heartbeat flush (`CounterViewModel.kt`), Setup/Waiting/Counting
+  UI with fake `+1` button (`MainActivity.kt`).
 - Phase 3+: CameraX → YOLO11n (LiteRT) → ByteTrack → line-cross counting.
