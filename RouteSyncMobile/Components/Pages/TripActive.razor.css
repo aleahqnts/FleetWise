@@ -277,3 +277,31 @@
 }
 
 .btn-cancel:disabled, .btn-endred:disabled { opacity: 0.6; }
+
+/* Camera auto-count mode (CameraCount heartbeat fresh -> manual counter hidden) */
+.auto-badge {
+    margin: -12px 0 14px;
+    text-align: center;
+    color: #2e9e8f;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.auto-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #3ab5a4;
+    margin-right: 4px;
+    animation: auto-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes auto-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+/* Grace window: camera expected but no heartbeat yet */
+.auto-badge.pending { color: #9aa3b2; }
+.auto-badge.pending .auto-dot { background: #9aa3b2; }
