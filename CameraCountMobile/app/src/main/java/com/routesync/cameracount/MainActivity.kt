@@ -43,9 +43,9 @@ fun Root(vm: CounterViewModel = viewModel()) {
         CameraScreen(vm = vm)
         return
     }
-    // Aiming/demo preview (no counting), reachable while waiting.
+    // Calibration (preview + draggable line), reachable while waiting.
     if (showPreview) {
-        CameraScreen(onClose = { showPreview = false })
+        CameraScreen(calibrate = true, onClose = { showPreview = false })
         return
     }
     RsBackground {
@@ -124,7 +124,7 @@ private fun Header(vm: CounterViewModel, vehicleId: String, onCamera: () -> Unit
     ) {
         RsWordmark("Passenger Counter")
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onCamera) { Text("Camera", color = RsColor.Navy, fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onCamera) { Text("Calibrate", color = RsColor.Navy, fontWeight = FontWeight.Bold) }
             TextButton(onClick = { showUnbind = true }) { Text(vehicleId, color = RsColor.Teal, fontWeight = FontWeight.Bold) }
         }
     }

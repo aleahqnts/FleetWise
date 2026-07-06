@@ -101,27 +101,32 @@ class PersonTracker {
 }
 
 /**
- * Vertical counting line in frame-normalized coords. A confirmed track whose center
- * crosses from the outward side to the inward side is counted ONCE (track.counted).
+ * Counting line = a segment between two endpoints A and B (frame-normalized 0..1), so it
+ * can sit at ANY angle — real doorways are rarely a perfect vertical. "Which side" of the
+ * infinite line through A,B is the sign of the 2D cross product; a confirmed track whose
+ * center flips from the outward side to the inward side counts ONCE (track.counted).
  *
- * Defaults are Phase-4 placeholders (line mid-frame, boarding = left -> right in the
- * mirrored preview). Phase 5 replaces them with on-screen draggable calibration.
- * Tracks first seen already on the inward side (driver, seated passengers) have no
- * outward history -> can never count.
+ * [inwardSign] (+1 / -1) picks which side is "boarding". Tracks first seen already on the
+ * inward side (driver, seated passengers) have no outward history -> never count.
  */
 class LineCrossCounter(
-    var lineX: Float = 0.5f,
-    var inwardPositive: Boolean = true
+    var ax: Float = 0.5f, var ay: Float = 0.05f,
+    var bx: Float = 0.5f, var by: Float = 0.95f,
+    var inwardSign: Int = 1
 ) {
+    private fun sideOf(px: Float, py: Float): Int {
+        val cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax)
+        return if (cross >= 0f) 1 else -1
+    }
+
     /** Returns how many NEW inward crossings happened this frame. */
     fun process(tracks: List<PersonTracker.Track>): Int {
         var crossings = 0
         for (t in tracks) {
-            val side = if (t.cx >= lineX) 1 else -1
+            val side = sideOf(t.cx, t.cy)
             if (t.prevSide == 0) { t.prevSide = side; continue }
             if (side != t.prevSide && !t.counted) {
-                val inward = if (inwardPositive) side == 1 else side == -1
-                if (inward) { t.counted = true; crossings++ }
+                if (side == inwardSign) { t.counted = true; crossings++ }
             }
             t.prevSide = side
         }
