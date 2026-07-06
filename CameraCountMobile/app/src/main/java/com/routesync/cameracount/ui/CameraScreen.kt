@@ -122,10 +122,13 @@ private fun DetectionSurface(
     var by by remember { mutableFloatStateOf(Prefs.DEF_BY) }
     var inwardSign by remember { mutableIntStateOf(Prefs.DEF_INWARD_SIGN) }
     var lineLoaded by remember { mutableStateOf(false) }
+    // null = pref not loaded yet; camera binds only after, so the right lens comes up first.
+    var useBack by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(Unit) {
         val cal = prefs.lineCalibration.first()
         ax = cal.ax; ay = cal.ay; bx = cal.bx; by = cal.by; inwardSign = cal.inwardSign
         lineLoaded = true
+        useBack = prefs.useBackCamera.first()
     }
 
     var boxes by remember { mutableStateOf<List<OverlayBox>>(emptyList()) }
@@ -136,6 +139,7 @@ private fun DetectionSurface(
     var frames by remember { mutableIntStateOf(0) }
     var windowStart by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var frameError by remember { mutableStateOf<String?>(null) }
+    var lensInfo by remember { mutableStateOf<String?>(null) } // e.g. "back 108° (wide)"
 
     val counting = vm != null
 
@@ -216,64 +220,89 @@ private fun DetectionSurface(
     }
 
     Box(Modifier.fillMaxSize()) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { ctx ->
-                val view = PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
-                val providerFuture = ProcessCameraProvider.getInstance(ctx)
-                providerFuture.addListener({
-                    val provider = providerFuture.get()
-                    val preview = Preview.Builder().build()
-                        .also { it.surfaceProvider = view.surfaceProvider }
-                    val analysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        // RGBA out: toBitmap() on YUV frames is unsupported on some devices
-                        // (every frame throws -> 0 fps). RGBA conversion is built-in.
-                        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                        .build()
+        // key(useBack): toggling the lens tears the whole binding down and rebuilds it
+        // with the other camera. Gated until the pref loads so the right lens comes up.
+        useBack?.let { back ->
+            key(back) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        val view = PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
+                        val providerFuture = ProcessCameraProvider.getInstance(ctx)
+                        providerFuture.addListener({
+                            val provider = providerFuture.get()
+                            val preview = Preview.Builder().build()
+                                .also { it.surfaceProvider = view.surfaceProvider }
+                            val analysis = ImageAnalysis.Builder()
+                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                // RGBA out: toBitmap() on YUV frames is unsupported on some devices
+                                // (every frame throws -> 0 fps). RGBA conversion is built-in.
+                                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                                .build()
 
-                    val front = provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
-                    val selector =
-                        if (front) CameraSelector.DEFAULT_FRONT_CAMERA
-                        else CameraSelector.DEFAULT_BACK_CAMERA
+                            val wantFront = !back
+                            val haveFront = provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
+                            val haveBack = provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)
+                            val front = if (wantFront) haveFront else !haveBack // fall back to whatever exists
+                            // Back cam: pick the widest physical lens the OEM exposes (ultrawide
+                            // if it's a separate CameraInfo); front cam: just the default.
+                            val backPick = if (!front)
+                                com.routesync.cameracount.camera.LensPicker.widestBack(provider.availableCameraInfos)
+                            else null
+                            val selector = when {
+                                front -> CameraSelector.DEFAULT_FRONT_CAMERA
+                                else -> backPick!!.selector
+                            }
+                            lensInfo = when {
+                                front -> "front ${com.routesync.cameracount.camera.LensPicker.fovDegrees(provider.availableCameraInfos, CameraSelector.LENS_FACING_FRONT)}°"
+                                else -> "back ${backPick!!.fovDegrees}°"
+                            }
 
-                    analysis.setAnalyzer(
-                        executor,
-                        DetectorAnalyzer(
-                            detector, mirrored = front,
-                            onError = { frameError = it },
-                            throttle = { thermalSkip }
-                        ) { dets, w, h, ms ->
-                            vm?.noteFrame() // stall guard: silence -> heartbeat stops -> manual fallback
-                            if (dets.isNotEmpty()) lastPersonAt = System.currentTimeMillis()
-                            boxes = if (counting) {
-                                // Real counting path: tracker IDs -> line-cross -> count.
-                                // (crossings ignored until the saved line is loaded, and
-                                // while the line itself is being dragged mid-trip)
-                                val tracks = tracker.update(dets)
-                                val crossings = lineCounter.process(tracks)
-                                if (lineLoaded && !adjusting) repeat(crossings) { vm!!.increment() }
-                                tracks.map {
-                                    OverlayBox(it.box.left, it.box.top, it.box.right, it.box.bottom, it.counted)
+                            analysis.setAnalyzer(
+                                executor,
+                                DetectorAnalyzer(
+                                    detector, mirrored = front,
+                                    onError = { frameError = it },
+                                    throttle = { thermalSkip }
+                                ) { dets, w, h, ms ->
+                                    vm?.noteFrame() // stall guard: silence -> heartbeat stops -> manual fallback
+                                    if (dets.isNotEmpty()) lastPersonAt = System.currentTimeMillis()
+                                    boxes = if (counting) {
+                                        // Real counting path: tracker IDs -> line-cross -> count.
+                                        // (crossings ignored until the saved line is loaded, and
+                                        // while the line itself is being dragged mid-trip)
+                                        val tracks = tracker.update(dets)
+                                        val crossings = lineCounter.process(tracks)
+                                        if (lineLoaded && !adjusting) repeat(crossings) { vm!!.increment() }
+                                        tracks.map {
+                                            OverlayBox(it.box.left, it.box.top, it.box.right, it.box.bottom, it.counted)
+                                        }
+                                    } else {
+                                        dets.filter { it.score >= YoloDetector.HIGH_CONF }
+                                            .map { OverlayBox(it.box.left, it.box.top, it.box.right, it.box.bottom, false) }
+                                    }
+                                    frameW = w; frameH = h; inferMs = ms; frameError = null
+                                    frames++
+                                    val now = System.currentTimeMillis()
+                                    if (now - windowStart >= 1000) {
+                                        fps = frames; frames = 0; windowStart = now
+                                    }
                                 }
-                            } else {
-                                dets.filter { it.score >= YoloDetector.HIGH_CONF }
-                                    .map { OverlayBox(it.box.left, it.box.top, it.box.right, it.box.bottom, false) }
+                            )
+                            provider.unbindAll()
+                            val cam = provider.bindToLifecycle(lifecycle, selector, preview, analysis)
+                            if (!front) {
+                                // Widest lens available: min zoom < 1.0 = ultrawide (0.6x etc.)
+                                // -> whole doorway + approach path in frame at dashboard distance.
+                                val minZoom = cam.cameraInfo.zoomState.value?.minZoomRatio ?: 1f
+                                if (minZoom < 1f) cam.cameraControl.setZoomRatio(minZoom)
                             }
-                            frameW = w; frameH = h; inferMs = ms; frameError = null
-                            frames++
-                            val now = System.currentTimeMillis()
-                            if (now - windowStart >= 1000) {
-                                fps = frames; frames = 0; windowStart = now
-                            }
-                        }
-                    )
-                    provider.unbindAll()
-                    provider.bindToLifecycle(lifecycle, selector, preview, analysis)
-                }, ContextCompat.getMainExecutor(ctx))
-                view
+                        }, ContextCompat.getMainExecutor(ctx))
+                        view
+                    }
+                )
             }
-        )
+        }
 
         // Boxes + counting line: frame-normalized coords mapped into the FIT_CENTER rect.
         // In calibrate mode, drag grabs whichever endpoint handle (A/B) is nearer the touch.
@@ -350,6 +379,9 @@ private fun DetectionSurface(
                 "$fps fps · ${inferMs}ms · ${if (detector.usingGpu) "GPU" else "CPU"}",
                 color = Color.White, fontSize = 12.sp
             )
+            lensInfo?.let {
+                Text(it, color = RsColor.Muted, fontSize = 11.sp)
+            }
             frameError?.let {
                 Text(it, color = Color(0xFFFF6B6B), fontSize = 11.sp)
             }
@@ -368,6 +400,19 @@ private fun DetectionSurface(
                     modifier = Modifier.background(Color(0xAA000000)).padding(horizontal = 10.dp, vertical = 4.dp)
                 )
                 Spacer(Modifier.height(12.dp))
+                // Lens choice lives here with the other mount-time decisions. Switching
+                // flips the scene -> re-drag the line after switching.
+                OutlinedButton(onClick = {
+                    val next = !(useBack ?: false)
+                    scope.launch { prefs.saveUseBackCamera(next) }
+                    useBack = next
+                }) {
+                    Text(
+                        if (useBack == true) "Front camera" else "Back camera",
+                        color = Color.White
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
                 Row {
                     OutlinedButton(onClick = { inwardSign = -inwardSign }) {
                         Text("Flip boarding side", color = Color.White)
