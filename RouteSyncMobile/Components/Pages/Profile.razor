@@ -9,7 +9,12 @@
 
 @if (loading)
 {
-    <div class="page-loading">Loading...</div>
+    <div class="page-skeleton">
+        <div class="sk sk-card tall" style="height:170px"></div>
+        <div class="sk sk-card" style="height:76px"></div>
+        <div class="sk sk-card"></div>
+        <div class="sk sk-card"></div>
+    </div>
 }
 else if (user is null)
 {
@@ -18,57 +23,106 @@ else if (user is null)
 else
 {
     <div class="profile">
-        <h1 class="ptitle">Profile</h1>
 
-        <div class="pcard">
-            <img class="pavatar" src="images/user-avatar.png" alt="" />
-            <p class="pname">@Session.DisplayName</p>
-            <span class="prole">Driver</span>
+        <div class="hero">
+            <div class="hero-avatar">@Initials</div>
+            <p class="hero-name">@Session.DisplayName</p>
+            <div class="hero-tags">
+                <span class="tag role">Driver</span>
+                <span class="tag avail @(available ? "on" : "off")">
+                    <span class="dot"></span>@(available ? "Available" : "Unavailable")
+                </span>
+            </div>
+            <p class="hero-since">Driving with RouteSync since @user.CreatedAt.ToString("MMMM yyyy")</p>
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <p class="stat-n">@tripsDone</p>
+                <p class="stat-l">Trips</p>
+            </div>
+            <div class="stat mid">
+                <p class="stat-n">@passengers.ToString("N0")</p>
+                <p class="stat-l">Passengers</p>
+            </div>
+            <div class="stat">
+                <p class="stat-n">@tripsThisMonth</p>
+                <p class="stat-l">This month</p>
+            </div>
         </div>
 
         <p class="psec">Account</p>
         <div class="pinfo">
-            <div class="prow"><span class="pk">Email</span><span class="pv">@user.EmailAddress</span></div>
-            <div class="prow"><span class="pk">Status</span><span class="pv">@(user.AccountStatus ?? "—")</span></div>
-            <div class="prow"><span class="pk">Member since</span><span class="pv">@user.CreatedAt.ToString("MMM d, yyyy")</span></div>
+            <div class="prow">
+                <span class="pico blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span>
+                <span class="pk">Email</span><span class="pv">@user.EmailAddress</span>
+            </div>
+            <div class="prow">
+                <span class="pico green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5 5-6"/></svg></span>
+                <span class="pk">Status</span><span class="pv">@(user.AccountStatus ?? "—")</span>
+            </div>
+            <div class="prow">
+                <span class="pico amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg></span>
+                <span class="pk">Member since</span><span class="pv">@user.CreatedAt.ToString("MMM d, yyyy")</span>
+            </div>
+            @if (lastTripDate is not null)
+            {
+                <div class="prow">
+                    <span class="pico teal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+                    <span class="pk">Last trip</span><span class="pv">@lastTripDate.Value.ToString("MMM d, yyyy")</span>
+                </div>
+            }
         </div>
 
-        <p class="psec">Personal Info</p>
-        <div class="pform">
-            <label>Contact number</label>
-            <input value="@contact" @oninput="OnContactInput" inputmode="numeric" maxlength="13" placeholder="0917 123 4567" />
-            @if (contact.Length > 0 && !PhoneValid(contact))
-            {
-                <p class="err-msg">Format: 09XX XXX XXXX</p>
-            }
-            <label>Address</label>
-            <input @bind="address" placeholder="Home address" />
-            <label>Emergency contact name</label>
-            <input @bind="emName" placeholder="Full name" />
-            <label>Emergency contact number</label>
-            <input value="@emNumber" @oninput="OnEmNumberInput" inputmode="numeric" maxlength="13" placeholder="0917 123 4567" />
-            @if (emNumber.Length > 0 && !PhoneValid(emNumber))
-            {
-                <p class="err-msg">Format: 09XX XXX XXXX</p>
-            }
+        <p class="psec">Settings</p>
 
-            @if (!string.IsNullOrEmpty(profileMsg))
-            {
-                <p class="@(profileOk ? "ok-msg" : "err-msg")">@profileMsg</p>
-            }
-            <button class="psave" @onclick="SaveProfile" disabled="@savingProfile">
-                @(savingProfile ? "Saving..." : "Save Changes")
-            </button>
-        </div>
+        <button class="popt" @onclick="@(() => { showInfoForm = !showInfoForm; if (showInfoForm) showPwdForm = false; })">
+            <span class="popt-left">
+                <span class="pico teal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6"/></svg></span>
+                <span>Personal Information</span>
+            </span>
+            <span class="chev @(showInfoForm ? "open" : "")">&#8250;</span>
+        </button>
+        @if (showInfoForm)
+        {
+            <div class="pform expanded">
+                <label>Contact number</label>
+                <input value="@contact" @oninput="OnContactInput" inputmode="numeric" maxlength="13" placeholder="0917 123 4567" />
+                @if (contact.Length > 0 && !PhoneValid(contact))
+                {
+                    <p class="err-msg">Format: 09XX XXX XXXX</p>
+                }
+                <label>Address</label>
+                <input @bind="address" placeholder="Home address" />
+                <label>Emergency contact name</label>
+                <input @bind="emName" placeholder="Full name" />
+                <label>Emergency contact number</label>
+                <input value="@emNumber" @oninput="OnEmNumberInput" inputmode="numeric" maxlength="13" placeholder="0917 123 4567" />
+                @if (emNumber.Length > 0 && !PhoneValid(emNumber))
+                {
+                    <p class="err-msg">Format: 09XX XXX XXXX</p>
+                }
 
-        <p class="psec">Security</p>
-        <button class="popt" @onclick="@(() => showPwdForm = !showPwdForm)">
-            <span>Change Password</span>
+                @if (!string.IsNullOrEmpty(profileMsg))
+                {
+                    <p class="@(profileOk ? "ok-msg" : "err-msg")">@profileMsg</p>
+                }
+                <button class="psave" @onclick="SaveProfile" disabled="@savingProfile">
+                    @(savingProfile ? "Saving..." : "Save Changes")
+                </button>
+            </div>
+        }
+
+        <button class="popt" @onclick="@(() => { showPwdForm = !showPwdForm; if (showPwdForm) showInfoForm = false; })">
+            <span class="popt-left">
+                <span class="pico navy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+                <span>Change Password</span>
+            </span>
             <span class="chev @(showPwdForm ? "open" : "")">&#8250;</span>
         </button>
         @if (showPwdForm)
         {
-            <div class="pform">
+            <div class="pform expanded">
                 <input type="password" @bind="curPwd" placeholder="Current password" />
                 <input type="password" @bind="newPwd" placeholder="New password" />
                 <input type="password" @bind="confirmPwd" placeholder="Confirm new password" />
@@ -83,13 +137,33 @@ else
             </div>
         }
 
-        <button class="plogout" @onclick="Logout">Log out</button>
+        <button class="plogout" @onclick="@(() => showLogoutConfirm = true)">Log out</button>
+
+        <p class="pver">RouteSync Driver</p>
     </div>
+
+    @if (showLogoutConfirm)
+    {
+        <div class="overlay">
+            <div class="ua-modal">
+                <h2>Log out?</h2>
+                <p class="lo-sub">You'll stop receiving assignments and messages until you log back in.</p>
+                <div class="lo-actions">
+                    <button class="lo-cancel" @onclick="@(() => showLogoutConfirm = false)">Cancel</button>
+                    <button class="lo-confirm" @onclick="Logout">Log out</button>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 @code {
     private bool loading = true;
     private UserModel? user;
+
+    private bool available;
+    private int tripsDone, tripsThisMonth, passengers;
+    private DateTime? lastTripDate;
 
     private string contact = "", address = "", emName = "", emNumber = "";
     private bool savingProfile, profileOk;
@@ -97,8 +171,22 @@ else
 
     private string curPwd = "", newPwd = "", confirmPwd = "";
     private bool savingPwd, pwdOk;
-    private bool showPwdForm;
+    private bool showPwdForm, showInfoForm, showLogoutConfirm;
     private string? pwdMsg;
+
+    private string Initials
+    {
+        get
+        {
+            var parts = (Session.DisplayName ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length switch
+            {
+                0 => "D",
+                1 => parts[0][..1].ToUpper(),
+                _ => $"{parts[0][0]}{parts[^1][0]}".ToUpper()
+            };
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -110,13 +198,31 @@ else
 
     private async Task LoadUser()
     {
-        user = await Data.GetUserAsync(Session.CurrentUser!.UserId);
+        var uid = Session.CurrentUser!.UserId;
+        user = await Data.GetUserAsync(uid);
         if (user is not null)
         {
             contact = FormatPhone(Digits(user.ContactNumber));
             address = user.Address ?? "";
             emName = user.EmergencyContactName ?? "";
             emNumber = FormatPhone(Digits(user.EmergencyContactNumber));
+        }
+
+        // Real driving record, not decoration: completed trips, passengers served,
+        // this month's runs. Failures degrade to zeros — profile still loads offline-ish.
+        try
+        {
+            available = await Data.GetAvailabilityAsync(uid) == "Available";
+            var trips = await Data.GetTripsForDriverAsync(uid);
+            var done = trips.Where(t => t.TripStatus == "Completed").ToList();
+            tripsDone = done.Count;
+            passengers = done.Sum(t => t.TotalBoarded);
+            tripsThisMonth = done.Count(t => t.Date.Year == DateTime.Today.Year && t.Date.Month == DateTime.Today.Month);
+            lastTripDate = done.OrderByDescending(t => t.Date).FirstOrDefault()?.Date;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Profile.Stats] {ex}");
         }
     }
 
