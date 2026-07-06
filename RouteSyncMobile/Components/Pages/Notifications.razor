@@ -8,7 +8,13 @@
 
 @if (loading)
 {
-    <div class="page-loading">Loading...</div>
+    <div class="page-skeleton">
+        <div class="sk sk-line w50" style="height:24px; margin-bottom:20px"></div>
+        <div class="sk sk-line w30"></div>
+        <div class="sk sk-card"></div>
+        <div class="sk sk-card"></div>
+        <div class="sk sk-card"></div>
+    </div>
 }
 else
 {
@@ -123,6 +129,34 @@ else
         loading = false;
         await Watch.RefreshNow();   // sync Watch cache w/ DB (authoritative is_read)
         Watch.MarkSeenNow();        // opening the tab clears broadcast/route from the badge
+        _ = PollLoop();             // background: new messages appear without pull-to-refresh
+    }
+
+    // Silent re-fetch every 15s while the tab is open. New messages just appear; the
+    // driver is looking at the list, so the badge is kept cleared too (MarkSeenNow).
+    private readonly CancellationTokenSource pollCts = new();
+
+    private async Task PollLoop()
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+            while (await timer.WaitForNextTickAsync(pollCts.Token))
+            {
+                try
+                {
+                    var fresh = await Data.GetMessagesAsync(Session.CurrentUser!.UserId);
+                    await InvokeAsync(() =>
+                    {
+                        items = fresh;
+                        Watch.MarkSeenNow();
+                        StateHasChanged();
+                    });
+                }
+                catch { /* background blip: keep showing the last good list */ }
+            }
+        }
+        catch (OperationCanceledException) { /* page closed */ }
     }
 
     private long? expandedId;
@@ -153,5 +187,10 @@ else
         Watch.MarkSeenNow();
         StateHasChanged();
     }
-    public void Dispose() => _ptrRef?.Dispose();
+    public void Dispose()
+    {
+        pollCts.Cancel();
+        pollCts.Dispose();
+        _ptrRef?.Dispose();
+    }
 }

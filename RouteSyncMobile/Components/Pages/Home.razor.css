@@ -222,6 +222,7 @@
     cursor: pointer;
     background: #cfd5df;
     flex: 0 0 46px;
+    transition: background 0.2s ease;
 }
 
 .toggle.on { background: #2e9e8f; }
@@ -233,7 +234,8 @@
     height: 20px;
     border-radius: 50%;
     background: #fff;
-    transition: left 0.15s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: left 0.2s cubic-bezier(0.3, 1.3, 0.5, 1);
     left: 3px;
 }
 
