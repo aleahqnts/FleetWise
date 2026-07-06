@@ -19,12 +19,21 @@ class DetectorAnalyzer(
     private val detector: YoloDetector,
     private val mirrored: Boolean,
     private val onError: (String) -> Unit = {},
+    /**
+     * Phase 6 thermal guard: process 1 of every N frames (1 = every frame). Dashboard
+     * heat is the #1 real failure; dropping inference fps under SEVERE/CRITICAL thermal
+     * sheds most of the CPU load while the tracker's velocity prediction bridges the gap.
+     */
+    private val throttle: () -> Int = { 1 },
     private val onResult: (dets: List<YoloDetector.Det>, frameW: Int, frameH: Int, inferMs: Long) -> Unit
 ) : ImageAnalysis.Analyzer {
 
+    private var frameNo = 0L
+
     override fun analyze(image: ImageProxy) {
         try {
-            analyzeInner(image)
+            val n = throttle().coerceAtLeast(1)
+            if (frameNo++ % n == 0L) analyzeInner(image)
         } catch (e: Exception) {
             // A dropped frame must never take the app down (teardown races, OOM spikes).
             android.util.Log.w("DetectorAnalyzer", "frame skipped", e)
