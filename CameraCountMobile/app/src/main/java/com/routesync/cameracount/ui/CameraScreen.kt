@@ -12,6 +12,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -25,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -136,6 +138,64 @@ private fun DetectionSurface(
     var frameError by remember { mutableStateOf<String?>(null) }
 
     val counting = vm != null
+
+    // Mid-trip line adjust: mount slips are fixed on the spot, no passcode — a driver
+    // wrestling a passcode dialog while boarding continues would just give up on it.
+    var adjusting by remember { mutableStateOf(false) }
+    val editingLine = calibrate || adjusting
+
+    // Dim mode: nobody in frame for 60s -> near-black overlay (heat + burn-in relief).
+    // Detection keeps running underneath; a person in frame or a tap wakes the screen.
+    var lastPersonAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var dimmed by remember { mutableStateOf(false) }
+    if (counting) LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(5_000)
+            dimmed = System.currentTimeMillis() - lastPersonAt > 60_000 && !editingLine
+        }
+    }
+
+    // Charging watch: a dashboard phone that isn't charging is a counter on a timer.
+    var charging by remember { mutableStateOf(true) }
+    DisposableEffect(Unit) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: android.content.Context?, i: android.content.Intent?) {
+                charging = (i?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+            }
+        }
+        val sticky = context.registerReceiver(
+            receiver, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
+        )
+        charging = (sticky?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+        onDispose { context.unregisterReceiver(receiver) }
+    }
+
+    // Phase 6: dashboard phone must never sleep mid-trip (or mid-calibration).
+    val view = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(Unit) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
+
+    // Phase 6 thermal guard: closed bus + sun = throttle before the OS kills us.
+    // SEVERE -> infer every 2nd frame, CRITICAL+ -> every 3rd. Listener-driven (no
+    // per-frame binder calls); API 29+, older devices just run unthrottled.
+    var thermalSkip by remember { mutableIntStateOf(1) }
+    DisposableEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            val pm = context.getSystemService(android.os.PowerManager::class.java)
+            val listener = android.os.PowerManager.OnThermalStatusChangedListener { status ->
+                thermalSkip = when {
+                    status >= android.os.PowerManager.THERMAL_STATUS_CRITICAL -> 3
+                    status >= android.os.PowerManager.THERMAL_STATUS_SEVERE -> 2
+                    else -> 1
+                }
+            }
+            pm.addThermalStatusListener(listener)
+            onDispose { pm.removeThermalStatusListener(listener) }
+        } else onDispose { }
+    }
+
     val tracker = remember { PersonTracker() }
     val lineCounter = remember { LineCrossCounter() }
     LaunchedEffect(ax, ay, bx, by, inwardSign) {
@@ -179,13 +239,20 @@ private fun DetectionSurface(
 
                     analysis.setAnalyzer(
                         executor,
-                        DetectorAnalyzer(detector, mirrored = front, onError = { frameError = it }) { dets, w, h, ms ->
+                        DetectorAnalyzer(
+                            detector, mirrored = front,
+                            onError = { frameError = it },
+                            throttle = { thermalSkip }
+                        ) { dets, w, h, ms ->
+                            vm?.noteFrame() // stall guard: silence -> heartbeat stops -> manual fallback
+                            if (dets.isNotEmpty()) lastPersonAt = System.currentTimeMillis()
                             boxes = if (counting) {
                                 // Real counting path: tracker IDs -> line-cross -> count.
-                                // (crossings ignored until the saved line is loaded)
+                                // (crossings ignored until the saved line is loaded, and
+                                // while the line itself is being dragged mid-trip)
                                 val tracks = tracker.update(dets)
                                 val crossings = lineCounter.process(tracks)
-                                if (lineLoaded) repeat(crossings) { vm!!.increment() }
+                                if (lineLoaded && !adjusting) repeat(crossings) { vm!!.increment() }
                                 tracks.map {
                                     OverlayBox(it.box.left, it.box.top, it.box.right, it.box.bottom, it.counted)
                                 }
@@ -211,7 +278,7 @@ private fun DetectionSurface(
         // Boxes + counting line: frame-normalized coords mapped into the FIT_CENTER rect.
         // In calibrate mode, drag grabs whichever endpoint handle (A/B) is nearer the touch.
         var activeHandle by remember { mutableIntStateOf(-1) } // 0=A, 1=B
-        val canvasModifier = if (calibrate) {
+        val canvasModifier = if (editingLine) {
             Modifier.fillMaxSize().pointerInput(frameW, frameH) {
                 fun norm(px: Float, py: Float): Pair<Float, Float> {
                     val scale = minOf(size.width.toFloat() / frameW, size.height.toFloat() / frameH)
@@ -254,7 +321,7 @@ private fun DetectionSurface(
                 val pb = pt(bx, by)
                 drawLine(
                     color = Color(0xFFFFC94D), start = pa, end = pb,
-                    strokeWidth = if (calibrate) 8f else 5f,
+                    strokeWidth = if (editingLine) 8f else 5f,
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(28f, 18f))
                 )
                 // Inward arrow: perpendicular to the line at its midpoint, pointing to the
@@ -266,7 +333,7 @@ private fun DetectionSurface(
                 val tip = Offset(mx + ndx * 60f, my + ndy * 60f)
                 drawLine(Color(0xFFFFC94D), Offset(mx, my), tip, strokeWidth = 6f)
                 drawCircle(Color(0xFFFFC94D), 10f, tip)
-                if (calibrate) {
+                if (editingLine) {
                     // Grab handles.
                     drawCircle(Color.White, 26f, pa); drawCircle(Color(0xFFFFC94D), 18f, pa)
                     drawCircle(Color.White, 26f, pb); drawCircle(Color(0xFFFFC94D), 18f, pb)
@@ -288,8 +355,9 @@ private fun DetectionSurface(
             }
         }
 
-        // Calibration controls: drag hint, boarding-direction flip, save.
-        if (calibrate) {
+        // Calibration controls: drag hint, boarding-direction flip, save. Shown both for
+        // the standalone calibrate screen and the mid-trip adjust overlay.
+        if (editingLine) {
             Column(
                 Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -308,17 +376,55 @@ private fun DetectionSurface(
                     Button(onClick = {
                         scope.launch {
                             prefs.saveLine(ax, ay, bx, by, inwardSign)
-                            onClose?.invoke()
+                            if (adjusting) adjusting = false else onClose?.invoke()
                         }
                     }) { Text("Save line", fontWeight = FontWeight.Bold) }
+                }
+                if (adjusting) {
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = {
+                        // Cancel: reload the saved line, drop the drag.
+                        scope.launch {
+                            val cal = prefs.lineCalibration.first()
+                            ax = cal.ax; ay = cal.ay; bx = cal.bx; by = cal.by; inwardSign = cal.inwardSign
+                            adjusting = false
+                        }
+                    }) { Text("Cancel", color = Color.White) }
                 }
             }
         }
 
+        // Mid-trip line adjust entry point (counting continues; crossings pause while dragging).
+        if (counting && !editingLine) {
+            OutlinedButton(
+                onClick = { adjusting = true; lastPersonAt = System.currentTimeMillis() },
+                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+            ) { Text("Adjust line", color = Color.White, fontSize = 12.sp) }
+        }
+
+        // Not-charging warning: the counter dies with the battery. Sits just above the HUD.
+        if (counting && !charging) {
+            Text(
+                "⚡ Not charging — plug the phone in",
+                color = Color(0xFFFFC94D), fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 176.dp)
+                    .clip(RoundedCornerShape(8.dp)).background(Color(0xCC000000))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+        }
+
         // Counting HUD: live count + trip + sync state, fed by the ViewModel.
-        if (vm != null) {
+        if (vm != null && !adjusting) {
             val s = vm.state.collectAsState().value
             if (s is CounterViewModel.UiState.Counting) {
+                // Each +1 flashes the number white and pops it slightly — glanceable trust.
+                val flash = remember { androidx.compose.animation.core.Animatable(0f) }
+                LaunchedEffect(s.count) {
+                    if (s.count > 0) {
+                        flash.snapTo(1f)
+                        flash.animateTo(0f, androidx.compose.animation.core.tween(650))
+                    }
+                }
                 Column(
                     Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp)
                         .clip(RoundedCornerShape(18.dp))
@@ -326,15 +432,47 @@ private fun DetectionSurface(
                         .padding(horizontal = 28.dp, vertical = 14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("${s.count}", color = RsColor.TealBright, fontSize = 56.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        "${s.count}",
+                        color = androidx.compose.ui.graphics.lerp(RsColor.TealBright, Color.White, flash.value),
+                        fontSize = 56.sp, fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.graphicsLayer {
+                            val sc = 1f + 0.14f * flash.value
+                            scaleX = sc; scaleY = sc
+                        }
+                    )
                     Text("passengers boarded", color = Color.White, fontSize = 13.sp)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "${s.tripId} · ${if (s.lastFlushOk) "synced" else "sync retrying"}",
-                        color = if (s.lastFlushOk) RsColor.TealBright else Color(0xFFFF6B6B),
+                        "${s.tripId} · " + when {
+                            s.cameraStalled -> "camera stalled — driver counting"
+                            s.lastFlushOk -> "synced"
+                            else -> "sync retrying"
+                        },
+                        color = if (s.lastFlushOk && !s.cameraStalled) RsColor.TealBright else Color(0xFFFF6B6B),
                         fontSize = 12.sp
                     )
                 }
+            }
+        }
+
+        // Dim overlay (topmost): idle bus stop / long empty stretch -> near-black screen
+        // saves heat + battery + OLED. Detection still runs; a person or a tap wakes it.
+        if (counting && dimmed) {
+            val dimCount = (vm?.state?.collectAsState()?.value as? CounterViewModel.UiState.Counting)?.count
+            Column(
+                Modifier.fillMaxSize().background(Color(0xF2000000))
+                    .pointerInput(Unit) {
+                        detectTapGestures { lastPersonAt = System.currentTimeMillis(); dimmed = false }
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                dimCount?.let {
+                    Text("$it", color = Color(0x559AE0D4), fontSize = 44.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("counting · screen resting", color = Color(0x44FFFFFF), fontSize = 12.sp)
             }
         }
     }
