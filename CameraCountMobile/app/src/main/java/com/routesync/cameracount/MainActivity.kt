@@ -37,6 +37,19 @@ fun Root(vm: CounterViewModel = viewModel()) {
     var showPreview by remember { mutableStateOf(false) }
     val s = vm.state.collectAsState().value
 
+    // Phase 6: the trip foreground-service notification needs this on API 33+.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val askNotif = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { }
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.POST_NOTIFICATIONS
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) askNotif.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     // Trip active -> this device IS the counter. Camera + tracker run for the whole
     // trip and stop when the trip ends (state leaves Counting -> screen disposed).
     if (s is CounterViewModel.UiState.Counting) {
@@ -57,6 +70,7 @@ fun Root(vm: CounterViewModel = viewModel()) {
             when (s) {
                 is CounterViewModel.UiState.NeedsSetup -> SetupCard(onBind = vm::bind)
                 is CounterViewModel.UiState.Waiting -> WaitingCard(vm, s, onCamera = { showPreview = true })
+                is CounterViewModel.UiState.Standby -> StandbyCard(vm, s)
                 else -> {}
             }
         }
@@ -64,9 +78,26 @@ fun Root(vm: CounterViewModel = viewModel()) {
 }
 
 @Composable
-private fun SetupCard(onBind: (String, String) -> Unit) {
+@OptIn(ExperimentalMaterial3Api::class)
+private fun SetupCard(onBind: (String, String, (String?) -> Unit) -> Unit) {
     var vehicle by remember { mutableStateOf("") }
     var passcode by remember { mutableStateOf("") }
+    var touchedVehicle by remember { mutableStateOf(false) }
+    var touchedPass by remember { mutableStateOf(false) }
+    var binding by remember { mutableStateOf(false) }
+    var bindError by remember { mutableStateOf<String?>(null) }
+
+    // Fleet list for the picker. null = loading; empty = fetch failed -> manual entry.
+    var fleet by remember { mutableStateOf<List<com.routesync.cameracount.data.SupabaseApi.FleetVehicle>?>(null) }
+    var fleetTried by remember { mutableIntStateOf(0) }
+    LaunchedEffect(fleetTried) {
+        fleet = null
+        fleet = try { com.routesync.cameracount.data.SupabaseApi.listVehicles() } catch (_: Exception) { emptyList() }
+    }
+
+    val vehicleOk = CounterViewModel.VEHICLE_ID_RE.matches(vehicle)
+    val passOk = passcode.length >= CounterViewModel.MIN_PASSCODE
+
     RsWordmark("Passenger Counter")
     Spacer(Modifier.height(24.dp))
     RsCard {
@@ -74,21 +105,81 @@ private fun SetupCard(onBind: (String, String) -> Unit) {
         Spacer(Modifier.height(4.dp))
         Text("Bind this phone to the bus it is mounted in.", color = RsColor.Muted)
         Spacer(Modifier.height(20.dp))
-        OutlinedTextField(
-            vehicle, { vehicle = it.uppercase() }, singleLine = true,
-            label = { Text("Vehicle ID (e.g. V001)") }, modifier = Modifier.fillMaxWidth()
-        )
+        val f = fleet
+        when {
+            f == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(10.dp))
+                Text("Loading fleet…", color = RsColor.Muted)
+            }
+            f.isNotEmpty() -> {
+                // Picker: no typos possible; shows the plate so the installer matches the bus.
+                var open by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
+                    OutlinedTextField(
+                        value = f.firstOrNull { it.vehicleId == vehicle }
+                            ?.let { "${it.vehicleId} · ${it.plate}" } ?: "",
+                        onValueChange = {}, readOnly = true,
+                        label = { Text("Select vehicle") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                        f.forEach { v ->
+                            DropdownMenuItem(
+                                text = { Text("${v.vehicleId} · ${v.plate}") },
+                                onClick = { vehicle = v.vehicleId; bindError = null; open = false }
+                            )
+                        }
+                    }
+                }
+            }
+            else -> {
+                // Offline / fetch failed: manual entry with format validation + retry.
+                OutlinedTextField(
+                    vehicle,
+                    {
+                        // Fleet IDs are V + digits: uppercase, strip anything else, cap at 4 chars.
+                        vehicle = it.uppercase().filter { c -> c == 'V' || c.isDigit() }.take(4)
+                        touchedVehicle = true; bindError = null
+                    },
+                    singleLine = true,
+                    label = { Text("Vehicle ID (e.g. V001)") }, modifier = Modifier.fillMaxWidth(),
+                    isError = touchedVehicle && vehicle.isNotEmpty() && !vehicleOk,
+                    supportingText = {
+                        if (touchedVehicle && vehicle.isNotEmpty() && !vehicleOk)
+                            Text("Format: V + 3 digits, e.g. V001", color = RsColor.Error)
+                    }
+                )
+                TextButton(onClick = { fleetTried++ }) { Text("Couldn't load the fleet list — retry", color = RsColor.Teal) }
+            }
+        }
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(
-            passcode, { passcode = it }, singleLine = true,
+            passcode, { passcode = it; touchedPass = true; bindError = null }, singleLine = true,
             label = { Text("Bind passcode") }, modifier = Modifier.fillMaxWidth(),
-            visualTransformation = PasswordVisualTransformation()
+            visualTransformation = PasswordVisualTransformation(),
+            isError = touchedPass && passcode.isNotEmpty() && !passOk,
+            supportingText = {
+                if (touchedPass && passcode.isNotEmpty() && !passOk)
+                    Text("At least ${CounterViewModel.MIN_PASSCODE} characters — needed later to unbind.", color = RsColor.Error)
+            }
         )
+        bindError?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, color = RsColor.Error)
+        }
         Spacer(Modifier.height(20.dp))
         PrimaryButton(
-            "Bind vehicle",
-            enabled = vehicle.isNotBlank() && passcode.isNotBlank()
-        ) { onBind(vehicle, passcode) }
+            if (binding) "Checking vehicle…" else "Bind vehicle",
+            enabled = vehicleOk && passOk && !binding
+        ) {
+            binding = true
+            onBind(vehicle, passcode) { err ->
+                binding = false
+                bindError = err // null = bound; Root switches to Waiting via state
+            }
+        }
     }
 }
 
@@ -101,15 +192,60 @@ private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waitin
             StatusDot(active = false)
             Spacer(Modifier.height(12.dp))
             Text("Waiting for trip", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = RsColor.Navy)
+            // Bound-bus confirmation: ID + plate, so a wrong bind is obvious at a glance.
+            s.plate?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(4.dp))
+                Text("${s.vehicleId} · $it", color = RsColor.Teal, fontWeight = FontWeight.Bold)
+            }
             Spacer(Modifier.height(8.dp))
             Text(
                 "Counting starts automatically when the driver starts a trip for ${s.vehicleId}.",
                 color = RsColor.Muted, textAlign = TextAlign.Center
             )
+            // Last run's result sticks around until the next trip starts.
+            s.tripSummary?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Last trip · $it", color = RsColor.Navy, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                        .background(RsColor.Mint2).padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
             s.lastError?.let {
                 Spacer(Modifier.height(12.dp))
-                Text("Last poll error: $it", color = RsColor.Error, textAlign = TextAlign.Center)
+                Text(
+                    "Offline — retrying…", color = RsColor.Error, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                        .background(RsColor.Mint1).padding(horizontal = 12.dp, vertical = 6.dp)
+                )
             }
+        }
+    }
+}
+
+/**
+ * FAULT state — deployment is strictly one counter phone per bus, and the bind-level
+ * vehicle lock should make this unreachable. Seeing it means two devices ended up bound
+ * to the same bus anyway (offline bind race, manually cleared lock): the trip claim
+ * stopped the double count, and this screen tells the operator to fix the root cause.
+ * (If the counting device dies >30s, this one recovers the trip so counts keep flowing.)
+ */
+@Composable
+private fun StandbyCard(vm: CounterViewModel, s: CounterViewModel.UiState.Standby) {
+    Header(vm, s.vehicleId, onCamera = {})
+    Spacer(Modifier.height(20.dp))
+    RsCard {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            StatusDot(active = false)
+            Spacer(Modifier.height(12.dp))
+            Text("⚠ Two counter phones detected", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = RsColor.Error)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Another device is already counting trip ${s.tripId} on ${s.vehicleId}. " +
+                    "Each bus must have exactly ONE counter phone — unbind the phone that " +
+                    "doesn't belong. Counts are safe: only one device is being accepted.",
+                color = RsColor.Muted, textAlign = TextAlign.Center
+            )
         }
     }
 }
