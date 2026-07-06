@@ -34,6 +34,11 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun Root(vm: CounterViewModel = viewModel()) {
+    var showCamera by remember { mutableStateOf(false) }
+    if (showCamera) {
+        CameraScreen(onClose = { showCamera = false })
+        return
+    }
     RsBackground {
         Column(
             Modifier.fillMaxSize().padding(24.dp),
@@ -42,8 +47,8 @@ fun Root(vm: CounterViewModel = viewModel()) {
         ) {
             when (val s = vm.state.collectAsState().value) {
                 is CounterViewModel.UiState.NeedsSetup -> SetupCard(onBind = vm::bind)
-                is CounterViewModel.UiState.Waiting -> WaitingCard(vm, s)
-                is CounterViewModel.UiState.Counting -> CountingCard(vm, s)
+                is CounterViewModel.UiState.Waiting -> WaitingCard(vm, s, onCamera = { showCamera = true })
+                is CounterViewModel.UiState.Counting -> CountingCard(vm, s, onCamera = { showCamera = true })
             }
         }
     }
@@ -79,8 +84,8 @@ private fun SetupCard(onBind: (String, String) -> Unit) {
 }
 
 @Composable
-private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waiting) {
-    Header(vm, s.vehicleId)
+private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waiting, onCamera: () -> Unit) {
+    Header(vm, s.vehicleId, onCamera)
     Spacer(Modifier.height(20.dp))
     RsCard {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -101,8 +106,8 @@ private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waitin
 }
 
 @Composable
-private fun CountingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Counting) {
-    Header(vm, s.vehicleId)
+private fun CountingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Counting, onCamera: () -> Unit) {
+    Header(vm, s.vehicleId, onCamera)
     Spacer(Modifier.height(20.dp))
     RsCard {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -126,7 +131,7 @@ private fun CountingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Count
 }
 
 @Composable
-private fun Header(vm: CounterViewModel, vehicleId: String) {
+private fun Header(vm: CounterViewModel, vehicleId: String, onCamera: () -> Unit) {
     var showUnbind by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().widthIn(max = 380.dp),
@@ -134,7 +139,10 @@ private fun Header(vm: CounterViewModel, vehicleId: String) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         RsWordmark("Passenger Counter")
-        TextButton(onClick = { showUnbind = true }) { Text(vehicleId, color = RsColor.Teal, fontWeight = FontWeight.Bold) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onCamera) { Text("Camera", color = RsColor.Navy, fontWeight = FontWeight.Bold) }
+            TextButton(onClick = { showUnbind = true }) { Text(vehicleId, color = RsColor.Teal, fontWeight = FontWeight.Bold) }
+        }
     }
     if (showUnbind) UnbindDialog(vm) { showUnbind = false }
 }
