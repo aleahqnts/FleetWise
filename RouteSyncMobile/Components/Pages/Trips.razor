@@ -7,7 +7,13 @@
 
 @if (loading)
 {
-    <div class="page-loading">Loading...</div>
+    <div class="page-skeleton">
+        <div class="sk sk-line w50" style="height:24px; margin-bottom:20px"></div>
+        <div class="sk sk-line w30"></div>
+        <div class="sk sk-card"></div>
+        <div class="sk sk-card"></div>
+        <div class="sk sk-card"></div>
+    </div>
 }
 else
 {
@@ -59,6 +65,28 @@ else
         if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
         trips = await Data.GetTripsForDriverAsync(Session.CurrentUser!.UserId);
         loading = false;
+        _ = PollLoop(); // background: finished trips appear without pull-to-refresh
+    }
+
+    // Silent re-fetch every 15s while the tab is open — list stays live, no flicker.
+    private readonly CancellationTokenSource pollCts = new();
+
+    private async Task PollLoop()
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+            while (await timer.WaitForNextTickAsync(pollCts.Token))
+            {
+                try
+                {
+                    var fresh = await Data.GetTripsForDriverAsync(Session.CurrentUser!.UserId);
+                    await InvokeAsync(() => { trips = fresh; StateHasChanged(); });
+                }
+                catch { /* background blip: keep showing the last good list */ }
+            }
+        }
+        catch (OperationCanceledException) { /* page closed */ }
     }
 
     private DotNetObjectReference<Trips>? _ptrRef;
@@ -75,5 +103,10 @@ else
         trips = await Data.GetTripsForDriverAsync(Session.CurrentUser!.UserId);
         StateHasChanged();
     }
-    public void Dispose() => _ptrRef?.Dispose();
+    public void Dispose()
+    {
+        pollCts.Cancel();
+        pollCts.Dispose();
+        _ptrRef?.Dispose();
+    }
 }

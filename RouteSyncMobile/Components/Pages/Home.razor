@@ -8,7 +8,13 @@
 
 @if (loading)
 {
-    <div class="loading">Loading...</div>
+    <div class="page-skeleton">
+        <div class="sk sk-line w30"></div>
+        <div class="sk sk-line w50" style="height:24px"></div>
+        <div class="sk sk-card" style="margin-top:20px"></div>
+        <div class="sk sk-card tall"></div>
+        <div class="sk sk-card"></div>
+    </div>
 }
 else
 {
@@ -276,11 +282,35 @@ else
         // Completed (not a stale "Active" -> phantom "Resume Trip").
         try { await Queue.FlushAsync(); } catch { /* offline: stays queued */ }
         await Load();
+        _ = PollLoop(); // background: new assignments appear without pull-to-refresh
     }
 
-    private async Task Load()
+    // Dispatcher assigns a trip -> it must show up on its own. Silent re-fetch every
+    // 15s while the page is open: no spinner, no flicker, the card just appears.
+    private readonly CancellationTokenSource pollCts = new();
+
+    private async Task PollLoop()
     {
-        loading = true;
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+            while (await timer.WaitForNextTickAsync(pollCts.Token))
+            {
+                // Don't yank state mid-interaction (modal open / toggle in flight).
+                if (toggling || showUnavailModal || loading) continue;
+                await InvokeAsync(async () =>
+                {
+                    await Load(silent: true);
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException) { /* page closed */ }
+    }
+
+    private async Task Load(bool silent = false)
+    {
+        if (!silent) loading = true;
         try
         {
             var uid = Session.CurrentUser!.UserId;
@@ -307,20 +337,24 @@ else
             }
 
             lastTrip = await Data.GetLastCompletedTripAsync(uid);
+            statusMsg = null; // a successful (re)load clears any stale error banner
         }
         catch (Exception ex)
         {
-            // Show the real failure reason instead of a blanket "network" message — a
-            // deserialization/parse error is NOT a connectivity problem and was being
-            // misreported as one.
-            statusMsg = ex is System.Net.Http.HttpRequestException or System.Threading.Tasks.TaskCanceledException
-                ? "Couldn't load. Check your connection."
-                : $"Couldn't load: {ex.GetType().Name} — {ex.Message}";
+            // Background polls fail quietly (a blip must not flash an error over a fine
+            // page); manual loads show the real failure reason instead of a blanket
+            // "network" message — a parse error is NOT a connectivity problem.
+            if (!silent)
+            {
+                statusMsg = ex is System.Net.Http.HttpRequestException or System.Threading.Tasks.TaskCanceledException
+                    ? "Couldn't load. Check your connection."
+                    : $"Couldn't load: {ex.GetType().Name} — {ex.Message}";
+            }
             System.Diagnostics.Debug.WriteLine($"[Home.Load] {ex}");
         }
         finally
         {
-            loading = false;
+            if (!silent) loading = false;
         }
     }
 
@@ -386,5 +420,11 @@ else
         }
     }
     [JSInvokable] public async Task Refresh() { await Load(); StateHasChanged(); }
-    public void Dispose() => _ptrRef?.Dispose();
+
+    public void Dispose()
+    {
+        pollCts.Cancel();
+        pollCts.Dispose();
+        _ptrRef?.Dispose();
+    }
 }
