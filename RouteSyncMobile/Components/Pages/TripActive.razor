@@ -37,11 +37,28 @@ else
 
         <div class="counter-card">
             <p class="counter-label">Passenger Counter</p>
-            <div class="counter">
-                <button class="cbtn minus" @onclick="Dec">&#8722;</button>
-                <span class="count">@total</span>
-                <button class="cbtn plus" @onclick="Inc">&#43;</button>
-            </div>
+            @if (cameraAlive)
+            {
+                <p class="auto-badge"><span class="auto-dot"></span> Auto-counting (camera)</p>
+                <div class="counter">
+                    <span class="count">@total</span>
+                </div>
+            }
+            else if (!ShowManual)
+            {
+                <p class="auto-badge pending"><span class="auto-dot"></span> Connecting to camera counter&#8230;</p>
+                <div class="counter">
+                    <span class="count">@total</span>
+                </div>
+            }
+            else
+            {
+                <div class="counter">
+                    <button class="cbtn minus" @onclick="Dec">&#8722;</button>
+                    <span class="count">@total</span>
+                    <button class="cbtn plus" @onclick="Inc">&#43;</button>
+                </div>
+            }
         </div>
 
         <div class="stat-row">
@@ -129,6 +146,20 @@ else
     private int tick;
     private DateTime now = PhTime.Now;
 
+    // Phase 2 (CameraCount): fresh heartbeat -> camera owns the count, manual hides.
+    private bool cameraAlive;
+    private int hbPollFails;
+    private static readonly TimeSpan HeartbeatStale = TimeSpan.FromSeconds(12);
+
+    // Camera-first: manual is the LAST resort, not the default. At trip start the camera
+    // needs ~10s to its first heartbeat (4s trip poll + 5s flush), so hold a grace window
+    // instead of flashing the +/- buttons. Once a heartbeat has EVER been seen this trip,
+    // grace no longer applies — a stale heartbeat means the camera died, reveal manual now.
+    private bool cameraSeen;
+    private DateTime graceEndUtc = DateTime.MaxValue;
+    private static readonly TimeSpan CameraGrace = TimeSpan.FromSeconds(30);
+    private bool ShowManual => !cameraAlive && (cameraSeen || DateTime.UtcNow >= graceEndUtc);
+
     private string CountKey => $"trip_count_{TripId}";
     private string CacheKey => $"trip_cache_{TripId}";
     private const string ActiveKey = "fw_active_trip";
@@ -196,6 +227,11 @@ else
             total = int.TryParse(saved, out var s) ? s : trip.TotalBoarded;
             // Seed the mirror so the tracker has a count to log from the first fix.
             await SecureStorage.Default.SetAsync(CountKey, total.ToString());
+
+            // Camera may already be counting this trip (e.g. app restart mid-trip) —
+            // evaluate its heartbeat before the first 5s poll so manual doesn't flash.
+            graceEndUtc = DateTime.UtcNow + CameraGrace;
+            ApplyCameraState(trip);
 
             // Keep this as the resume target + (re)start background tracking.
             await SecureStorage.Default.SetAsync(ActiveKey, TripId);
@@ -267,8 +303,47 @@ else
     {
         now = PhTime.Now;
         tick++;
-        if (tick % 15 == 0) _ = Flush();
+        // Camera alive -> it owns trips.total_boarded; suppress the manual flush so the
+        // two writers never fight. Manual flush resumes automatically when stale.
+        if (tick % 15 == 0 && !cameraAlive) _ = Flush();
+        if (tick % 5 == 0) _ = RefreshCameraStateAsync();
         InvokeAsync(StateHasChanged);
+    }
+
+    // CameraCount stamps count_heartbeat in TRUE UTC every 5s. PhTime.Raw recovers the
+    // stored instant, so freshness is judged against DateTime.UtcNow (no +8 skew).
+    private void ApplyCameraState(Trip t)
+    {
+        var hb = t.CountHeartbeat;
+        if (hb is not null) cameraSeen = true;
+        var fresh = hb is not null && DateTime.UtcNow - PhTime.Raw(hb.Value) < HeartbeatStale;
+        // Camera's number only ever raises ours (monotonic) — a lagging DB read must
+        // never wipe taps the driver just made.
+        if (fresh && t.TotalBoarded > total) total = t.TotalBoarded;
+        cameraAlive = fresh;
+    }
+
+    private async Task RefreshCameraStateAsync()
+    {
+        try
+        {
+            var t = await Data.GetTripAsync(TripId);
+            if (t is null) return;
+            hbPollFails = 0;
+            ApplyCameraState(t);
+            if (cameraAlive)
+            {
+                // Keep the tap-mirror current: the background tracker logs this value
+                // into telemetry, and End Trip audits against it.
+                await SecureStorage.Default.SetAsync(CountKey, total.ToString());
+            }
+        }
+        catch
+        {
+            // Offline: after ~15s of failed reads, fail OPEN (reveal manual) so the
+            // driver can keep counting; camera's monotonic max() reconciles later.
+            if (++hbPollFails >= 3) cameraAlive = false;
+        }
     }
 
     private async Task Inc()
