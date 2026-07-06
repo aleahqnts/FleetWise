@@ -7,7 +7,7 @@
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
 
     <application
-        android:label="CameraCount"
+        android:label="RouteSync Counter"
         android:icon="@android:drawable/ic_menu_camera"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:supportsRtl="true">

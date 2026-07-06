@@ -51,4 +51,9 @@ public class Trip : BaseModel
     // row stay in sync with the schema.
     [Column("is_simulated")]
     public bool IsSimulated { get; set; }
+
+    // CameraCount Mobile stamps this (true UTC) every 5s while it is counting.
+    // Fresh (<12s) -> camera owns total_boarded and the driver's manual counter hides.
+    [Column("count_heartbeat")]
+    public DateTime? CountHeartbeat { get; set; }
 }
