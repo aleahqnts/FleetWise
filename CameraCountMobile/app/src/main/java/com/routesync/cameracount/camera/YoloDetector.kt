@@ -33,8 +33,14 @@ class YoloDetector private constructor(
 
     companion object {
         const val MODEL_ASSET = "yolo11n_float32.tflite"
-        private const val CONF_THRESHOLD = 0.40f
-        private const val IOU_THRESHOLD = 0.45f
+        /** UI/new-track confidence. Detector emits down to CONF_THRESHOLD so the
+         *  tracker's second (low-conf rescue) stage can keep occluded tracks alive. */
+        const val HIGH_CONF = 0.40f
+        private const val CONF_THRESHOLD = 0.25f
+        // NMS keeps a box unless it overlaps a higher-scoring one by > this. Set high so
+        // two people standing close (moderate overlap) stay as TWO boxes; only near-
+        // identical duplicates on the SAME person get merged.
+        private const val IOU_THRESHOLD = 0.55f
         private const val PERSON_CLASS = 0
 
         fun tryCreate(context: Context): YoloDetector? = try {

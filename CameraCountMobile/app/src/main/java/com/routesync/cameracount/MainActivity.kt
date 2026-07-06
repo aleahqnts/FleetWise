@@ -34,9 +34,18 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun Root(vm: CounterViewModel = viewModel()) {
-    var showCamera by remember { mutableStateOf(false) }
-    if (showCamera) {
-        CameraScreen(onClose = { showCamera = false })
+    var showPreview by remember { mutableStateOf(false) }
+    val s = vm.state.collectAsState().value
+
+    // Trip active -> this device IS the counter. Camera + tracker run for the whole
+    // trip and stop when the trip ends (state leaves Counting -> screen disposed).
+    if (s is CounterViewModel.UiState.Counting) {
+        CameraScreen(vm = vm)
+        return
+    }
+    // Aiming/demo preview (no counting), reachable while waiting.
+    if (showPreview) {
+        CameraScreen(onClose = { showPreview = false })
         return
     }
     RsBackground {
@@ -45,10 +54,10 @@ fun Root(vm: CounterViewModel = viewModel()) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            when (val s = vm.state.collectAsState().value) {
+            when (s) {
                 is CounterViewModel.UiState.NeedsSetup -> SetupCard(onBind = vm::bind)
-                is CounterViewModel.UiState.Waiting -> WaitingCard(vm, s, onCamera = { showCamera = true })
-                is CounterViewModel.UiState.Counting -> CountingCard(vm, s, onCamera = { showCamera = true })
+                is CounterViewModel.UiState.Waiting -> WaitingCard(vm, s, onCamera = { showPreview = true })
+                else -> {}
             }
         }
     }
@@ -101,31 +110,6 @@ private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waitin
                 Spacer(Modifier.height(12.dp))
                 Text("Last poll error: $it", color = RsColor.Error, textAlign = TextAlign.Center)
             }
-        }
-    }
-}
-
-@Composable
-private fun CountingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Counting, onCamera: () -> Unit) {
-    Header(vm, s.vehicleId, onCamera)
-    Spacer(Modifier.height(20.dp))
-    RsCard {
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            StatusDot(active = true)
-            Spacer(Modifier.height(6.dp))
-            Text("Counting  ·  ${s.tripId}", color = RsColor.Muted, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(12.dp))
-            Text("${s.count}", fontSize = 72.sp, fontWeight = FontWeight.ExtraBold, color = RsColor.Teal)
-            Text("passengers boarded", color = RsColor.Navy)
-            Spacer(Modifier.height(24.dp))
-            PrimaryButton("+1  (fake camera event)") { vm.increment() }
-            Spacer(Modifier.height(14.dp))
-            Text(
-                if (s.lastFlushOk) "Synced · count + heartbeat every 5s"
-                else "Sync retrying — will catch up",
-                color = if (s.lastFlushOk) RsColor.Teal else RsColor.Error,
-                fontSize = 13.sp
-            )
         }
     }
 }
