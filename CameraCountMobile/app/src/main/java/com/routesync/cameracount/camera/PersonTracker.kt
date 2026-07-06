@@ -23,8 +23,14 @@ class PersonTracker {
         var misses = 0
         /** set once the track crossed the line inward — a person counts exactly once */
         var counted = false
-        /** which side of the counting line this track was on last frame; 0 = unseen */
+        /** which side of the counting line this track was on last frame; 0 = undecided */
         var prevSide = 0
+        /**
+         * side the track was BORN on (first frame it cleared the dead band). Only tracks
+         * born OUTWARD may ever count: someone already past the line who steps back and
+         * returns, a driver near the line, or a track popping up mid-frame can never +1.
+         */
+        var originSide = 0
         val cx get() = box.centerX()
         val cy get() = box.centerY()
         val confirmed get() = hits >= MIN_HITS
@@ -102,33 +108,62 @@ class PersonTracker {
 
 /**
  * Counting line = a segment between two endpoints A and B (frame-normalized 0..1), so it
- * can sit at ANY angle — real doorways are rarely a perfect vertical. "Which side" of the
- * infinite line through A,B is the sign of the 2D cross product; a confirmed track whose
- * center flips from the outward side to the inward side counts ONCE (track.counted).
+ * can sit at ANY angle — real doorways are rarely a perfect vertical.
  *
- * [inwardSign] (+1 / -1) picks which side is "boarding". Tracks first seen already on the
- * inward side (driver, seated passengers) have no outward history -> never count.
+ * A +1 needs ALL of:
+ *  - track born on the OUTWARD side (origin rule): anyone first seen inward — already
+ *    boarded, the driver, a person popping up mid-frame — can never count, even if they
+ *    wander back over the line and return;
+ *  - center clears a DEAD BAND (~[BAND] perpendicular distance) past the line before a
+ *    side "counts" as entered: a hand hovering on the line jitters inside the band and
+ *    never registers a crossing;
+ *  - once per track ([Track.counted]).
+ *
+ * [inwardSign] (+1 / -1) picks which side of A->B is "boarding". Sides here are stored
+ * relative to inward: +1 = inward, -1 = outward.
  */
 class LineCrossCounter(
     var ax: Float = 0.5f, var ay: Float = 0.05f,
     var bx: Float = 0.5f, var by: Float = 0.95f,
     var inwardSign: Int = 1
 ) {
-    private fun sideOf(px: Float, py: Float): Int {
-        val cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax)
-        return if (cross >= 0f) 1 else -1
+    companion object {
+        /** dead-band half-width, in frame-normalized units (~2% of the frame). */
+        private const val BAND = 0.02f
+    }
+
+    /** Perpendicular distance from the line, sign flipped so + = inward side. */
+    private fun inwardDist(px: Float, py: Float): Float {
+        val dx = bx - ax
+        val dy = by - ay
+        val len = kotlin.math.hypot(dx, dy).coerceAtLeast(1e-4f)
+        val cross = dx * (py - ay) - dy * (px - ax)
+        return cross / len * inwardSign
     }
 
     /** Returns how many NEW inward crossings happened this frame. */
     fun process(tracks: List<PersonTracker.Track>): Int {
         var crossings = 0
         for (t in tracks) {
-            val side = sideOf(t.cx, t.cy)
-            if (t.prevSide == 0) { t.prevSide = side; continue }
-            if (side != t.prevSide && !t.counted) {
-                if (side == inwardSign) { t.counted = true; crossings++ }
+            val d = inwardDist(t.cx, t.cy)
+            val zone = when {
+                d > BAND -> 1   // clearly inward
+                d < -BAND -> -1 // clearly outward
+                else -> 0       // inside the dead band: keep previous state
             }
-            t.prevSide = side
+            if (zone == 0) continue
+            if (t.prevSide == 0) {
+                t.prevSide = zone
+                t.originSide = zone
+                continue
+            }
+            if (zone != t.prevSide) {
+                if (zone == 1 && t.originSide == -1 && !t.counted) {
+                    t.counted = true
+                    crossings++
+                }
+                t.prevSide = zone
+            }
         }
         return crossings
     }
