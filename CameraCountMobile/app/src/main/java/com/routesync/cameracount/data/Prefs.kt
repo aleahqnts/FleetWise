@@ -30,6 +30,7 @@ class Prefs(private val context: Context) {
         private val LINE_INWARD_SIGN = intPreferencesKey("line_inward_sign")
         private val PENDING_TRIP_ID = stringPreferencesKey("pending_trip_id")
         private val PENDING_COUNT = intPreferencesKey("pending_count")
+        private val USE_BACK_CAMERA = androidx.datastore.preferences.core.booleanPreferencesKey("use_back_camera")
         // Default = vertical line down the middle (same as before, just as two endpoints).
         const val DEF_AX = 0.5f; const val DEF_AY = 0.05f
         const val DEF_BX = 0.5f; const val DEF_BY = 0.95f
@@ -49,6 +50,16 @@ class Prefs(private val context: Context) {
         val id = "cam-" + java.util.UUID.randomUUID().toString().take(8)
         context.dataStore.edit { it[DEVICE_ID] = id }
         return id
+    }
+
+    /**
+     * Which camera faces the doorway. Back camera often has a 0.6x ultrawide -> whole
+     * approach path in frame at dashboard distance. Mount decides; toggle in Calibrate.
+     */
+    val useBackCamera: Flow<Boolean> = context.dataStore.data.map { it[USE_BACK_CAMERA] ?: false }
+
+    suspend fun saveUseBackCamera(v: Boolean) {
+        context.dataStore.edit { it[USE_BACK_CAMERA] = v }
     }
 
     /** Counting-line calibration (Phase 5): two endpoints (any angle) + boarding side. */
