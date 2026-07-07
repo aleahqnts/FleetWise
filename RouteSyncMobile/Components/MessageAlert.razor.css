@@ -1,88 +1,117 @@
-.msg-pop-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(13, 28, 40, .55);
+/* Minimalist toast — soft neutral card a shade darker than the white app bg.
+   No blur (invisible over white), no transform animation (stuck off-screen on some
+   WebViews). Opacity-only fade in, which every WebView renders reliably. */
+/* Flat solid card, full-width (positioning inlined on the element). */
+.toast {
+    padding: 13px 15px;
+    border-radius: 16px;
+    background: #eef0f4;                 /* a touch darker than the #fff page */
+    border: 1px solid #e2e5ec;
+    box-shadow: 0 8px 24px rgba(20, 30, 55, 0.14);
+    cursor: pointer;
+    animation: toast-fade 0.22s ease-out;
+}
+
+.toast.high {
+    background: #fdeff0;
+    border-color: #f2d3d5;
+}
+
+@keyframes toast-fade {
+    from { opacity: 0; }
+}
+
+.toast-top {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 6px;
+}
+
+.toast-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #2e9e8f;
+    flex: 0 0 7px;
+}
+
+.toast.high .toast-dot { background: #d0494b; }
+
+.toast-scope {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    color: #6a7386;
+    text-transform: uppercase;
+}
+
+.toast-prio {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #d0494b;
+    color: #fff;
+}
+
+.toast-when {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: #9aa3b2;
+}
+
+.toast-x {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    background: rgba(20, 30, 55, 0.08);
+    color: #59627a;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 28px;
-    z-index: 4000;
 }
 
-.msg-pop {
-    width: 100%;
-    max-width: 360px;
-    background: #fff;
-    border-radius: 18px;
-    padding: 20px 20px 18px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, .3);
-    border-top: 5px solid #2e9e8f;
-    animation: msg-pop-in .18s ease-out;
-}
-
-.msg-pop.high {
-    border-top-color: #e23b3b;
-}
-
-@keyframes msg-pop-in {
-    from { transform: translateY(12px) scale(.97); opacity: 0; }
-    to   { transform: none; opacity: 1; }
-}
-
-.msg-pop-head {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
-}
-
-.msg-pop-scope {
-    font-size: 10.5px;
-    font-weight: 800;
-    letter-spacing: .3px;
-    text-transform: uppercase;
-    padding: 2px 8px;
+.toast-x.got {
+    width: auto;
+    height: auto;
+    padding: 5px 12px;
     border-radius: 999px;
-    background: #e6f6f2;
-    color: #2e7d72;
-}
-
-.msg-pop-prio {
-    font-size: 10.5px;
+    background: #d0494b;
+    color: #fff;
     font-weight: 800;
-    letter-spacing: .3px;
-    text-transform: uppercase;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: #fdecec;
-    color: #d23b3b;
 }
 
-.msg-pop-title {
-    margin: 0 0 6px;
-    font-size: 17px;
-    font-weight: 800;
-    color: #14463f;
-}
-
-.msg-pop-body {
-    margin: 0 0 16px;
-    font-size: 14px;
-    line-height: 1.45;
-    color: #41505e;
-}
-
-.msg-pop-btn {
-    width: 100%;
-    border: none;
-    border-radius: 12px;
-    padding: 12px;
+.toast-title {
+    margin: 0;
     font-size: 15px;
     font-weight: 800;
-    color: #fff;
-    background: #2e9e8f;
+    color: #1b2a56;
+    line-height: 1.25;
 }
 
-.msg-pop.high .msg-pop-btn {
-    background: #e23b3b;
+/* Collapsed: message clamped to one line. Expanded: full text. */
+.toast-msg {
+    margin: 3px 0 0;
+    font-size: 13px;
+    color: #5a6473;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.toast.expanded .toast-msg {
+    white-space: normal;
+    overflow: visible;
 }

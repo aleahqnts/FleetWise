@@ -9,10 +9,10 @@
 {
     <div class="page-skeleton">
         <div class="sk sk-line w50" style="height:24px; margin-bottom:20px"></div>
-        <div class="sk sk-line w30"></div>
-        <div class="sk sk-card"></div>
-        <div class="sk sk-card"></div>
-        <div class="sk sk-card"></div>
+        <div class="sk sk-card" style="height:64px"></div>
+        <div class="sk sk-line w30" style="margin-top:8px"></div>
+        <div class="sk sk-card tall" style="height:130px"></div>
+        <div class="sk sk-card tall" style="height:130px"></div>
     </div>
 }
 else
@@ -20,9 +20,27 @@ else
     <div class="trips">
         <h1 class="trips-title">Trips</h1>
 
+        @if (trips.Any())
+        {
+            <div class="tsum">
+                <div class="tsum-item">
+                    <p class="tsum-n">@MonthTrips</p>
+                    <p class="tsum-l">Trips this month</p>
+                </div>
+                <div class="tsum-item right">
+                    <p class="tsum-n">@MonthPassengers.ToString("N0")</p>
+                    <p class="tsum-l">Passengers this month</p>
+                </div>
+            </div>
+        }
+
         @if (!trips.Any())
         {
-            <p class="muted">No trips yet.</p>
+            <div class="tempty">
+                <span class="tempty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="16" height="13" rx="2"/><path d="M4 9h16M8 21l1.5-4M16 21l-1.5-4"/><circle cx="8.5" cy="13.5" r="1"/><circle cx="15.5" cy="13.5" r="1"/></svg></span>
+                <p class="tempty-t">No trips yet</p>
+                <p class="tempty-s">Your completed trips will show up here.</p>
+            </div>
         }
         else
         {
@@ -31,12 +49,28 @@ else
                 <h2 class="group">@g.Key</h2>
                 @foreach (var t in g)
                 {
-                    <div class="trip-card">
-                        <div>
-                            <p class="tid">@t.TripId</p>
-                            <p class="tdate">@t.Date.ToString("MMMM d, yyyy")</p>
+                    <div class="trip-card @StatusClass(t)" @onclick="@(() => Nav.NavigateTo($"/trip-report/{t.TripId}"))">
+                        <div class="tc-head">
+                            <p class="tc-route">@(routeNames.GetValueOrDefault(t.RouteId, $"Route {t.RouteId}"))</p>
+                            <span class="tc-status @StatusClass(t)">@t.TripStatus</span>
                         </div>
-                        <button class="link-btn" @onclick="@(() => Nav.NavigateTo($"/trip-report/{t.TripId}"))">View Trip</button>
+                        <p class="tc-sub">@t.TripId · @t.ShiftType Shift · @TimeRange(t)</p>
+
+                        <div class="tc-stats">
+                            <span class="tc-stat">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-4.5 5.5-4.5s5.5 1.5 5.5 4.5M15.5 5.5a3.2 3.2 0 0 1 0 5M17.5 14.7c1.8.7 3 1.9 3 4.3"/></svg>
+                                @t.TotalBoarded passengers
+                            </span>
+                            <span class="tc-stat">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
+                                ₱@t.EstimatedRevenue.ToString("N2")
+                            </span>
+                            <span class="tc-stat">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14M6 17V8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v9"/><circle cx="8.5" cy="19" r="1.4"/><circle cx="15.5" cy="19" r="1.4"/></svg>
+                                @t.VehicleId
+                            </span>
+                        </div>
+                        <span class="tc-chev">&#8250;</span>
                     </div>
                 }
             }
@@ -47,6 +81,14 @@ else
 @code {
     private bool loading = true;
     private List<Trip> trips = new();
+    private readonly Dictionary<int, string> routeNames = new();
+
+    private int MonthTrips => trips.Count(t =>
+        t.TripStatus == "Completed" && t.Date.Year == DateTime.Today.Year && t.Date.Month == DateTime.Today.Month);
+
+    private int MonthPassengers => trips.Where(t =>
+        t.TripStatus == "Completed" && t.Date.Year == DateTime.Today.Year && t.Date.Month == DateTime.Today.Month)
+        .Sum(t => t.TotalBoarded);
 
     private IEnumerable<IGrouping<string, Trip>> Grouped =>
         trips.OrderByDescending(t => t.Date).ThenByDescending(t => t.TripId)
@@ -60,12 +102,37 @@ else
         return dd.ToString("MMMM d, yyyy");
     }
 
+    private static string StatusClass(Trip t) => t.TripStatus switch
+    {
+        "Completed" => "done",
+        "Active" => "live",
+        _ => "other"
+    };
+
+    private static string TimeRange(Trip t) =>
+        $"{DateTime.Today.Add(t.ShiftStartTime):h:mm tt} – {DateTime.Today.Add(t.ShiftEndTime):h:mm tt}";
+
     protected override async Task OnInitializedAsync()
     {
         if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
         trips = await Data.GetTripsForDriverAsync(Session.CurrentUser!.UserId);
+        await FillRouteNames();
         loading = false;
         _ = PollLoop(); // background: finished trips appear without pull-to-refresh
+    }
+
+    // Route names are stable — fetch each unique route once, then cache for the session.
+    private async Task FillRouteNames()
+    {
+        foreach (var id in trips.Select(t => t.RouteId).Distinct().Where(id => !routeNames.ContainsKey(id)))
+        {
+            try
+            {
+                var r = await Data.GetRouteAsync(id);
+                if (r is not null) routeNames[id] = r.RouteName;
+            }
+            catch { /* falls back to "Route N" label */ }
+        }
     }
 
     // Silent re-fetch every 15s while the tab is open — list stays live, no flicker.
@@ -81,7 +148,12 @@ else
                 try
                 {
                     var fresh = await Data.GetTripsForDriverAsync(Session.CurrentUser!.UserId);
-                    await InvokeAsync(() => { trips = fresh; StateHasChanged(); });
+                    await InvokeAsync(async () =>
+                    {
+                        trips = fresh;
+                        await FillRouteNames();
+                        StateHasChanged();
+                    });
                 }
                 catch { /* background blip: keep showing the last good list */ }
             }
@@ -101,6 +173,7 @@ else
     [JSInvokable] public async Task Refresh()
     {
         trips = await Data.GetTripsForDriverAsync(Session.CurrentUser!.UserId);
+        await FillRouteNames();
         StateHasChanged();
     }
     public void Dispose()
