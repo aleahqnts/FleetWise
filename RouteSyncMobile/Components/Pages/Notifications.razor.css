@@ -12,11 +12,71 @@
     padding: 52px 22px 28px;
 }
 
+.nbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
 .ntitle {
-    margin: 0 0 18px;
+    margin: 0;
     font-size: 22px;
     font-weight: 800;
     color: #1b2a56;
+}
+
+.nsub {
+    margin: 2px 0 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #2e9e8f;
+}
+
+.nmark {
+    border: 1px solid #cfe5df;
+    background: #e8f5f1;
+    color: #2e9e8f;
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.nmark:disabled { opacity: 0.6; }
+
+.nwhen {
+    color: #9aa3b2;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.nempty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+.nempty-ico svg {
+    width: 54px;
+    height: 54px;
+    color: #c3cbd8;
+}
+
+.nempty-t {
+    margin: 14px 0 0;
+    font-size: 16px;
+    font-weight: 800;
+    color: #1b2a56;
+}
+
+.nempty-s {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: #8a93a2;
 }
 
 .ngroup {

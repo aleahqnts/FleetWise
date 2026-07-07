@@ -3,66 +3,115 @@
 @inject DriverDataService Data
 @using FleetWiseMobile.Models
 
+@* Non-blocking frosted-glass toast. Normal msgs auto-hide in 8s; HIGH priority sticks
+   until "Got it". Tapping expands the full body in place — the trip screen stays put.
+   position:fixed inlined so a stale scoped-css cache can never bury it off-screen. *@
+@* Minimalist non-blocking toast. Critical positioning inlined (a stale scoped-css cache
+   or a stuck transform-animation can never bury it again). Soft gray card, no blur.
+   Tap = expand full body in place; ✕/Got it = dismiss. Auto-hides normal msgs in 8s. *@
 @if (current is not null)
 {
-    <div class="msg-pop-backdrop" @onclick="DismissIfAllowed">
-        <div class="msg-pop @(IsHigh(current) ? "high" : "")" @onclick:stopPropagation="true">
-            <div class="msg-pop-head">
-                <span class="msg-pop-scope">@ScopeLabel(current)</span>
-                @if (IsHigh(current))
-                {
-                    <span class="msg-pop-prio">High priority</span>
-                }
-            </div>
-            <p class="msg-pop-title">@current.Subject</p>
-            <p class="msg-pop-body">@current.Body</p>
-            <button class="msg-pop-btn" @onclick="Dismiss">
-                @(IsHigh(current) ? "Got it" : "Close")
+    @* Box fully inlined (matches the test card that worked) — the .toast scoped-css class
+       kept failing to apply after structural edits, so nothing critical relies on it now.
+       Full-width edge-to-edge with 14px side margins; flat solid card, no accent rail. *@
+    <div style="position:fixed; top:52px; left:14px; right:14px; z-index:9000;
+                background:@(IsHigh(current) ? "#fdeff0" : "#eef0f4");
+                border:1px solid @(IsHigh(current) ? "#f2d3d5" : "#e2e5ec");
+                border-radius:16px; padding:13px 15px;
+                box-shadow:0 12px 36px rgba(20,30,55,0.38); cursor:pointer;"
+         @onclick="ToggleExpand">
+        <div style="display:flex; align-items:center; gap:7px; margin-bottom:6px;">
+            <span style="width:7px; height:7px; border-radius:50%; flex:0 0 7px;
+                         background:@(IsHigh(current) ? "#d0494b" : "#2e9e8f");"></span>
+            <span style="font:700 11px sans-serif; letter-spacing:.2px; text-transform:uppercase; color:#6a7386;">
+                @ScopeLabel(current)
+            </span>
+            @if (IsHigh(current))
+            {
+                <span style="font:800 10px sans-serif; text-transform:uppercase; padding:2px 8px;
+                             border-radius:999px; background:#d0494b; color:#fff;">Urgent</span>
+            }
+            <span style="margin-left:auto; font:600 11px sans-serif; color:#9aa3b2;">now</span>
+            <button @onclick="Dismiss" @onclick:stopPropagation="true"
+                    style="flex:0 0 auto; border:none; cursor:pointer; font-weight:800; line-height:1;
+                           @(IsHigh(current)
+                             ? "padding:5px 12px; border-radius:999px; background:#d0494b; color:#fff; font-size:12px;"
+                             : "width:24px; height:24px; padding:0; border-radius:50%; background:rgba(20,30,55,.08); color:#59627a; font-size:12px;")">
+                @(IsHigh(current) ? "Got it" : "✕")
             </button>
         </div>
+        <p style="margin:0; font:800 15px sans-serif; color:#1b2a56; line-height:1.25;">@current.Subject</p>
+        <p style="margin:3px 0 0; font:13px sans-serif; color:#5a6473; line-height:1.4;
+                  @(expanded ? "" : "white-space:nowrap; overflow:hidden; text-overflow:ellipsis;")">
+            @current.Body
+        </p>
     </div>
 }
 
 @code {
     private readonly Queue<MessageModel> _queue = new();
     private MessageModel? current;
+    private bool expanded;
     private System.Timers.Timer? _auto;
 
-    protected override void OnInitialized() => Watch.NewMessage += OnNew;
+    protected override void OnInitialized()
+    {
+        Watch.NewMessage += OnNew;
+    }
 
     private void OnNew(MessageModel m)
     {
         _queue.Enqueue(m);
-        InvokeAsync(ShowNext);
+        InvokeAsync(() => { StateHasChanged(); ShowNext(); });
     }
 
     private void ShowNext()
     {
         if (current is not null || _queue.Count == 0) return;
         current = _queue.Dequeue();
+        expanded = false;
 
         _auto?.Dispose();
         _auto = null;
-        // Normal msgs auto-close after 8s; high-priority must be tapped.
+        // Normal msgs auto-hide after 8s (they stay unread -> tab badge catches them).
+        // High priority never auto-hides: the driver must acknowledge it.
         if (!IsHigh(current))
         {
             _auto = new System.Timers.Timer(8000) { AutoReset = false };
-            _auto.Elapsed += (_, _) => InvokeAsync(Dismiss);
+            _auto.Elapsed += (_, _) => InvokeAsync(AutoHide);
             _auto.Start();
         }
         StateHasChanged();
     }
 
-    // Tapping the backdrop closes only non-high msgs (high needs explicit button).
-    private void DismissIfAllowed()
+    // Expanding = reading: cancel the auto-hide so it doesn't vanish mid-sentence.
+    private void ToggleExpand()
     {
-        if (current is not null && !IsHigh(current)) _ = Dismiss();
+        expanded = !expanded;
+        if (expanded)
+        {
+            _auto?.Dispose();
+            _auto = null;
+        }
     }
 
+    // Timer expiry hides WITHOUT marking read — an unseen toast must keep its badge.
+    private void AutoHide()
+    {
+        current = null;
+        expanded = false;
+        _auto?.Dispose();
+        _auto = null;
+        StateHasChanged();
+        ShowNext();
+    }
+
+    // Explicit dismiss = acknowledged -> mark direct messages read.
     private async Task Dismiss()
     {
         var m = current;
         current = null;
+        expanded = false;
         _auto?.Dispose();
         _auto = null;
 

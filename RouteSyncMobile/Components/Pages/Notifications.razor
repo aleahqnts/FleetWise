@@ -19,11 +19,29 @@
 else
 {
     <div class="notif">
-        <h1 class="ntitle">Notifications</h1>
+        <div class="nbar">
+            <div>
+                <h1 class="ntitle">Notifications</h1>
+                @if (UnreadCount > 0)
+                {
+                    <p class="nsub">@UnreadCount unread</p>
+                }
+            </div>
+            @if (UnreadCount > 0)
+            {
+                <button class="nmark" @onclick="MarkAllRead" disabled="@markingAll">
+                    @(markingAll ? "Marking…" : "Mark all read")
+                </button>
+            }
+        </div>
 
         @if (!items.Any())
         {
-            <p class="muted">No messages in the last 2 weeks.</p>
+            <div class="nempty">
+                <span class="nempty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M10.5 19a2 2 0 0 0 3 0"/></svg></span>
+                <p class="nempty-t">All caught up</p>
+                <p class="nempty-s">No messages in the last 2 weeks.</p>
+            </div>
         }
         else
         {
@@ -55,7 +73,7 @@ else
                                     <span class="nprio">High priority</span>
                                 }
                             </div>
-                            <p class="nt">@n.Subject</p>
+                            <p class="nt">@n.Subject <span class="nwhen">· @When(n)</span></p>
                             @if (expandedId == n.MessageId)
                             {
                                 <p class="np full">@n.Body</p>
@@ -88,6 +106,36 @@ else
 
     // unread dot + mark-read only apply to driver-targeted msgs (1 recipient)
     private static bool IsUnread(MessageModel n) => Aud(n) == "driver" && !n.IsRead;
+
+    private int UnreadCount => items.Count(IsUnread);
+    private bool markingAll;
+
+    private async Task MarkAllRead()
+    {
+        markingAll = true;
+        try
+        {
+            foreach (var n in items.Where(IsUnread))
+            {
+                await Data.MarkMessageReadAsync(n.MessageId);
+                n.IsRead = true;
+            }
+            await Watch.RefreshNow();
+        }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Msg.MarkAll] {ex}"); }
+        finally { markingAll = false; }
+    }
+
+    /** Compact age for the card head: 5m / 3h / else clock time (groups carry the date). */
+    private static string When(MessageModel n)
+    {
+        var t = PhTime.Raw(n.CreatedAt);
+        var age = DateTime.Now - t;
+        if (age < TimeSpan.FromMinutes(1)) return "now";
+        if (age < TimeSpan.FromHours(1)) return $"{(int)age.TotalMinutes}m";
+        if (age < TimeSpan.FromHours(24)) return $"{(int)age.TotalHours}h";
+        return t.ToString("h:mm tt");
+    }
 
     private static bool IsHighPriority(MessageModel n) =>
         string.Equals(n.Priority, "high", StringComparison.OrdinalIgnoreCase);
