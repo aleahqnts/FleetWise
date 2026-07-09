@@ -6,6 +6,10 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Phase 7: Supabase service (secret) key lives in an untracked local override so it
+// never commits. Overrides Supabase:Key from appsettings.json when present.
+builder.Configuration.AddJsonFile("appsettings.Secret.json", optional: true, reloadOnChange: true);
+
 // Add services to the container.
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>

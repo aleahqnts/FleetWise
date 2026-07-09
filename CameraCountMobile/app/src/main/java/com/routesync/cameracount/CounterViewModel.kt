@@ -102,18 +102,22 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
     fun bind(vehicle: String, passcode: String, onResult: (String?) -> Unit) {
         val v = vehicle.trim().uppercase()
         viewModelScope.launch {
-            // Phase 7: mint the device JWT FIRST — post-7d every call below needs it.
-            // Unreachable (fn not deployed / offline check happens next anyway) -> proceed
-            // on anon; Denied = wrong fleet passcode -> tolerated during the 7a-7c window,
-            // becomes a hard refuse at the 7d cutover.
+            // Phase 7 (7d: JWT-only): mint the device JWT FIRST — every call below
+            // requires it (anon has zero DB access). Wrong passcode or no server ->
+            // bind refused outright.
             when (val tok = SupabaseApi.fetchDeviceToken(deviceId, passcode)) {
                 is SupabaseApi.TokenResult.Ok -> {
                     prefs.saveDeviceJwt(tok.token)
                     SupabaseApi.deviceJwt = tok.token
                 }
-                SupabaseApi.TokenResult.Denied ->
-                    android.util.Log.w("CameraCount", "device-token refused (fleet passcode mismatch)")
-                SupabaseApi.TokenResult.Unreachable -> { /* anon fallback */ }
+                SupabaseApi.TokenResult.Denied -> {
+                    onResult("Wrong fleet passcode — binding is verified by the server now.")
+                    return@launch
+                }
+                SupabaseApi.TokenResult.Unreachable -> {
+                    onResult("Can't reach the server — check the internet connection and try again.")
+                    return@launch
+                }
             }
             val p = try {
                 SupabaseApi.findVehiclePlate(v)
