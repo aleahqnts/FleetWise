@@ -19,9 +19,21 @@ public static class MauiProgram
 		// Supabase client — single shared instance (mirrors the web app's setup).
 		var supabase = new Supabase.Client(SupabaseConfig.Url, SupabaseConfig.Key);
 		supabase.InitializeAsync().Wait();
+
+		// Phase 7: every postgrest read/write carries the driver JWT once login minted
+		// one (SupabaseConfig.Bearer falls back to the anon key until then). Dynamic
+		// closure -> login/logout flips auth for ALL From<T>() calls with no re-init.
+		if (supabase.Postgrest is Postgrest.Client pg)
+			pg.GetHeaders = () => new Dictionary<string, string>
+			{
+				["apikey"] = SupabaseConfig.Key,
+				["Authorization"] = $"Bearer {SupabaseConfig.Bearer}",
+			};
+
 		builder.Services.AddSingleton(supabase);
 
 		// App services
+		builder.Services.AddSingleton<Services.AuthApi>();
 		builder.Services.AddSingleton<Services.SessionService>();
 		builder.Services.AddSingleton<Services.AuthService>();
 		builder.Services.AddSingleton<Services.DriverDataService>();

@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Identity
 @inject SessionService Session
 @inject DriverDataService Data
+@inject AuthApi Api
 @inject MessageWatch Watch
 @inject IJSRuntime JS
 @inject NavigationManager Nav
@@ -264,19 +265,28 @@ else
         if (newPwd.Length < 6) { pwdMsg = "New password too short (min 6)."; pwdOk = false; return; }
         if (newPwd != confirmPwd) { pwdMsg = "New passwords don't match."; pwdOk = false; return; }
 
-        var hasher = new PasswordHasher<UserModel>();
-        if (user!.PasswordHash is null ||
-            hasher.VerifyHashedPassword(user, user.PasswordHash, curPwd) == PasswordVerificationResult.Failed)
-        {
-            pwdMsg = "Current password is incorrect."; pwdOk = false; return;
-        }
-
         savingPwd = true;
         try
         {
-            var newHash = hasher.HashPassword(user, newPwd);
-            await Data.UpdatePasswordAsync(user.UserId, newHash);
-            user.PasswordHash = newHash;
+            // Phase 7: server-side verify + hash via the change-password edge fn.
+            var r = await Api.ChangePasswordAsync(curPwd, newPwd);
+            if (r.Outcome == AuthApi.Outcome.Denied)
+            {
+                pwdMsg = r.Message ?? "Current password is incorrect."; pwdOk = false; return;
+            }
+            if (r.Outcome == AuthApi.Outcome.Unreachable)
+            {
+                // Legacy fallback (fn not reachable / anon session): on-device verify + hash.
+                // This path dies at the 7b cutover.
+                var hasher = new PasswordHasher<UserModel>();
+                var curHash = await Data.GetUserHashAsync(user!.UserId);
+                if (curHash is null ||
+                    hasher.VerifyHashedPassword(user, curHash, curPwd) == PasswordVerificationResult.Failed)
+                {
+                    pwdMsg = "Current password is incorrect."; pwdOk = false; return;
+                }
+                await Data.UpdatePasswordAsync(user.UserId, hasher.HashPassword(user, newPwd));
+            }
             curPwd = newPwd = confirmPwd = "";
             pwdMsg = "Password updated."; pwdOk = true;
         }

@@ -30,6 +30,11 @@ class DetectorAnalyzer(
 
     private var frameNo = 0L
 
+    // Reused across frames (analyzer is single-threaded): allocating a fresh model-input
+    // bitmap per frame = constant GC churn + heat on a CPU-inference phone.
+    private var square: Bitmap? = null
+    private var squareCanvas: Canvas? = null
+
     override fun analyze(image: ImageProxy) {
         try {
             val n = throttle().coerceAtLeast(1)
@@ -53,17 +58,22 @@ class DetectorAnalyzer(
             Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
         } else bmp
 
-        // Letterbox into the model square, preserving aspect.
+        // Letterbox into the model square, preserving aspect. The square buffer is
+        // reused frame-to-frame; borders are cleared so no previous-frame ghosting.
         val s = detector.inputSize
         val scale = s.toFloat() / maxOf(upright.width, upright.height)
         val dw = upright.width * scale
         val dh = upright.height * scale
         val dx = (s - dw) / 2f
         val dy = (s - dh) / 2f
-        val square = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
-        Canvas(square).drawBitmap(upright, null, RectF(dx, dy, dx + dw, dy + dh), null)
+        val sq = square ?: Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888).also {
+            square = it
+            squareCanvas = Canvas(it)
+        }
+        squareCanvas!!.drawColor(android.graphics.Color.BLACK)
+        squareCanvas!!.drawBitmap(upright, null, RectF(dx, dy, dx + dw, dy + dh), null)
 
-        val dets = detector.detect(square).map { d ->
+        val dets = detector.detect(sq).map { d ->
             // input-square (0..1) -> pixels -> strip letterbox -> frame-normalized.
             var l = (d.box.left * s - dx) / dw
             var t = (d.box.top * s - dy) / dh
