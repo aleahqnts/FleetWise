@@ -236,19 +236,8 @@ public class DriverDataService
             updated_at = PhTime.Now
         });
 
-    // LEGACY fallback only (anon path while the change-password edge fn is unreachable).
-    // Writes the base table; dies at the 7b cutover.
-    public async Task UpdatePasswordAsync(int userId, string newHash)
-        => await PatchAsync($"users?user_id=eq.{userId}", new { password_hash = newHash, updated_at = PhTime.Now });
-
-    // LEGACY fallback only: fetch the stored hash for on-device verify. Same lifespan.
-    public async Task<string?> GetUserHashAsync(int userId)
-    {
-        var r = await _supabase.From<UserAuthModel>()
-            .Filter("user_id", Operator.Equals, userId.ToString())
-            .Get();
-        return r.Models.FirstOrDefault()?.PasswordHash;
-    }
+    // (7d: legacy on-device password paths removed — change-password edge fn is the
+    // ONLY writer of password_hash outside the web dashboard.)
 
     // Returns the inserted row so the caller has the generated checklist_id (needed to
     // link a maintenance incident when the inspection fails).

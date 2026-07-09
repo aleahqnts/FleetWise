@@ -379,3 +379,7 @@ skills-lock.json
 .agents/
 /.claude/skills
 /PLAN.md
+
+# Phase 7: Supabase service key override (never commit)
+appsettings.Secret.json
+**/appsettings.Secret.json

@@ -5,8 +5,8 @@ namespace FleetWiseMobile.Models;
 
 // Phase 7: retargeted from `users` to the `users_app` view — same columns MINUS
 // password_hash, so the hash never crosses the wire again. The view is scoped to
-// the JWT's own row once a token is attached. Auth fallback paths that still need
-// the hash use UserAuthModel (base table) until the 7b cutover.
+// the JWT's own row. (7d: base `users` is edge-fn/service-only; no client model
+// touches it anymore.)
 [Table("users_app")]
 public class UserModel : BaseModel
 {

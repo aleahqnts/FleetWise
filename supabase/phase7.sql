@@ -255,8 +255,10 @@ notify pgrst, 'reload schema';
 -- Kills the hash hole: anon can no longer read or write password_hash.
 -- Edge fns (service role) + users_app view (definer) keep working.
 -- ============================================================================
+-- PREREQ: web dashboard must be on the secret key FIRST (its login reads users).
 -- alter table public.users enable row level security;
 -- revoke all on public.users from anon;
+-- revoke all on public.users from authenticated;
 -- -- rollback: alter table public.users disable row level security;
 -- --           grant all on public.users to anon;
 
@@ -277,7 +279,10 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- 7d — KILL anon  (DO NOT RUN during 7a)
 -- ============================================================================
--- revoke all on all tables in schema public from anon;
--- revoke all on public.users_app from anon;
+-- revoke all on all tables in schema public from anon;          -- includes users_app view
+-- revoke all on all sequences in schema public from anon;
+-- revoke all on all tables in schema public from authenticated;
 -- -- (web dashboard must already be on the secret key; both apps JWT-only)
+-- -- NOTE for future tables (e.g. Phase 8 device_config/device_status): Supabase default
+-- -- privileges re-grant anon on CREATE — revoke again per new table.
 -- -- rollback: grant select, update on public.<t> to anon;  -- per table as needed
