@@ -19,8 +19,15 @@ import java.util.concurrent.TimeUnit
 object SupabaseApi {
 
     private const val BASE = "https://vrtluruqaxutecydbrsq.supabase.co/rest/v1"
+    private const val FUNCTIONS = "https://vrtluruqaxutecydbrsq.supabase.co/functions/v1"
     private const val KEY = "sb_publishable_sjkjW2K7QOPRKmixJdhSgA_8rPtoFzD"
     private val JSON = "application/json".toMediaType()
+
+    /**
+     * Phase 7: app_camera JWT from the device-token edge fn. Loaded from DataStore at
+     * startup, refreshed at bind. Null -> anon key (works until the 7d cutover).
+     */
+    @Volatile var deviceJwt: String? = null
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -29,7 +36,46 @@ object SupabaseApi {
 
     private fun Request.Builder.supabaseHeaders() = this
         .header("apikey", KEY)
-        .header("Authorization", "Bearer $KEY")
+        .header("Authorization", "Bearer ${deviceJwt ?: KEY}")
+
+    /** Outcome of a device-token mint: only Denied means the passcode was refused. */
+    sealed interface TokenResult {
+        data class Ok(val token: String) : TokenResult
+        data object Denied : TokenResult
+        data object Unreachable : TokenResult
+    }
+
+    /**
+     * Phase 7 provisioning: trade the bind passcode (the fleet secret) for a 365-day
+     * device JWT. The secret is only ever compared SERVER-side (edge fn env var).
+     */
+    suspend fun fetchDeviceToken(deviceId: String, fleetSecret: String): TokenResult =
+        withContext(Dispatchers.IO) {
+            val body = JSONObject()
+                .put("device_id", deviceId)
+                .put("fleet_secret", fleetSecret)
+                .toString()
+                .toRequestBody(JSON)
+            val req = Request.Builder().url("$FUNCTIONS/device-token")
+                .header("apikey", KEY)
+                .post(body)
+                .build()
+            try {
+                http.newCall(req).execute().use { res ->
+                    when {
+                        res.isSuccessful -> {
+                            val token = JSONObject(res.body?.string() ?: "{}")
+                                .optString("token", "")
+                            if (token.isNotEmpty()) TokenResult.Ok(token) else TokenResult.Unreachable
+                        }
+                        res.code == 401 || res.code == 400 || res.code == 429 -> TokenResult.Denied
+                        else -> TokenResult.Unreachable // fn not deployed / 5xx
+                    }
+                }
+            } catch (_: Exception) {
+                TokenResult.Unreachable
+            }
+        }
 
     data class ActiveTrip(val tripId: String, val totalBoarded: Int)
 

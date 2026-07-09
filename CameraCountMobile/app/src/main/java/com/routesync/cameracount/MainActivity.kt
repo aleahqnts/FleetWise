@@ -18,6 +18,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.first
 import com.routesync.cameracount.ui.*
 
 /**
@@ -185,8 +186,40 @@ private fun SetupCard(onBind: (String, String, (String?) -> Unit) -> Unit) {
 
 @Composable
 private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waiting, onCamera: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { com.routesync.cameracount.data.Prefs(context) }
+
+    // Deploy trap: a bound phone whose line was never calibrated counts garbage against
+    // the default mid-screen line. Nag until the installer calibrates once.
+    var lineIsDefault by remember { mutableStateOf(false) }
+    var deviceId by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        val cal = prefs.lineCalibration.first()
+        lineIsDefault = cal.ax == com.routesync.cameracount.data.Prefs.DEF_AX &&
+            cal.ay == com.routesync.cameracount.data.Prefs.DEF_AY &&
+            cal.bx == com.routesync.cameracount.data.Prefs.DEF_BX &&
+            cal.by == com.routesync.cameracount.data.Prefs.DEF_BY
+        deviceId = prefs.deviceId()
+    }
+
     Header(vm, s.vehicleId, onCamera)
     Spacer(Modifier.height(20.dp))
+    if (lineIsDefault) {
+        Row(
+            Modifier.widthIn(max = 380.dp).fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(RsColor.Mint1)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Counting line not calibrated", fontWeight = FontWeight.Bold, color = RsColor.Navy, fontSize = 14.sp)
+                Text("Counts may be wrong until the line is placed on the doorway.", color = RsColor.Muted, fontSize = 12.sp)
+            }
+            TextButton(onClick = onCamera) { Text("Calibrate", color = RsColor.Teal, fontWeight = FontWeight.Bold) }
+        }
+        Spacer(Modifier.height(12.dp))
+    }
     RsCard {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             StatusDot(active = false)
@@ -220,6 +253,12 @@ private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waitin
                 )
             }
         }
+    }
+    // Ops footer: device id matches trips/vehicles.counter_device_id in the DB — needed
+    // when an admin has to identify or clear this phone's lock.
+    if (deviceId.isNotBlank()) {
+        Spacer(Modifier.height(14.dp))
+        Text("RouteSync Counter · $deviceId", color = RsColor.Muted, fontSize = 11.sp)
     }
 }
 

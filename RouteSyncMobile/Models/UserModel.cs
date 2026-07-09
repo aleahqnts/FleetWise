@@ -3,7 +3,11 @@ using Postgrest.Models;
 
 namespace FleetWiseMobile.Models;
 
-[Table("users")]
+// Phase 7: retargeted from `users` to the `users_app` view — same columns MINUS
+// password_hash, so the hash never crosses the wire again. The view is scoped to
+// the JWT's own row once a token is attached. Auth fallback paths that still need
+// the hash use UserAuthModel (base table) until the 7b cutover.
+[Table("users_app")]
 public class UserModel : BaseModel
 {
     [PrimaryKey("user_id")]
@@ -20,9 +24,6 @@ public class UserModel : BaseModel
 
     [Column("email_address")]
     public string? EmailAddress { get; set; }
-
-    [Column("password_hash")]
-    public string? PasswordHash { get; set; }
 
     [Column("role_id")]
     public int RoleId { get; set; }

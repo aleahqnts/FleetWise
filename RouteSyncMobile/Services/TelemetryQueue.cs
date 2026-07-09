@@ -58,7 +58,7 @@ public class TelemetryQueue
                 var req = new HttpRequestMessage(HttpMethod.Post,
                     $"{SupabaseConfig.Url}/rest/v1/telemetry_data");
                 req.Headers.TryAddWithoutValidation("apikey", SupabaseConfig.Key);
-                req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {SupabaseConfig.Key}");
+                req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {SupabaseConfig.Bearer}");
                 req.Headers.TryAddWithoutValidation("Prefer", "return=minimal");
                 req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
@@ -92,7 +92,7 @@ public class TelemetryQueue
             var req = new HttpRequestMessage(HttpMethod.Patch,
                 $"{SupabaseConfig.Url}/rest/v1/trips?trip_id=eq.{Uri.EscapeDataString(f.TripId)}");
             req.Headers.TryAddWithoutValidation("apikey", SupabaseConfig.Key);
-            req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {SupabaseConfig.Key}");
+            req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {SupabaseConfig.Bearer}");
             req.Headers.TryAddWithoutValidation("Prefer", "return=minimal");
             req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
