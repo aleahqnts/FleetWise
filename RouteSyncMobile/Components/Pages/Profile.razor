@@ -268,7 +268,8 @@ else
         savingPwd = true;
         try
         {
-            // Phase 7: server-side verify + hash via the change-password edge fn.
+            // Phase 7 (7d: JWT-only): server-side verify + hash via the change-password
+            // edge fn — the ONLY password writer for this app. No offline path.
             var r = await Api.ChangePasswordAsync(curPwd, newPwd);
             if (r.Outcome == AuthApi.Outcome.Denied)
             {
@@ -276,16 +277,7 @@ else
             }
             if (r.Outcome == AuthApi.Outcome.Unreachable)
             {
-                // Legacy fallback (fn not reachable / anon session): on-device verify + hash.
-                // This path dies at the 7b cutover.
-                var hasher = new PasswordHasher<UserModel>();
-                var curHash = await Data.GetUserHashAsync(user!.UserId);
-                if (curHash is null ||
-                    hasher.VerifyHashedPassword(user, curHash, curPwd) == PasswordVerificationResult.Failed)
-                {
-                    pwdMsg = "Current password is incorrect."; pwdOk = false; return;
-                }
-                await Data.UpdatePasswordAsync(user.UserId, hasher.HashPassword(user, newPwd));
+                pwdMsg = "Can't reach the server. Check your connection and try again."; pwdOk = false; return;
             }
             curPwd = newPwd = confirmPwd = "";
             pwdMsg = "Password updated."; pwdOk = true;
