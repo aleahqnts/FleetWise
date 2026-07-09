@@ -78,6 +78,8 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             deviceId = prefs.deviceId()
+            // Phase 7: attach the stored device JWT before the first DB call.
+            SupabaseApi.deviceJwt = prefs.deviceJwt()
             restored = prefs.pendingCount() // survives kill/reboot mid-trip
             plate = prefs.plate.first()
             val v = prefs.vehicleId.first()
@@ -100,6 +102,19 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
     fun bind(vehicle: String, passcode: String, onResult: (String?) -> Unit) {
         val v = vehicle.trim().uppercase()
         viewModelScope.launch {
+            // Phase 7: mint the device JWT FIRST — post-7d every call below needs it.
+            // Unreachable (fn not deployed / offline check happens next anyway) -> proceed
+            // on anon; Denied = wrong fleet passcode -> tolerated during the 7a-7c window,
+            // becomes a hard refuse at the 7d cutover.
+            when (val tok = SupabaseApi.fetchDeviceToken(deviceId, passcode)) {
+                is SupabaseApi.TokenResult.Ok -> {
+                    prefs.saveDeviceJwt(tok.token)
+                    SupabaseApi.deviceJwt = tok.token
+                }
+                SupabaseApi.TokenResult.Denied ->
+                    android.util.Log.w("CameraCount", "device-token refused (fleet passcode mismatch)")
+                SupabaseApi.TokenResult.Unreachable -> { /* anon fallback */ }
+            }
             val p = try {
                 SupabaseApi.findVehiclePlate(v)
             } catch (_: Exception) {

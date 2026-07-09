@@ -45,6 +45,18 @@ class PersonTracker {
     private var nextId = 1
     private val tracks = mutableListOf<Track>()
 
+    /**
+     * After the counting line MOVES (mid-trip adjust), every track's side/origin history
+     * is meaningless against the new geometry — clear it so sides re-establish on the
+     * next frame. [Track.counted] is kept: a person already counted must not recount.
+     */
+    fun resetCrossingState() {
+        for (t in tracks) {
+            t.prevSide = 0
+            t.originSide = 0
+        }
+    }
+
     /** Feed one frame's detections; returns live confirmed tracks (for counting + overlay). */
     fun update(dets: List<YoloDetector.Det>): List<Track> {
         // Predict every track one frame forward.

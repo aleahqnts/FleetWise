@@ -421,6 +421,9 @@ private fun DetectionSurface(
                     Button(onClick = {
                         scope.launch {
                             prefs.saveLine(ax, ay, bx, by, inwardSign)
+                            // Old side/origin history is against the OLD line — clear it
+                            // so nobody gets counted (or missed) off stale geometry.
+                            tracker.resetCrossingState()
                             if (adjusting) adjusting = false else onClose?.invoke()
                         }
                     }) { Text("Save line", fontWeight = FontWeight.Bold) }

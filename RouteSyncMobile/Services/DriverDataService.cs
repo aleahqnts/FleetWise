@@ -22,7 +22,7 @@ public class DriverDataService
     {
         var req = new HttpRequestMessage(HttpMethod.Patch, $"{FleetWiseMobile.SupabaseConfig.Url}/rest/v1/{pathWithFilter}");
         req.Headers.TryAddWithoutValidation("apikey", FleetWiseMobile.SupabaseConfig.Key);
-        req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {FleetWiseMobile.SupabaseConfig.Key}");
+        req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {FleetWiseMobile.SupabaseConfig.Bearer}");
         req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
         var res = await _http.SendAsync(req);
         res.EnsureSuccessStatusCode();
@@ -33,7 +33,7 @@ public class DriverDataService
     {
         var req = new HttpRequestMessage(HttpMethod.Post, $"{FleetWiseMobile.SupabaseConfig.Url}/rest/v1/{path}");
         req.Headers.TryAddWithoutValidation("apikey", FleetWiseMobile.SupabaseConfig.Key);
-        req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {FleetWiseMobile.SupabaseConfig.Key}");
+        req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {FleetWiseMobile.SupabaseConfig.Bearer}");
         req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
         var res = await _http.SendAsync(req);
         res.EnsureSuccessStatusCode();
@@ -221,11 +221,13 @@ public class DriverDataService
         return (u is not null && u.RoleId == 2 && u.AccountStatus == "Activated") ? u : null;
     }
 
+    // Phase 7: profile writes go through the users_app view (no hash column there,
+    // and the view pins a JWT caller to their own row).
     public async Task StampLoginAsync(int userId)
-        => await PatchAsync($"users?user_id=eq.{userId}", new { last_login = PhTime.Now });
+        => await PatchAsync($"users_app?user_id=eq.{userId}", new { last_login = PhTime.Now });
 
     public async Task UpdateProfileAsync(int userId, string? contact, string? address, string? emName, string? emNumber)
-        => await PatchAsync($"users?user_id=eq.{userId}", new
+        => await PatchAsync($"users_app?user_id=eq.{userId}", new
         {
             contact_number = contact,
             address = address,
@@ -234,8 +236,19 @@ public class DriverDataService
             updated_at = PhTime.Now
         });
 
+    // LEGACY fallback only (anon path while the change-password edge fn is unreachable).
+    // Writes the base table; dies at the 7b cutover.
     public async Task UpdatePasswordAsync(int userId, string newHash)
         => await PatchAsync($"users?user_id=eq.{userId}", new { password_hash = newHash, updated_at = PhTime.Now });
+
+    // LEGACY fallback only: fetch the stored hash for on-device verify. Same lifespan.
+    public async Task<string?> GetUserHashAsync(int userId)
+    {
+        var r = await _supabase.From<UserAuthModel>()
+            .Filter("user_id", Operator.Equals, userId.ToString())
+            .Get();
+        return r.Models.FirstOrDefault()?.PasswordHash;
+    }
 
     // Returns the inserted row so the caller has the generated checklist_id (needed to
     // link a maintenance incident when the inspection fails).

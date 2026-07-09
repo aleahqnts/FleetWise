@@ -30,6 +30,7 @@ class Prefs(private val context: Context) {
         private val LINE_INWARD_SIGN = intPreferencesKey("line_inward_sign")
         private val PENDING_TRIP_ID = stringPreferencesKey("pending_trip_id")
         private val PENDING_COUNT = intPreferencesKey("pending_count")
+        private val DEVICE_JWT = stringPreferencesKey("device_jwt")
         private val USE_BACK_CAMERA = androidx.datastore.preferences.core.booleanPreferencesKey("use_back_camera")
         // Default = vertical line down the middle (same as before, just as two endpoints).
         const val DEF_AX = 0.5f; const val DEF_AY = 0.05f
@@ -50,6 +51,17 @@ class Prefs(private val context: Context) {
         val id = "cam-" + java.util.UUID.randomUUID().toString().take(8)
         context.dataStore.edit { it[DEVICE_ID] = id }
         return id
+    }
+
+    /**
+     * Phase 7: app_camera JWT minted by the device-token edge fn at bind time (365d).
+     * Survives unbind — it carries only device_id; vehicle scope is the DB join, so a
+     * re-bind to another bus reuses the same token.
+     */
+    suspend fun deviceJwt(): String? = context.dataStore.data.first()[DEVICE_JWT]
+
+    suspend fun saveDeviceJwt(jwt: String) {
+        context.dataStore.edit { it[DEVICE_JWT] = jwt }
     }
 
     /**
