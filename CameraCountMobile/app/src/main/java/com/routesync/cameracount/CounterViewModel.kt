@@ -248,8 +248,49 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                     if (tripId == null) _state.value = waiting(e.message)
                     // While counting, poll errors are tolerated; flush loop keeps trying.
                 }
+                // Phase 8a config follower: independent of trip state so a parked bus
+                // still obeys remote calibration. Own runCatching — a config hiccup
+                // must never break the trip poll.
+                runCatching { followDeviceConfig() }
                 delay(4_000)
             }
+        }
+    }
+
+    /**
+     * Phase 8a: the `device_config` DB row is authoritative; this device FOLLOWS it.
+     * DataStore is only the offline cache (seeds the camera before the first DB read).
+     *
+     * Per poll tick (~4s):
+     *  - DB row missing or BEHIND our local version (fresh install, or we calibrated
+     *    on-phone while offline) -> push local up. Self-healing: the DB converges to
+     *    the newest edit no matter where it happened.
+     *  - DB row NEWER -> apply it (one atomic DataStore write; CameraScreen collects
+     *    the flows, so the line moves / lens flips live and crossing state resets),
+     *    then echo config_version_applied so the driver/web sees the ✓.
+     *  - In sync -> heartbeat last_seen every ~3rd tick (~12s liveness signal).
+     */
+    private var cfgTick = 0
+    private suspend fun followDeviceConfig() {
+        cfgTick++
+        val localV = prefs.configVersion()
+        val cfg = SupabaseApi.getDeviceConfig(deviceId)
+        when {
+            cfg == null || cfg.version < localV -> {
+                val cal = prefs.lineCalibration.first()
+                val back = prefs.useBackCamera.first()
+                SupabaseApi.upsertDeviceConfig(
+                    deviceId, cal.ax, cal.ay, cal.bx, cal.by, cal.inwardSign, back, localV
+                )
+                SupabaseApi.upsertDeviceStatus(deviceId, localV)
+            }
+            cfg.version > localV -> {
+                prefs.applyRemoteConfig(
+                    cfg.ax, cfg.ay, cfg.bx, cfg.by, cfg.inwardSign, cfg.useBackCamera, cfg.version
+                )
+                SupabaseApi.upsertDeviceStatus(deviceId, cfg.version, justApplied = true)
+            }
+            cfgTick % 3 == 0 -> SupabaseApi.upsertDeviceStatus(deviceId, localV)
         }
     }
 
