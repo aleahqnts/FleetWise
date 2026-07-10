@@ -17,7 +17,7 @@ public class MessageWatch
     private readonly ILocalNotifier _notifier;
 
     private const string SeenTsKey = "msg_seen_ts";
-    private const int PollMs = 20000;
+    private const int PollMs = 5000;
 
     private System.Threading.Timer? _timer;
     private int _userId;

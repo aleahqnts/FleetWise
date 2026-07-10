@@ -142,7 +142,7 @@ else
     {
         try
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
             while (await timer.WaitForNextTickAsync(pollCts.Token))
             {
                 try
