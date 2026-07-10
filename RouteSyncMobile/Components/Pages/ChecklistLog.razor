@@ -3,16 +3,27 @@
 @inject SessionService Session
 @inject DriverDataService Data
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 @if (loading)
 {
-    <div class="log-loading">Loading...</div>
+    <div class="log">
+        <div class="log-header">
+            <button class="back" @onclick="GoBack">&#8592;</button>
+            <div class="log-title"><h1>Checklist Log</h1></div>
+            <span class="spacer"></span>
+        </div>
+        <div class="sk sk-card" style="height:64px"></div>
+        <div class="sk sk-card" style="height:150px; margin-top:12px;"></div>
+        <div class="sk sk-card" style="height:150px; margin-top:12px;"></div>
+        <div class="sk sk-card" style="height:150px; margin-top:12px;"></div>
+    </div>
 }
 else if (checklist is null)
 {
     <div class="log">
         <div class="log-header">
-            <button class="back" @onclick="@(() => Nav.NavigateTo("/home"))">&#8592;</button>
+            <button class="back" @onclick="GoBack">&#8592;</button>
             <div class="log-title"><h1>Checklist Log</h1></div>
             <span class="spacer"></span>
         </div>
@@ -23,7 +34,7 @@ else
 {
     <div class="log">
         <div class="log-header">
-            <button class="back" @onclick="@(() => Nav.NavigateTo("/home"))">&#8592;</button>
+            <button class="back" @onclick="GoBack">&#8592;</button>
             <div class="log-title">
                 <h1>Checklist Log</h1>
                 <p class="log-bus">@busLabel</p>
@@ -80,6 +91,10 @@ else
             ("Brake & Safety Systems", checklist.BrakeSafety ?? new()),
             ("Passenger & Fare Systems", checklist.PassengerSystems ?? new()),
         };
+
+    // One step back in WebView history — this page is reachable from Home AND from
+    // Trip Report, so a hardcoded target would strand one of them.
+    private async Task GoBack() => await JS.InvokeVoidAsync("history.back");
 
     protected override async Task OnInitializedAsync()
     {

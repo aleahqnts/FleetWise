@@ -95,8 +95,24 @@
             new bootstrap.Modal(document.getElementById(modalIds[openModal])).show();
         }
 
+        // Reset Password — two-step confirm inside the Edit User modal
+        function resetPasswordConfirmUi() {
+            document.getElementById('rpDefault').hidden = false;
+            document.getElementById('rpConfirm').hidden = true;
+        }
+
+        document.getElementById('rpShowConfirm').addEventListener('click', function () {
+            document.getElementById('rpUserId').value = document.getElementById('euUserId').value;
+            document.getElementById('rpDefault').hidden = true;
+            document.getElementById('rpConfirm').hidden = false;
+        });
+
+        document.getElementById('rpCancel').addEventListener('click', resetPasswordConfirmUi);
+
         // Edit User — populate fields from the clicked row's data-* attributes
         document.getElementById('editUserModal').addEventListener('show.bs.modal', function (event) {
+            resetPasswordConfirmUi();
+
             const btn = event.relatedTarget;
             if (!btn) return;
 
@@ -623,6 +639,40 @@
 
     .us-form-input--plain:focus {
         border-bottom-color: var(--us-teal);
+    }
+
+    /* ── Reset Password (Edit User modal) ───────────────────── */
+    .us-reset-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+    }
+
+    .us-reset-confirm-text {
+        font-size: 0.875rem;
+        color: var(--us-text);
+        font-family: 'Segoe UI', sans-serif;
+        margin: 0 0 12px;
+    }
+
+    .us-temp-pass {
+        font-family: 'Consolas', monospace;
+        background: var(--us-teal-light);
+        padding: 2px 8px;
+        border-radius: 6px;
+    }
+
+    .us-reset-confirm-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+
+    .us-btn--danger {
+        background: #E53E3E;
+        border-color: #E53E3E;
+        color: #fff;
     }
 
     /* ── Manage Roles modal ─────────────────────────────────── */
