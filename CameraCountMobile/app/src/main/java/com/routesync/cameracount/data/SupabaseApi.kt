@@ -229,6 +229,92 @@ object SupabaseApi {
         }
     }
 
+    // ------------------------------------------------------------------
+    // Phase 8a — remote camera control: device_config (desired, followed)
+    // + device_status (reported, echoed). See REMOTE-CONTROL-plan.md.
+    // ------------------------------------------------------------------
+
+    data class DeviceConfig(
+        val ax: Float, val ay: Float, val bx: Float, val by: Float,
+        val inwardSign: Int, val useBackCamera: Boolean, val version: Int
+    )
+
+    /** Follower read (piggybacks the 4s poll): the desired config for THIS device. */
+    suspend fun getDeviceConfig(deviceId: String): DeviceConfig? = withContext(Dispatchers.IO) {
+        val url = "$BASE/device_config?device_id=eq.$deviceId" +
+                "&select=line_ax,line_ay,line_bx,line_by,inward_sign,use_back_camera,version"
+        val req = Request.Builder().url(url).supabaseHeaders().get().build()
+        http.newCall(req).execute().use { res ->
+            if (!res.isSuccessful) throw IllegalStateException("GET device_config ${res.code}")
+            val arr = JSONArray(res.body?.string() ?: "[]")
+            if (arr.length() == 0) return@withContext null
+            val r = arr.getJSONObject(0)
+            DeviceConfig(
+                ax = r.optDouble("line_ax", Prefs.DEF_AX.toDouble()).toFloat(),
+                ay = r.optDouble("line_ay", Prefs.DEF_AY.toDouble()).toFloat(),
+                bx = r.optDouble("line_bx", Prefs.DEF_BX.toDouble()).toFloat(),
+                by = r.optDouble("line_by", Prefs.DEF_BY.toDouble()).toFloat(),
+                inwardSign = r.optInt("inward_sign", Prefs.DEF_INWARD_SIGN),
+                useBackCamera = r.optBoolean("use_back_camera", false),
+                version = r.optInt("version", 0)
+            )
+        }
+    }
+
+    /**
+     * Local calibration writes UP (and first boot seeds the row): upsert keeps the DB
+     * authoritative even though the edit happened on the phone. updated_by='device'
+     * tells the other writers (driver 8b / admin 8e) who authored this version.
+     */
+    suspend fun upsertDeviceConfig(
+        deviceId: String,
+        ax: Float, ay: Float, bx: Float, by: Float,
+        inwardSign: Int, useBack: Boolean, version: Int
+    ): Unit = withContext(Dispatchers.IO) {
+        // Android's org.json.JSONObject has NO put(String, float) overload — pass Double
+        // or it throws NoSuchMethodError at runtime.
+        val body = JSONObject()
+            .put("device_id", deviceId)
+            .put("line_ax", ax.toDouble()).put("line_ay", ay.toDouble())
+            .put("line_bx", bx.toDouble()).put("line_by", by.toDouble())
+            .put("inward_sign", inwardSign)
+            .put("use_back_camera", useBack)
+            .put("version", version)
+            .put("updated_by", "device")
+            .put("updated_at", Instant.now().toString())
+            .toString().toRequestBody(JSON)
+        val req = Request.Builder().url("$BASE/device_config").supabaseHeaders()
+            .header("Prefer", "resolution=merge-duplicates,return=minimal")
+            .post(body)
+            .build()
+        http.newCall(req).execute().use { res ->
+            if (!res.isSuccessful) throw IllegalStateException("UPSERT device_config ${res.code}")
+        }
+    }
+
+    /**
+     * Reported state: liveness heartbeat + which config version this device runs.
+     * Driver/web show ✓ only when config_version_applied == device_config.version.
+     * [justApplied] stamps applied_at (a fresh apply, not just a heartbeat).
+     */
+    suspend fun upsertDeviceStatus(
+        deviceId: String, configVersionApplied: Int, justApplied: Boolean = false
+    ): Unit = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+            .put("device_id", deviceId)
+            .put("last_seen", Instant.now().toString())
+            .put("config_version_applied", configVersionApplied)
+            .apply { if (justApplied) put("applied_at", Instant.now().toString()) }
+            .toString().toRequestBody(JSON)
+        val req = Request.Builder().url("$BASE/device_status").supabaseHeaders()
+            .header("Prefer", "resolution=merge-duplicates,return=minimal")
+            .post(body)
+            .build()
+        http.newCall(req).execute().use { res ->
+            if (!res.isSuccessful) throw IllegalStateException("UPSERT device_status ${res.code}")
+        }
+    }
+
     /** Phase-0 smoke check: can this device reach the DB at all? */
     suspend fun ping(): Boolean = withContext(Dispatchers.IO) {
         val req = Request.Builder()

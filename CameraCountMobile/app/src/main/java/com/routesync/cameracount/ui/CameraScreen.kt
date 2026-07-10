@@ -148,6 +148,21 @@ private fun DetectionSurface(
     var adjusting by remember { mutableStateOf(false) }
     val editingLine = calibrate || adjusting
 
+    // Phase 8a: remote config lands in DataStore (ViewModel follower), so COLLECT the
+    // flows — the line moves / lens flips live mid-trip. Paused while the user is
+    // editing so a remote write can't yank the handles out from under a drag.
+    LaunchedEffect(Unit) {
+        prefs.lineCalibration.collect { cal ->
+            if (!(calibrate || adjusting)) {
+                ax = cal.ax; ay = cal.ay; bx = cal.bx; by = cal.by; inwardSign = cal.inwardSign
+                lineLoaded = true
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
+        prefs.useBackCamera.collect { back -> if (!(calibrate || adjusting)) useBack = back }
+    }
+
     // Dim mode: nobody in frame for 60s -> near-black overlay (heat + burn-in relief).
     // Detection keeps running underneath; a person in frame or a tap wakes the screen.
     var lastPersonAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -206,6 +221,9 @@ private fun DetectionSurface(
         lineCounter.ax = ax; lineCounter.ay = ay
         lineCounter.bx = bx; lineCounter.by = by
         lineCounter.inwardSign = inwardSign
+        // Any line change (drag OR remote apply) invalidates side/origin history —
+        // stale geometry would count (or miss) people against the OLD line.
+        tracker.resetCrossingState()
     }
 
     val executor = remember { Executors.newSingleThreadExecutor() }
@@ -404,7 +422,20 @@ private fun DetectionSurface(
                 // flips the scene -> re-drag the line after switching.
                 OutlinedButton(onClick = {
                     val next = !(useBack ?: false)
-                    scope.launch { prefs.saveUseBackCamera(next) }
+                    scope.launch {
+                        prefs.saveUseBackCamera(next)
+                        // Phase 8a: lens choice is part of device_config — push it up with
+                        // the SAVED line (a drag in progress isn't saved yet). Offline is
+                        // fine: the follower self-heals (DB behind local -> push).
+                        val v = prefs.bumpConfigVersion()
+                        runCatching {
+                            val cal = prefs.lineCalibration.first()
+                            com.routesync.cameracount.data.SupabaseApi.upsertDeviceConfig(
+                                prefs.deviceId(), cal.ax, cal.ay, cal.bx, cal.by,
+                                cal.inwardSign, next, v
+                            )
+                        }
+                    }
                     useBack = next
                 }) {
                     Text(
@@ -424,6 +455,16 @@ private fun DetectionSurface(
                             // Old side/origin history is against the OLD line — clear it
                             // so nobody gets counted (or missed) off stale geometry.
                             tracker.resetCrossingState()
+                            // Phase 8a: local calibrate authors a new version and writes
+                            // it UP — the DB row stays the truth. Offline OK: the
+                            // follower self-heals (DB behind local -> push next poll).
+                            val v = prefs.bumpConfigVersion()
+                            runCatching {
+                                com.routesync.cameracount.data.SupabaseApi.upsertDeviceConfig(
+                                    prefs.deviceId(), ax, ay, bx, by, inwardSign,
+                                    prefs.useBackCamera.first(), v
+                                )
+                            }
                             if (adjusting) adjusting = false else onClose?.invoke()
                         }
                     }) { Text("Save line", fontWeight = FontWeight.Bold) }

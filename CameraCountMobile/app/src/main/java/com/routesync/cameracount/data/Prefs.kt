@@ -32,6 +32,7 @@ class Prefs(private val context: Context) {
         private val PENDING_COUNT = intPreferencesKey("pending_count")
         private val DEVICE_JWT = stringPreferencesKey("device_jwt")
         private val USE_BACK_CAMERA = androidx.datastore.preferences.core.booleanPreferencesKey("use_back_camera")
+        private val CONFIG_VERSION = intPreferencesKey("config_version")
         // Default = vertical line down the middle (same as before, just as two endpoints).
         const val DEF_AX = 0.5f; const val DEF_AY = 0.05f
         const val DEF_BX = 0.5f; const val DEF_BY = 0.95f
@@ -92,6 +93,39 @@ class Prefs(private val context: Context) {
             it[LINE_AX] = ax; it[LINE_AY] = ay
             it[LINE_BX] = bx; it[LINE_BY] = by
             it[LINE_INWARD_SIGN] = inwardSign
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Phase 8a: DB `device_config` row is the source of truth; DataStore is
+    // the offline cache. CONFIG_VERSION = the version this device last
+    // applied (or authored, on a local calibrate).
+    // ------------------------------------------------------------------
+
+    suspend fun configVersion(): Int = context.dataStore.data.first()[CONFIG_VERSION] ?: 0
+
+    /** Local calibrate authors a NEW version (version+1) that gets pushed up. */
+    suspend fun bumpConfigVersion(): Int {
+        val v = configVersion() + 1
+        context.dataStore.edit { it[CONFIG_VERSION] = v }
+        return v
+    }
+
+    /**
+     * Apply a newer remote config in ONE atomic edit — line, lens, and version
+     * land together so a mid-apply crash can't leave a half-applied cache that
+     * still claims the new version.
+     */
+    suspend fun applyRemoteConfig(
+        ax: Float, ay: Float, bx: Float, by: Float,
+        inwardSign: Int, useBack: Boolean, version: Int
+    ) {
+        context.dataStore.edit {
+            it[LINE_AX] = ax; it[LINE_AY] = ay
+            it[LINE_BX] = bx; it[LINE_BY] = by
+            it[LINE_INWARD_SIGN] = inwardSign
+            it[USE_BACK_CAMERA] = useBack
+            it[CONFIG_VERSION] = version
         }
     }
 
