@@ -36,42 +36,179 @@
 .spacer { width: 32px; }
 .muted { color: #8a93a2; }
 
-.dtr {
-    margin: 0 0 12px;
-    font-size: 16px;
+/* ---------- Hero (minimal: header surface, ink text) ----------
+   A "darker white" so the header reads distinct from the #fff content cards. */
+
+.hero {
+    background: #edf0f6;
+    border: 1px solid #dde2ec;
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
+}
+
+.hero-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.hero-date {
+    color: #8a93a2;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.hero-status {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 10px;
+    border-radius: 999px;
+}
+
+.hero-status.done { background: #eafaf1; color: #2fae74; }
+.hero-status.live {
+    background: #e6f5f2;
+    color: #2e9e8f;
+    animation: live-pulse 1.6s ease-in-out infinite;
+}
+.hero-status.other { background: #eef0f5; color: #7a8494; }
+
+@keyframes live-pulse {
+    50% { opacity: 0.55; }
+}
+
+.hero-route {
+    margin: 10px 0 0;
+    color: #1b2a56;
+    font-size: 19px;
+    font-weight: 800;
+}
+
+.hero-id {
+    margin: 8px 0 0;
+    color: #8a93a2;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* ---------- Stat tiles ---------- */
+
+.stats {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.stat {
+    flex: 1;
+    border: 1px solid #e6e8ee;
+    border-radius: 14px;
+    background: #fff;
+    padding: 12px 8px 10px;
+    text-align: center;
+    min-width: 0;
+}
+
+.stat svg {
+    width: 18px;
+    height: 18px;
+    color: #2e9e8f;
+}
+
+/* Plain peso glyph — the circled-P icon read as something else entirely */
+.stat-peso {
+    display: inline-block;
+    height: 18px;
+    line-height: 18px;
+    font-size: 17px;
+    font-weight: 800;
+    color: #2e9e8f;
+}
+
+.stat-n {
+    margin: 4px 0 0;
+    font-size: 15px;
+    font-weight: 800;
+    color: #1b2a56;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stat-l {
+    margin: 1px 0 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: #8a93a2;
+}
+
+/* ---------- Cards ---------- */
+
+.card {
+    border: 1px solid #e6e8ee;
+    border-radius: 14px;
+    background: #fff;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+
+.card-title {
+    margin: 0 0 10px;
+    font-size: 14px;
     font-weight: 800;
     color: #1b2a56;
 }
 
-.rep-card {
-    border: 1px solid #e6e8ee;
-    border-radius: 12px;
-    padding: 18px;
-}
+/* ---------- Timeline ---------- */
 
-.date {
-    margin: 0 0 6px;
-    color: #8a93a2;
+.tl { position: relative; }
+
+.tl-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
     font-size: 14px;
 }
 
-.sec {
-    margin: 16px 0 8px;
-    color: #2e9e8f;
-    font-weight: 800;
-    font-size: 15px;
+.tl-row + .tl-row { border-top: 1px dashed #eef0f5; }
+
+.tl-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
 }
+
+.tl-dot.sched { background: #b6bdc9; }
+.tl-dot.start { background: #2e9e8f; }
+.tl-dot.end { background: #1b2a56; }
+
+.tl-k {
+    flex: 1;
+    color: #7a8494;
+    font-weight: 600;
+}
+
+.tl-v {
+    color: #1b2a56;
+    font-weight: 700;
+}
+
+/* ---------- Key/value rows ---------- */
 
 .row {
     display: flex;
     gap: 10px;
     align-items: baseline;
     margin: 7px 0;
-    font-size: 15px;
+    font-size: 14px;
 }
 
 .row .k {
-    flex: 0 0 130px;
+    flex: 0 0 120px;
     color: #7a8494;
     font-weight: 600;
 }
@@ -80,4 +217,41 @@
     flex: 1;
     color: #1b2a56;
     font-weight: 700;
+}
+
+/* ---------- Checklist card ---------- */
+
+.check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.check.none { cursor: default; }
+
+.check-main { flex: 1; min-width: 0; }
+
+.check .card-title { margin-bottom: 2px; }
+
+.check-sub {
+    margin: 0;
+    font-size: 12px;
+    color: #8a93a2;
+}
+
+.check-status {
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 10px;
+    border-radius: 999px;
+}
+
+.check-status.ok { background: #eafaf1; color: #2fae74; }
+.check-status.warn { background: #fdf3e7; color: #d9822b; }
+
+.check-chev {
+    color: #b6bdc9;
+    font-size: 22px;
 }

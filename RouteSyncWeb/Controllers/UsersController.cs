@@ -136,6 +136,32 @@ namespace FleetWise.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ResetPassword(int userId)
+        {
+            var userResponse = await _supabase.From<UserModel>()
+                .Filter("user_id", Postgrest.Constants.Operator.Equals, userId.ToString())
+                .Get();
+            var user = userResponse.Models.FirstOrDefault();
+            if (user is null)
+            {
+                TempData["Error"] = "User not found.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var hasher = new PasswordHasher<UserModel>();
+            // Back onto the shared temp password — same as a brand-new account, so the
+            // next login with it forces a password change without any flag column.
+            user.PasswordHash = hasher.HashPassword(user, PasswordPolicy.TemporaryPassword);
+            user.UpdatedAt = PhClock.Now;
+
+            await _supabase.From<UserModel>().Update(user);
+
+            TempData["Success"] = $"Password for \"{user.FirstName} {user.LastName}\" was reset. Temporary password: {PasswordPolicy.TemporaryPassword} — they'll be asked to change it on next login.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> CreateRole(RoleFormViewModel model)
         {
             if (ModelState.IsValid)
