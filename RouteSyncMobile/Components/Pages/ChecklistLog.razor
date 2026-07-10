@@ -82,6 +82,8 @@ else
     private BusChecklist? checklist;
     private string busLabel = "";
 
+    // Empty sections skipped: new checklists no longer fill passenger_systems,
+    // but old rows that have it still render.
     private IEnumerable<(string Title, Dictionary<string, string> Items)> Sections =>
         new (string, Dictionary<string, string>)[]
         {
@@ -90,7 +92,7 @@ else
             ("Interior Inspection", checklist.InteriorInspection ?? new()),
             ("Brake & Safety Systems", checklist.BrakeSafety ?? new()),
             ("Passenger & Fare Systems", checklist.PassengerSystems ?? new()),
-        };
+        }.Where(s => s.Item2.Count > 0);
 
     // One step back in WebView history — this page is reachable from Home AND from
     // Trip Report, so a hardcoded target would strand one of them.

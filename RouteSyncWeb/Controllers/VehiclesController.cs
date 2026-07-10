@@ -728,6 +728,7 @@ namespace FleetWise.Controllers
             ["No Visible Body Damage"] = "Visible body damage",
             ["No fluid leaks under bus"] = "Fluid leak under bus",
             ["No unusual smoke or overheating"] = "Unusual smoke / overheating",
+            ["No visible damage or leaks"] = "Visible damage or leaks",
         };
 
         private static string RephraseIssue(string issue) =>

@@ -16,7 +16,7 @@ else if (submitted)
         </div>
         <h2>Bus Checklist Submitted!</h2>
         <div class="confirm-card">
-            <p class="confirm-sub">Completed 5 out of 5 sections</p>
+            <p class="confirm-sub">Completed @sections.Count out of @sections.Count sections</p>
             @for (int i = 0; i < sections.Count; i++)
             {
                 <div class="confirm-row">
@@ -99,27 +99,26 @@ else
     private Section CurrentSection => sections[currentSection];
     private bool IsLast => currentSection == sections.Count - 1;
 
+    // Trimmed to what a driver can realistically walk-around check before a trip.
+    // Section titles must stay in sync with the web's hardcoded names
+    // (VehiclesController.DeriveInspectionIssue / DeriveInspectionSections).
     private readonly List<Section> sections = new()
     {
         new("Exterior Inspection", "exterior_inspection", new[]
         {
-            "Windshield","Side Mirrors","Headlights","Brake Lights","Signal Lights","Wipers","Tires","No Visible Body Damage"
+            "Tires & wheels","Lights & signals","Mirrors & windshield","Wipers","No visible damage or leaks"
         }),
         new("Engine Compartment", "engine_compartment", new[]
         {
-            "Engine oil level","Coolant level","Brake fluid level","Battery condition","No fluid leaks under bus","No unusual smoke or overheating"
+            "Engine oil level","Coolant level","Brake fluid level","Battery condition"
         }),
         new("Interior Inspection", "interior_inspection", new[]
         {
-            "Driver seat & seatbelt","Steering wheel","Dashboard warning lights","Speedometer","Fuel level","Horn","Passenger seats & handrails","Interior cleanliness"
+            "Driver seat & seatbelt","Horn & dashboard gauges","Fuel level","Passenger seats, handrails & doors"
         }),
         new("Brake & Safety Systems", "brake_safety", new[]
         {
-            "Service brakes","Parking brake","Emergency brake","Fire extinguisher","First aid kit","Early warning device / reflectors","Emergency alarm"
-        }),
-        new("Passenger & Fare Systems", "passenger_systems", new[]
-        {
-            "Passenger doors","Beep/card scanner","QR payment scanner","Route display","CCTV system"
+            "Service brakes","Parking brake","Fire extinguisher & first aid kit","Early warning device / reflectors"
         }),
     };
 
@@ -184,7 +183,7 @@ else
                 EngineCompartment = ToDict(1),
                 InteriorInspection = ToDict(2),
                 BrakeSafety = ToDict(3),
-                PassengerSystems = ToDict(4),
+                PassengerSystems = new(), // section retired; column kept so old rows still render
                 ChecklistStatus = status,
                 Notes = null
             };
