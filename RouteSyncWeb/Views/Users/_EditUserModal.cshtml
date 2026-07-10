@@ -53,11 +53,32 @@
                             <span asp-validation-for="AccountStatus" class="us-field-error"></span>
                         </div>
                     </div>
+                    <div class="us-section-header">Password</div>
+                    <div class="us-section-body">
+                        <div class="us-reset-row" id="rpDefault">
+                            <button type="button" class="us-btn us-btn--outline" id="rpShowConfirm">Reset Password</button>
+                            <span class="us-field-hint">Sets a temporary password the user must change on next login.</span>
+                        </div>
+                        <div class="us-reset-confirm" id="rpConfirm" hidden>
+                            <p class="us-reset-confirm-text">
+                                Reset this user's password to
+                                <strong class="us-temp-pass">@FleetWise.Services.PasswordPolicy.TemporaryPassword</strong>?
+                                They'll be required to change it the next time they sign in.
+                            </p>
+                            <div class="us-reset-confirm-actions">
+                                <button type="button" class="us-btn us-btn--outline" id="rpCancel">Cancel</button>
+                                <button type="submit" form="resetPasswordForm" class="us-btn us-btn--danger">Yes, Reset Password</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="us-btn us-btn--outline" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="us-btn us-btn--primary">Save Changes</button>
                 </div>
+            </form>
+            <form asp-action="ResetPassword" asp-controller="Users" method="post" id="resetPasswordForm" hidden>
+                <input type="hidden" name="userId" id="rpUserId" />
             </form>
         </div>
     </div>

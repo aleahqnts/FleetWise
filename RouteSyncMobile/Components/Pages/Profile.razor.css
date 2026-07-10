@@ -6,11 +6,14 @@
 
 /* ---------- Hero: identity at a glance ---------- */
 
+/* Header surface: a "darker white" so the hero still reads as a header, distinct
+   from the plain #fff content cards below it, but no longer a colored gradient. */
 .hero {
     display: flex;
     flex-direction: column;
     align-items: center;
-    background: linear-gradient(150deg, #1b2a56 0%, #24557c 55%, #2e9e8f 130%);
+    background: #edf0f6;
+    border: 1px solid #dde2ec;
     border-radius: 18px;
     padding: 26px 18px 20px;
     margin-bottom: 14px;
@@ -20,9 +23,9 @@
     width: 78px;
     height: 78px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.14);
-    border: 2px solid rgba(255, 255, 255, 0.55);
-    color: #fff;
+    background: #e2e7f2;
+    border: 2px solid #c4ccdd;
+    color: #1b2a56;
     font-size: 28px;
     font-weight: 800;
     display: flex;
@@ -34,7 +37,7 @@
 
 .hero-name {
     margin: 0;
-    color: #fff;
+    color: #1b2a56;
     font-size: 21px;
     font-weight: 800;
     letter-spacing: -0.2px;
@@ -54,15 +57,14 @@
 }
 
 .tag.role {
-    background: rgba(255, 255, 255, 0.16);
-    color: #fff;
+    background: #e2e7f2;
+    color: #1b2a56;
 }
 
 .tag.avail {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: rgba(255, 255, 255, 0.16);
 }
 
 .tag.avail .dot {
@@ -71,14 +73,14 @@
     border-radius: 50%;
 }
 
-.tag.avail.on { color: #a9f0d9; }
-.tag.avail.on .dot { background: #48e0a4; }
-.tag.avail.off { color: #ffd7d7; }
-.tag.avail.off .dot { background: #ff9c9c; }
+.tag.avail.on { background: #e8f5f1; color: #2e9e8f; }
+.tag.avail.on .dot { background: #2fae74; }
+.tag.avail.off { background: #fdecec; color: #d15b5b; }
+.tag.avail.off .dot { background: #e88; }
 
 .hero-since {
     margin: 10px 0 0;
-    color: rgba(255, 255, 255, 0.75);
+    color: #8a93a2;
     font-size: 12px;
 }
 

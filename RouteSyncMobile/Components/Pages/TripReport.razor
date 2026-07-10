@@ -5,7 +5,21 @@
 
 @if (loading)
 {
-    <div class="page-loading">Loading...</div>
+    <div class="rep">
+        <div class="rep-header">
+            <button class="back" @onclick="@(() => Nav.NavigateTo("/trips"))">&#8592;</button>
+            <h1>Trip Report</h1>
+            <span class="spacer"></span>
+        </div>
+        <div class="sk sk-card" style="height:118px"></div>
+        <div style="display:flex; gap:8px; margin:12px 0;">
+            <div class="sk sk-card" style="flex:1; height:88px; margin:0;"></div>
+            <div class="sk sk-card" style="flex:1; height:88px; margin:0;"></div>
+            <div class="sk sk-card" style="flex:1; height:88px; margin:0;"></div>
+        </div>
+        <div class="sk sk-card" style="height:128px"></div>
+        <div class="sk sk-card" style="height:118px; margin-top:12px;"></div>
+    </div>
 }
 else if (trip is null)
 {
@@ -22,30 +36,90 @@ else
     <div class="rep">
         <div class="rep-header">
             <button class="back" @onclick="@(() => Nav.NavigateTo("/trips"))">&#8592;</button>
-            <h1>@trip.TripId</h1>
+            <h1>Trip Report</h1>
             <span class="spacer"></span>
         </div>
 
-        <h2 class="dtr">Daily Trip Report</h2>
+        <!-- Hero: what trip, where, what happened -->
+        <div class="hero">
+            <div class="hero-top">
+                <span class="hero-date">@trip.Date.ToString("MMMM d, yyyy")</span>
+                <span class="hero-status @StatusClass">@trip.TripStatus</span>
+            </div>
+            <p class="hero-route">@(route?.RouteName ?? $"Route {trip.RouteId}")</p>
+            <p class="hero-id">@trip.TripId · @trip.ShiftType Shift</p>
+        </div>
 
-        <div class="rep-card">
-            <p class="date">Date: @trip.Date.ToString("MMMM d, yyyy")</p>
+        <!-- Key numbers -->
+        <div class="stats">
+            <div class="stat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-4.5 5.5-4.5s5.5 1.5 5.5 4.5M15.5 5.5a3.2 3.2 0 0 1 0 5M17.5 14.7c1.8.7 3 1.9 3 4.3"/></svg>
+                <p class="stat-n">@trip.TotalBoarded</p>
+                <p class="stat-l">Passengers</p>
+            </div>
+            <div class="stat">
+                <span class="stat-peso">&#8369;</span>
+                <p class="stat-n">&#8369;@trip.EstimatedRevenue.ToString("N2")</p>
+                <p class="stat-l">Est. Revenue</p>
+            </div>
+            <div class="stat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+                <p class="stat-n">@Duration</p>
+                <p class="stat-l">Duration</p>
+            </div>
+        </div>
 
-            <p class="sec">Assignment Details</p>
-            <div class="row"><span class="k">Trip ID</span><span class="v">@trip.TripId</span></div>
-            <div class="row"><span class="k">Route</span><span class="v">@(route?.RouteName ?? $"Route {trip.RouteId}")</span></div>
-            <div class="row"><span class="k">Shift Type</span><span class="v">@trip.ShiftType Shift</span></div>
-            <div class="row"><span class="k">Shift Time</span><span class="v">@ShiftRange</span></div>
-            <div class="row"><span class="k">Bus ID</span><span class="v">@(vehicle?.VehicleId ?? trip.VehicleId)</span></div>
+        <!-- Timeline: scheduled vs actual -->
+        <div class="card">
+            <p class="card-title">Time</p>
+            <div class="tl">
+                <div class="tl-row">
+                    <span class="tl-dot sched"></span>
+                    <span class="tl-k">Scheduled shift</span>
+                    <span class="tl-v">@ShiftRange</span>
+                </div>
+                <div class="tl-row">
+                    <span class="tl-dot start"></span>
+                    <span class="tl-k">Trip started</span>
+                    <span class="tl-v">@TimeOrDash(trip.ActualStartTime)</span>
+                </div>
+                <div class="tl-row">
+                    <span class="tl-dot end"></span>
+                    <span class="tl-k">Trip ended</span>
+                    <span class="tl-v">@TimeOrDash(trip.ActualEndTime)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assignment -->
+        <div class="card">
+            <p class="card-title">Assignment</p>
+            <div class="row"><span class="k">Bus</span><span class="v">@(vehicle?.VehicleId ?? trip.VehicleId)</span></div>
             <div class="row"><span class="k">Plate Number</span><span class="v">@(vehicle?.PlateNumber ?? "—")</span></div>
             <div class="row"><span class="k">Driver</span><span class="v">@Session.DisplayName</span></div>
-
-            <p class="sec">Trip Details</p>
-            <div class="row"><span class="k">Start Time</span><span class="v">@TimeOrDash(trip.ActualStartTime)</span></div>
-            <div class="row"><span class="k">End Time</span><span class="v">@TimeOrDash(trip.ActualEndTime)</span></div>
-            <div class="row"><span class="k">Total Passengers</span><span class="v">@trip.TotalBoarded</span></div>
-            <div class="row"><span class="k">Estimated Revenue</span><span class="v">&#8369;@trip.EstimatedRevenue.ToString("N2")</span></div>
         </div>
+
+        <!-- Pre-trip checklist -->
+        @if (checklist is not null)
+        {
+            <div class="card check" @onclick="@(() => Nav.NavigateTo($"/checklist-log/{trip.TripId}"))">
+                <div class="check-main">
+                    <p class="card-title">Pre-Trip Checklist</p>
+                    <p class="check-sub">Submitted @PhTime.Raw(checklist.SubmittedAt).ToString("h:mm tt")</p>
+                </div>
+                <span class="check-status @ChecklistClass">@checklist.ChecklistStatus</span>
+                <span class="check-chev">&#8250;</span>
+            </div>
+        }
+        else
+        {
+            <div class="card check none">
+                <div class="check-main">
+                    <p class="card-title">Pre-Trip Checklist</p>
+                    <p class="check-sub">No checklist submitted for this trip.</p>
+                </div>
+            </div>
+        }
     </div>
 }
 
@@ -56,9 +130,34 @@ else
     private Trip? trip;
     private BusRoute? route;
     private Vehicle? vehicle;
+    private BusChecklist? checklist;
 
     private string ShiftRange => trip is null ? "" :
-        $"{DateTime.Today.Add(trip.ShiftStartTime):h:mm tt} to {DateTime.Today.Add(trip.ShiftEndTime):h:mm tt}";
+        $"{DateTime.Today.Add(trip.ShiftStartTime):h:mm tt} – {DateTime.Today.Add(trip.ShiftEndTime):h:mm tt}";
+
+    private string StatusClass => trip?.TripStatus switch
+    {
+        "Completed" => "done",
+        "Active" => "live",
+        _ => "other"
+    };
+
+    private string ChecklistClass => checklist?.ChecklistStatus?.ToLowerInvariant() switch
+    {
+        "passed" or "complete" or "completed" => "ok",
+        _ => "warn"
+    };
+
+    private string Duration
+    {
+        get
+        {
+            if (trip?.ActualStartTime is null || trip.ActualEndTime is null) return "—";
+            var span = trip.ActualEndTime.Value - trip.ActualStartTime.Value;
+            if (span < TimeSpan.Zero) return "—";
+            return span.TotalHours >= 1 ? $"{(int)span.TotalHours}h {span.Minutes:D2}m" : $"{span.Minutes}m";
+        }
+    }
 
     private static string TimeOrDash(DateTime? dt) => dt is null ? "—" : PhTime.Raw(dt.Value).ToString("h:mm tt");
 
@@ -71,6 +170,7 @@ else
         {
             route = await Data.GetRouteAsync(trip.RouteId);
             vehicle = await Data.GetVehicleAsync(trip.VehicleId);
+            try { checklist = await Data.GetChecklistAsync(trip.TripId); } catch { /* card shows "none" */ }
         }
         loading = false;
     }
