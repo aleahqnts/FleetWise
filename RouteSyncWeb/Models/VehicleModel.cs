@@ -33,6 +33,10 @@ public class Vehicle : BaseModel
     [Column("out_of_service")]
     public bool OutOfService { get; set; }
 
+    // Phase 8: the counter phone bound to this bus (camera app claims it at bind).
+    [Column("counter_device_id")]
+    public string CounterDeviceId { get; set; }
+
     [Column("last_maintenance_date")]
     public DateTime? LastMaintenanceDate { get; set; }
 

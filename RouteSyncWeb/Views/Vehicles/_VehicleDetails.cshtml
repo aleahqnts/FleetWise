@@ -35,6 +35,22 @@
         <div class="vh-detail-row"><strong>Route:</strong> @Model.RouteName</div>
     </div>
 
+    <!-- Passenger Counter Camera (Phase 8e: remote calibration, any bus, no trip needed) -->
+    <div class="vh-section-header">Passenger Counter</div>
+    <div class="vh-section-body">
+        @if (!string.IsNullOrEmpty(Model.CounterDeviceId))
+        {
+            <div class="vh-detail-row"><strong>Counter Phone:</strong> @Model.CounterDeviceId</div>
+            <div class="vh-review-actions" style="margin-top:8px;">
+                <button type="button" class="vh-btn vh-btn--primary" onclick="camOpen('@Model.VehicleId')">Calibrate Camera</button>
+            </div>
+        }
+        else
+        {
+            <div class="vh-detail-row vh-detail-empty">No counter phone is bound to this bus.</div>
+        }
+    </div>
+
     <!-- Inspection Log -->
     <div class="vh-section-header">
         <span>Inspection Log</span>
@@ -122,7 +138,7 @@
         <div class="vh-section-body">
             @if (Model.OutOfService)
             {
-                <div class="vh-oos-banner">This bus is <strong>Out of Service</strong> — dispatch cannot assign it.</div>
+                <div class="vh-oos-banner">This bus is <strong>Out of Service</strong>. Dispatch cannot assign it.</div>
             }
 
             <div class="vh-review-actions">

@@ -146,6 +146,7 @@ namespace FleetWise.Controllers
                 VehicleId = vehicle.VehicleId,
                 PlateNumber = vehicle.PlateNumber ?? "—",
                 RouteName = routeName,
+                CounterDeviceId = vehicle.CounterDeviceId,
             };
 
             if (checklist != null)
@@ -169,7 +170,7 @@ namespace FleetWise.Controllers
                 if (hadIncident && !hasOpenIncident && vm.InspectionBadge == "Flagged")
                 {
                     vm.InspectionBadge = "Resolved";
-                    vm.Issue = "Resolved — issues addressed";
+                    vm.Issue = "Resolved (issues addressed)";
                     vm.InspectionSections = new();
                 }
             }
@@ -810,6 +811,124 @@ namespace FleetWise.Controllers
             if (s.Equals("Pending", OIC)) return "Pending";
             if (s.Equals("Ready to Deploy", OIC) || s.Equals("Ready", OIC)) return "Ready to Deploy";
             return s;
+        }
+
+        // ════════════════════════════════════════════════════════════════════════
+        // Phase 8e: remote camera control (admin surface). Any bus, anytime, no
+        // trip needed — the service key bypasses RLS, so it MUST stay server-side;
+        // the browser only ever talks to these proxy endpoints.
+        // Same device_config/device_status/snapshot plumbing the driver app uses.
+        // ════════════════════════════════════════════════════════════════════════
+
+        private static readonly HttpClient _camHttp = new();
+
+        private HttpRequestMessage CamReq(HttpMethod method, string path)
+        {
+            var config = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+            var url = config["Supabase:Url"];
+            var key = config["Supabase:Key"];
+            var req = new HttpRequestMessage(method, $"{url}/{path}");
+            req.Headers.TryAddWithoutValidation("apikey", key);
+            req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {key}");
+            return req;
+        }
+
+        private async Task<System.Text.Json.JsonElement?> CamGetFirst(string path)
+        {
+            var res = await _camHttp.SendAsync(CamReq(HttpMethod.Get, path));
+            if (!res.IsSuccessStatusCode) return null;
+            var doc = System.Text.Json.JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+            var arr = doc.RootElement;
+            return arr.GetArrayLength() > 0 ? arr[0].Clone() : null;
+        }
+
+        private async Task<bool> CamPatch(string deviceId, object body)
+        {
+            var req = CamReq(HttpMethod.Patch,
+                $"rest/v1/device_config?device_id=eq.{Uri.EscapeDataString(deviceId)}");
+            req.Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(body),
+                System.Text.Encoding.UTF8, "application/json");
+            var res = await _camHttp.SendAsync(req);
+            return res.IsSuccessStatusCode;
+        }
+
+        // Panel state: which device, its desired config, and its reported status.
+        [HttpGet]
+        public async Task<IActionResult> CameraState(string vehicleId)
+        {
+            var vResp = await _supabase.From<Vehicle>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
+                .Get();
+            var dev = vResp.Models.FirstOrDefault()?.CounterDeviceId;
+            if (string.IsNullOrEmpty(dev))
+                return Json(new { deviceId = (string?)null });
+
+            var esc = Uri.EscapeDataString(dev);
+            var cfg = await CamGetFirst($"rest/v1/device_config?device_id=eq.{esc}");
+            var st = await CamGetFirst($"rest/v1/device_status?device_id=eq.{esc}");
+            return Json(new { deviceId = dev, config = cfg, status = st });
+        }
+
+        // Ask the camera to wake and take a fresh doorway photo.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CameraWake(string deviceId)
+        {
+            var ok = await CamPatch(deviceId, new { wake_requested_at = DateTime.UtcNow });
+            return ok ? Ok() : StatusCode(502);
+        }
+
+        // Snapshot proxy: the bucket is private and the key stays server-side, so the
+        // browser fetches the image through us. no-store: the object is overwritten in
+        // place every wake, a cached copy would show yesterday's doorway.
+        [HttpGet]
+        public async Task<IActionResult> CameraSnapshot(string deviceId)
+        {
+            var req = CamReq(HttpMethod.Get,
+                $"storage/v1/object/authenticated/camera-snapshots/{Uri.EscapeDataString(deviceId)}.jpg");
+            var res = await _camHttp.SendAsync(req);
+            if (!res.IsSuccessStatusCode) return NotFound();
+            var bytes = await res.Content.ReadAsByteArrayAsync();
+            Response.Headers.CacheControl = "no-store";
+            return File(bytes, "image/jpeg");
+        }
+
+        // Save the calibration. Version is re-read server-side right before the write so
+        // a concurrent editor (driver, the camera's own calibrate) can't land the same
+        // number with different content — the follower's version compare would skip it.
+        // Doubles arrive as invariant-culture strings; MVC form binding is culture-
+        // sensitive and would misparse "0.53" under some locales.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CameraSave(
+            string deviceId, string ax, string ay, string bx, string by,
+            int inwardSign, bool useBack)
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            if (!double.TryParse(ax, System.Globalization.NumberStyles.Float, inv, out var nAx) ||
+                !double.TryParse(ay, System.Globalization.NumberStyles.Float, inv, out var nAy) ||
+                !double.TryParse(bx, System.Globalization.NumberStyles.Float, inv, out var nBx) ||
+                !double.TryParse(by, System.Globalization.NumberStyles.Float, inv, out var nBy))
+                return BadRequest();
+
+            var cfg = await CamGetFirst(
+                $"rest/v1/device_config?device_id=eq.{Uri.EscapeDataString(deviceId)}&select=version");
+            var curV = cfg?.TryGetProperty("version", out var v) == true ? v.GetInt32() : 0;
+            var newV = curV + 1;
+
+            var ok = await CamPatch(deviceId, new
+            {
+                line_ax = nAx,
+                line_ay = nAy,
+                line_bx = nBx,
+                line_by = nBy,
+                inward_sign = inwardSign,
+                use_back_camera = useBack,
+                version = newV,
+                updated_by = "admin",
+                updated_at = DateTime.UtcNow
+            });
+            return ok ? Json(new { version = newV }) : StatusCode(502);
         }
     }
 }
