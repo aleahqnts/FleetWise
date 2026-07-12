@@ -9,6 +9,8 @@ namespace FleetWise.Models
         // ── Vehicle Profile ──
         public string PlateNumber { get; set; } = string.Empty;
         public string RouteName { get; set; } = string.Empty;
+        /// <summary>Phase 8: counter phone bound to this bus (null/empty = none bound).</summary>
+        public string? CounterDeviceId { get; set; }
 
         // ── Inspection Log (latest bus_checklist) ──
         public bool HasInspection { get; set; }

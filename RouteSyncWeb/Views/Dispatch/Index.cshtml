@@ -156,7 +156,7 @@
                                 // trip is grey (not green), completed is slate. Roadworthiness
                                 // shows as a SEPARATE flag marker, never overwriting this dot.
                                 var (vDotClass, vTooltip) =
-                                    trip.TripStatus == "Missed" ? ("dp-dot--missed", "Missed — bus not used") :
+                                    trip.TripStatus == "Missed" ? ("dp-dot--missed", "Missed (bus not used)") :
                                     trip.VehicleStatus switch
                                     {
                                         "On Trip" => ("dp-dot--green", "On trip"),
@@ -210,7 +210,7 @@
                                             <span class="rp-plate">| @trip.PlateNumber</span>
                                             @if (trip.Flagged)
                                             {
-                                                <span class="dp-flag" title="Flagged on inspection — see Trip Detail / Vehicles"><i class="ti ti-flag-filled"></i></span>
+                                                <span class="dp-flag" title="Flagged on inspection. See Trip Detail or Vehicles."><i class="ti ti-flag-filled"></i></span>
                                             }
                                         </div>
                                     </td>
