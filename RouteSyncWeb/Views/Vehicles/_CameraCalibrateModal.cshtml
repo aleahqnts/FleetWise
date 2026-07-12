@@ -1,0 +1,202 @@
+@*
+    Phase 8e: remote camera calibration overlay (admin, any bus, no trip needed).
+    Custom overlay (not Bootstrap) so it stacks cleanly above the View Vehicle modal,
+    same as the action overlay. Driven entirely by ~/js/camera-calib.js.
+*@
+<div id="camOverlay" class="cam-overlay" style="display:none;">
+    <div class="cam-panel">
+        <div class="cam-panel-head">
+            <span class="cam-panel-title">Calibrate Camera</span>
+            <span id="camChip" class="cam-chip cam-chip--off">Offline</span>
+            <button type="button" class="btn-close" onclick="camClose()" aria-label="Close"></button>
+        </div>
+
+        <div id="camWait" class="cam-wait">
+            <div class="vh-spinner"></div>
+            <p id="camWaitText" class="cam-wait-text">Waking the camera&#8230;</p>
+            <button id="camRetry" type="button" class="cam-btn" style="display:none;" onclick="camStart()">Try again</button>
+        </div>
+
+        <div id="camEditor" style="display:none;">
+            <p class="cam-hint">Drag the two dots so the line crosses the boarding pathway. The arrow points into the bus.</p>
+            <div id="camStage" class="cam-stage">
+                <div id="camFrame" class="cam-frame">
+                    <img id="camImg" draggable="false" alt="Camera snapshot" />
+                    <svg id="camSvg" preserveAspectRatio="none">
+                        <line id="cam-ln" stroke="#FFC94D" stroke-width="4" stroke-dasharray="12 8" />
+                        <line id="cam-ar" stroke="#FFC94D" stroke-width="3" />
+                        <circle id="cam-art" r="5" fill="#FFC94D" />
+                        <circle id="cam-hao" r="15" fill="#ffffff" />
+                        <circle id="cam-ha" r="10" fill="#FFC94D" />
+                        <circle id="cam-hbo" r="15" fill="#ffffff" />
+                        <circle id="cam-hb" r="10" fill="#FFC94D" />
+                    </svg>
+                    <div id="camVeil" class="cam-veil" style="display:none;"><div class="vh-spinner"></div></div>
+                </div>
+            </div>
+            <div class="cam-actions">
+                <button type="button" class="cam-btn" id="camFlipSide" onclick="camFlipSide()">Flip Boarding Side</button>
+                <button type="button" class="cam-btn" id="camFlipLens" onclick="camFlipLens()">Flip Camera</button>
+                <button type="button" class="cam-btn" id="camRefresh" onclick="camRefresh()">Refresh</button>
+                <button type="button" class="cam-btn cam-btn--save" id="camSave" onclick="camSave()">Save</button>
+            </div>
+            <p id="camNote" class="cam-note" style="display:none;"></p>
+        </div>
+    </div>
+</div>
+
+<style>
+    .cam-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(20, 28, 50, 0.55);
+        z-index: 1080; /* above Bootstrap modals (1055) */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+    }
+
+    .cam-panel {
+        width: 100%;
+        max-width: 560px;
+        max-height: 94vh;
+        overflow-y: auto;
+        background: #fff;
+        border-radius: 14px;
+        padding: 18px 20px 20px;
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.35);
+    }
+
+    .cam-panel-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .cam-panel-title {
+        flex: 1;
+        font-size: 16px;
+        font-weight: 800;
+        color: #1b2a56;
+    }
+
+    .cam-chip {
+        font-size: 11px;
+        font-weight: 800;
+        padding: 3px 10px;
+        border-radius: 999px;
+    }
+
+    .cam-chip--on { background: #eafaf1; color: #2fae74; }
+    .cam-chip--off { background: #fdecec; color: #d15b5b; }
+
+    .cam-wait {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 46px 20px;
+        text-align: center;
+    }
+
+    .cam-wait-text {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 700;
+        color: #1b2a56;
+    }
+
+    .cam-hint {
+        margin: 0 0 10px;
+        font-size: 12.5px;
+        color: #8a93a2;
+        text-align: center;
+    }
+
+    /* Stage centers the photo; the frame wraps it tightly so the SVG overlays the
+       IMAGE rect exactly (letterboxing the image inside the stage would desync the
+       drag coords). Image capped at 52vh so the action buttons always stay on screen. */
+    .cam-stage {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #0b0f17;
+    }
+
+    .cam-frame {
+        position: relative;
+        display: inline-block;
+        line-height: 0;
+        touch-action: none;
+        user-select: none;
+    }
+
+    .cam-frame img {
+        display: block;
+        max-height: 52vh;
+        max-width: 100%;
+        width: auto;
+        height: auto;
+        pointer-events: none;
+    }
+
+    #camSvg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
+    }
+
+    .cam-veil {
+        position: absolute;
+        inset: 0;
+        background: rgba(11, 15, 23, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .cam-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    .cam-btn {
+        flex: 1;
+        border: 1px solid #d9dee6;
+        background: #fff;
+        border-radius: 10px;
+        padding: 10px 8px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #1b2a56;
+        cursor: pointer;
+    }
+
+    .cam-btn:hover { background: #f4f6fa; }
+    .cam-btn:disabled { opacity: 0.5; cursor: default; }
+
+    .cam-btn--save {
+        background: #2e9e8f;
+        border-color: #2e9e8f;
+        color: #fff;
+    }
+
+    .cam-btn--save:hover { background: #28897c; }
+
+    .cam-note {
+        margin: 10px 0 0;
+        font-size: 12.5px;
+        color: #8a93a2;
+        text-align: center;
+    }
+
+    .cam-note--ok { color: #2fae74; font-weight: 700; }
+    .cam-note--err { color: #d15b5b; font-weight: 700; }
+</style>

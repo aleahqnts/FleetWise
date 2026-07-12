@@ -22,7 +22,7 @@
         <button class="sch-btn-save" id="sch-save" onclick="schSave()">Save Schedule</button>
     </div>
 
-    <p class="sch-hint">Assign vehicle + driver per route, shift and day. Multiple buses per shift — use <strong>+ Add bus</strong>. Started/completed trips are locked. Conflicts (double-booking, back-to-back driver shifts) are blocked on save.</p>
+    <p class="sch-hint">Assign vehicle + driver per route, shift and day. Multiple buses per shift: use <strong>+ Add bus</strong>. Started/completed trips are locked. Conflicts (double-booking, back-to-back driver shifts) are blocked on save.</p>
 
     @foreach (var route in Model.Routes)
     {
@@ -134,7 +134,7 @@
                 <span class="sch-modal-ico">&#9888;</span>
                 <h3>Override these conflicts?</h3>
             </div>
-            <p class="sch-modal-sub">You are saving a schedule that breaks the booking rules below. This is intentional — confirm only if you mean to.</p>
+            <p class="sch-modal-sub">You are saving a schedule that breaks the booking rules below. This is intentional. Confirm only if you mean to.</p>
             <ul id="sch-override-list" class="sch-modal-list"></ul>
             <div class="sch-modal-actions">
                 <button class="sch-modal-btn" onclick="schCancelOverride()">Cancel</button>

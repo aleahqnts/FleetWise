@@ -84,7 +84,7 @@ namespace FleetWise.Controllers
 
             await _supabase.From<UserModel>().Insert(user);
 
-            TempData["Success"] = $"User \"{model.FirstName} {model.LastName}\" created. Temporary password: {PasswordPolicy.TemporaryPassword} — they'll be asked to change it on first login.";
+            TempData["Success"] = $"User \"{model.FirstName} {model.LastName}\" created. Temporary password: {PasswordPolicy.TemporaryPassword}. They'll be asked to change it on first login.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -156,7 +156,7 @@ namespace FleetWise.Controllers
 
             await _supabase.From<UserModel>().Update(user);
 
-            TempData["Success"] = $"Password for \"{user.FirstName} {user.LastName}\" was reset. Temporary password: {PasswordPolicy.TemporaryPassword} — they'll be asked to change it on next login.";
+            TempData["Success"] = $"Password for \"{user.FirstName} {user.LastName}\" was reset. Temporary password: {PasswordPolicy.TemporaryPassword}. They'll be asked to change it on next login.";
             return RedirectToAction(nameof(Index));
         }
 

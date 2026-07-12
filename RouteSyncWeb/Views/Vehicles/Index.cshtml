@@ -122,6 +122,7 @@
 @await Html.PartialAsync("_AddVehicleModal", (AddVehicleViewModel)ViewBag.AddVehicleModel)
 @await Html.PartialAsync("_ViewVehicleModal")
 @await Html.PartialAsync("_EditVehicleModal")
+@await Html.PartialAsync("_CameraCalibrateModal")
 
 @* Antiforgery token for the View-modal fetch POSTs (add note / resolve / out-of-service). *@
 @Html.AntiForgeryToken()
@@ -142,6 +143,18 @@
         </div>
     </div>
 </div>
+
+<script>
+    // Phase 8e: proxy endpoints for the camera calibration overlay (service key stays
+    // server-side; camera-calib.js only ever calls these).
+    window.camUrls = {
+        state: '@Url.Action("CameraState", "Vehicles")',
+        wake: '@Url.Action("CameraWake", "Vehicles")',
+        snapshot: '@Url.Action("CameraSnapshot", "Vehicles")',
+        save: '@Url.Action("CameraSave", "Vehicles")'
+    };
+</script>
+<script src="~/js/camera-calib.js"></script>
 
 <script>
     // Load the vehicle table rows in the background so the page itself renders instantly
