@@ -305,3 +305,50 @@
 /* Grace window: camera expected but no heartbeat yet */
 .auto-badge.pending { color: #9aa3b2; }
 .auto-badge.pending .auto-dot { background: #9aa3b2; }
+
+/* ---------- Phase 8: camera card (chip + calibrate entry) ---------- */
+
+.cam-card {
+    border: 1px solid #e6e8ee;
+    border-radius: 12px;
+    background: #fff;
+    margin-bottom: 16px;
+    padding: 12px 16px 14px;
+}
+
+.cam-head-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.cam-title {
+    font-size: 14px;
+    font-weight: 800;
+    color: #1b2a56;
+}
+
+.cam-chip {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 10px;
+    border-radius: 999px;
+}
+
+.cam-chip.on { background: #eafaf1; color: #2fae74; }
+.cam-chip.off { background: #fdecec; color: #d15b5b; }
+
+.cam-btn.calib {
+    width: 100%;
+    border: 1px solid #cfe5e1;
+    background: #eef4f3;
+    border-radius: 10px;
+    padding: 12px 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #2e9e8f;
+    cursor: pointer;
+}
+
+.cam-btn.calib:active { background: #e2efec; }

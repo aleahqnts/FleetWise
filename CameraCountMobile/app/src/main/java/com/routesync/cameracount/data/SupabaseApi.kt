@@ -236,13 +236,15 @@ object SupabaseApi {
 
     data class DeviceConfig(
         val ax: Float, val ay: Float, val bx: Float, val by: Float,
-        val inwardSign: Int, val useBackCamera: Boolean, val version: Int
+        val inwardSign: Int, val useBackCamera: Boolean, val version: Int,
+        /** Phase 8c: driver asked for a wake+snapshot at this instant (ISO), or null. */
+        val wakeRequestedAt: Instant? = null
     )
 
     /** Follower read (piggybacks the 4s poll): the desired config for THIS device. */
     suspend fun getDeviceConfig(deviceId: String): DeviceConfig? = withContext(Dispatchers.IO) {
         val url = "$BASE/device_config?device_id=eq.$deviceId" +
-                "&select=line_ax,line_ay,line_bx,line_by,inward_sign,use_back_camera,version"
+                "&select=line_ax,line_ay,line_bx,line_by,inward_sign,use_back_camera,version,wake_requested_at"
         val req = Request.Builder().url(url).supabaseHeaders().get().build()
         http.newCall(req).execute().use { res ->
             if (!res.isSuccessful) throw IllegalStateException("GET device_config ${res.code}")
@@ -256,7 +258,10 @@ object SupabaseApi {
                 by = r.optDouble("line_by", Prefs.DEF_BY.toDouble()).toFloat(),
                 inwardSign = r.optInt("inward_sign", Prefs.DEF_INWARD_SIGN),
                 useBackCamera = r.optBoolean("use_back_camera", false),
-                version = r.optInt("version", 0)
+                version = r.optInt("version", 0),
+                wakeRequestedAt = r.optString("wake_requested_at", "")
+                    .takeIf { it.isNotEmpty() && it != "null" }
+                    ?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() }
             )
         }
     }
@@ -298,13 +303,21 @@ object SupabaseApi {
      * [justApplied] stamps applied_at (a fresh apply, not just a heartbeat).
      */
     suspend fun upsertDeviceStatus(
-        deviceId: String, configVersionApplied: Int, justApplied: Boolean = false
+        deviceId: String, configVersionApplied: Int, justApplied: Boolean = false,
+        /** Phase 8c wake lifecycle: idle|capturing|preview|applied. Null = field omitted
+         *  from the upsert body, so the DB keeps its current wake_state. */
+        wakeState: String? = null,
+        snapshotReady: Boolean = false
     ): Unit = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("device_id", deviceId)
             .put("last_seen", Instant.now().toString())
             .put("config_version_applied", configVersionApplied)
-            .apply { if (justApplied) put("applied_at", Instant.now().toString()) }
+            .apply {
+                if (justApplied) put("applied_at", Instant.now().toString())
+                if (wakeState != null) put("wake_state", wakeState)
+                if (snapshotReady) put("snapshot_ready_at", Instant.now().toString())
+            }
             .toString().toRequestBody(JSON)
         val req = Request.Builder().url("$BASE/device_status").supabaseHeaders()
             .header("Prefer", "resolution=merge-duplicates,return=minimal")
@@ -312,6 +325,45 @@ object SupabaseApi {
             .build()
         http.newCall(req).execute().use { res ->
             if (!res.isSuccessful) throw IllegalStateException("UPSERT device_status ${res.code}")
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Phase 8c — snapshot transport: private Storage bucket, one transient
+    // object per device ({device_id}.jpg), aggressively deleted.
+    // ------------------------------------------------------------------
+
+    private const val STORAGE = "https://vrtluruqaxutecydbrsq.supabase.co/storage/v1"
+    private val JPEG = "image/jpeg".toMediaType()
+
+    /** Upload (overwrite) this device's snapshot. RLS pins the path to our own JWT. */
+    suspend fun uploadSnapshot(deviceId: String, jpeg: ByteArray): Unit = withContext(Dispatchers.IO) {
+        val req = Request.Builder()
+            .url("$STORAGE/object/camera-snapshots/$deviceId.jpg")
+            .header("apikey", KEY)
+            .header("Authorization", "Bearer ${deviceJwt ?: KEY}")
+            .header("x-upsert", "true")
+            // Object is overwritten in place every wake — any CDN caching serves the
+            // driver yesterday's doorway. (Driver side also cache-busts its GET.)
+            .header("cache-control", "no-cache")
+            .post(jpeg.toRequestBody(JPEG))
+            .build()
+        http.newCall(req).execute().use { res ->
+            if (!res.isSuccessful) throw IllegalStateException("PUT snapshot ${res.code}")
+        }
+    }
+
+    /** Purge the snapshot (apply / cancel / timeout). Missing object = fine. */
+    suspend fun deleteSnapshot(deviceId: String): Unit = withContext(Dispatchers.IO) {
+        val req = Request.Builder()
+            .url("$STORAGE/object/camera-snapshots/$deviceId.jpg")
+            .header("apikey", KEY)
+            .header("Authorization", "Bearer ${deviceJwt ?: KEY}")
+            .delete()
+            .build()
+        http.newCall(req).execute().use { res ->
+            if (!res.isSuccessful && res.code != 404)
+                throw IllegalStateException("DELETE snapshot ${res.code}")
         }
     }
 

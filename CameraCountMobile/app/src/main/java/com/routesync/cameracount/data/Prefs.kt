@@ -104,11 +104,8 @@ class Prefs(private val context: Context) {
 
     suspend fun configVersion(): Int = context.dataStore.data.first()[CONFIG_VERSION] ?: 0
 
-    /** Local calibrate authors a NEW version (version+1) that gets pushed up. */
-    suspend fun bumpConfigVersion(): Int {
-        val v = configVersion() + 1
+    suspend fun saveConfigVersion(v: Int) {
         context.dataStore.edit { it[CONFIG_VERSION] = v }
-        return v
     }
 
     /**
