@@ -30,6 +30,14 @@ class DetectorAnalyzer(
 
     private var frameNo = 0L
 
+    /**
+     * Phase 8c: one-shot frame grab while counting (snapshot for remote calibration
+     * without touching the live camera session). Consumed and cleared on the next
+     * analyzed frame. Receives the frame in DISPLAY space (upright, mirrored for the
+     * front lens) — the space the line's normalized coords live in.
+     */
+    @Volatile var frameTap: ((Bitmap) -> Unit)? = null
+
     // Reused across frames (analyzer is single-threaded): allocating a fresh model-input
     // bitmap per frame = constant GC churn + heat on a CPU-inference phone.
     private var square: Bitmap? = null
@@ -57,6 +65,16 @@ class DetectorAnalyzer(
             val m = Matrix().apply { postRotate(rotation.toFloat()) }
             Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
         } else bmp
+
+        // Phase 8c snapshot tap: hand out a detached copy in display space, then clear.
+        frameTap?.let { tap ->
+            frameTap = null
+            val out = if (mirrored) {
+                val m = Matrix().apply { postScale(-1f, 1f) }
+                Bitmap.createBitmap(upright, 0, 0, upright.width, upright.height, m, true)
+            } else upright.copy(Bitmap.Config.ARGB_8888, false)
+            tap(out)
+        }
 
         // Letterbox into the model square, preserving aspect. The square buffer is
         // reused frame-to-frame; borders are cleared so no previous-frame ghosting.

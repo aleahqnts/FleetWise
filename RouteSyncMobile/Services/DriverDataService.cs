@@ -39,6 +39,48 @@ public class DriverDataService
         res.EnsureSuccessStatusCode();
     }
 
+    // Raw Supabase REST GET returning the first row (or null). device_config/device_status
+    // are plain DTOs, not postgrest models — no BaseModel ceremony needed.
+    private static async Task<T?> GetJsonAsync<T>(string pathWithQuery)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Get, $"{FleetWiseMobile.SupabaseConfig.Url}/rest/v1/{pathWithQuery}");
+        req.Headers.TryAddWithoutValidation("apikey", FleetWiseMobile.SupabaseConfig.Key);
+        req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {FleetWiseMobile.SupabaseConfig.Bearer}");
+        var res = await _http.SendAsync(req);
+        res.EnsureSuccessStatusCode();
+        var json = await res.Content.ReadAsStringAsync();
+        var list = JsonSerializer.Deserialize<List<T>>(json);
+        return list is { Count: > 0 } ? list[0] : default;
+    }
+
+    // ---- Phase 8: remote camera control (RLS scopes both tables to the driver's
+    //      ACTIVE-trip camera via driver_active_camera(); no trip -> empty reads) ----
+
+    public Task<DeviceConfigDto?> GetDeviceConfigAsync(string deviceId)
+        => GetJsonAsync<DeviceConfigDto>($"device_config?device_id=eq.{Uri.EscapeDataString(deviceId)}");
+
+    public Task<DeviceStatusDto?> GetDeviceStatusAsync(string deviceId)
+        => GetJsonAsync<DeviceStatusDto>($"device_status?device_id=eq.{Uri.EscapeDataString(deviceId)}");
+
+    public Task PatchDeviceConfigAsync(string deviceId, object body)
+        => PatchAsync($"device_config?device_id=eq.{Uri.EscapeDataString(deviceId)}", body);
+
+    // 8d: the camera's wake snapshot — authenticated Storage GET; RLS only serves the
+    // ACTIVE trip's camera object. Null = not there (purged / not captured yet / denied).
+    // The ?t= buster is load-bearing: the object is OVERWRITTEN in place on every wake,
+    // and the storage CDN caches by URL — without a unique query the driver gets the
+    // previous photo back on Refresh.
+    public async Task<byte[]?> DownloadSnapshotAsync(string deviceId)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Get,
+            $"{FleetWiseMobile.SupabaseConfig.Url}/storage/v1/object/authenticated/camera-snapshots/{Uri.EscapeDataString(deviceId)}.jpg?t={DateTime.UtcNow.Ticks}");
+        req.Headers.TryAddWithoutValidation("apikey", FleetWiseMobile.SupabaseConfig.Key);
+        req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {FleetWiseMobile.SupabaseConfig.Bearer}");
+        var res = await _http.SendAsync(req);
+        if (!res.IsSuccessStatusCode) return null;
+        return await res.Content.ReadAsByteArrayAsync();
+    }
+
     public async Task<string> GetAvailabilityAsync(int userId)
     {
         var r = await _supabase.From<DriverAvailability>()
