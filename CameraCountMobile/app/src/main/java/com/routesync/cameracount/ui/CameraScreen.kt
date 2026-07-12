@@ -49,6 +49,23 @@ import java.util.concurrent.Executors
 private data class OverlayBox(val l: Float, val t: Float, val r: Float, val b: Float, val counted: Boolean)
 
 /**
+ * Next config version for an on-phone calibrate write. Re-reads the DB so we beat
+ * whatever is there NOW (a driver's remote save, another writer) instead of a stale
+ * local counter — two writers picking the same number would silently desync (the
+ * follower's version `>` compare skips an equal write). Offline -> DB read fails ->
+ * max(0, local)+1, and the follower's push-up self-heals on reconnect.
+ */
+private suspend fun nextConfigVersion(prefs: Prefs): Int {
+    val dev = prefs.deviceId()
+    val dbV = runCatching {
+        com.routesync.cameracount.data.SupabaseApi.getDeviceConfig(dev)?.version
+    }.getOrNull() ?: 0
+    val v = maxOf(dbV, prefs.configVersion()) + 1
+    prefs.saveConfigVersion(v)
+    return v
+}
+
+/**
  * Phase 3/4/5 camera surface.
  * - [vm] != null: COUNTING mode — ByteTrack + line-cross feed vm.increment(); uses the
  *   per-device SAVED line. Trip end (vm state leaves Counting) tears this down from Root.
@@ -96,7 +113,7 @@ fun CameraScreen(
         onClose?.let {
             Button(
                 onClick = it,
-                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp)
             ) { Text("Close") }
         }
     }
@@ -229,6 +246,7 @@ private fun DetectionSurface(
     val executor = remember { Executors.newSingleThreadExecutor() }
     DisposableEffect(Unit) {
         onDispose {
+            vm?.liveAnalyzer = null // snapshot taps fall back to headless capture
             // Order matters: stop frames FIRST, then stop the worker, then free the
             // interpreter — closing native memory under a live frame = SIGSEGV.
             runCatching { ProcessCameraProvider.getInstance(context).get().unbindAll() }
@@ -276,8 +294,7 @@ private fun DetectionSurface(
                                 else -> "back ${backPick!!.fovDegrees}°"
                             }
 
-                            analysis.setAnalyzer(
-                                executor,
+                            val analyzer =
                                 DetectorAnalyzer(
                                     detector, mirrored = front,
                                     onError = { frameError = it },
@@ -306,7 +323,10 @@ private fun DetectionSurface(
                                         fps = frames; frames = 0; windowStart = now
                                     }
                                 }
-                            )
+                            analysis.setAnalyzer(executor, analyzer)
+                            // Phase 8c: while counting, remote snapshots tap THIS analyzer's
+                            // frames instead of opening a second camera session.
+                            vm?.liveAnalyzer = analyzer
                             provider.unbindAll()
                             val cam = provider.bindToLifecycle(lifecycle, selector, preview, analysis)
                             if (!front) {
@@ -389,7 +409,7 @@ private fun DetectionSurface(
         }
 
         Column(
-            Modifier.align(Alignment.TopStart).padding(16.dp)
+            Modifier.align(Alignment.TopStart).statusBarsPadding().padding(16.dp)
                 .background(Color(0xAA000000)).padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
             Text("persons: ${boxes.size}", color = RsColor.TealBright, fontWeight = FontWeight.Bold)
@@ -409,7 +429,7 @@ private fun DetectionSurface(
         // the standalone calibrate screen and the mid-trip adjust overlay.
         if (editingLine) {
             Column(
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp),
+                Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -427,7 +447,7 @@ private fun DetectionSurface(
                         // Phase 8a: lens choice is part of device_config — push it up with
                         // the SAVED line (a drag in progress isn't saved yet). Offline is
                         // fine: the follower self-heals (DB behind local -> push).
-                        val v = prefs.bumpConfigVersion()
+                        val v = nextConfigVersion(prefs)
                         runCatching {
                             val cal = prefs.lineCalibration.first()
                             com.routesync.cameracount.data.SupabaseApi.upsertDeviceConfig(
@@ -458,7 +478,7 @@ private fun DetectionSurface(
                             // Phase 8a: local calibrate authors a new version and writes
                             // it UP — the DB row stays the truth. Offline OK: the
                             // follower self-heals (DB behind local -> push next poll).
-                            val v = prefs.bumpConfigVersion()
+                            val v = nextConfigVersion(prefs)
                             runCatching {
                                 com.routesync.cameracount.data.SupabaseApi.upsertDeviceConfig(
                                     prefs.deviceId(), ax, ay, bx, by, inwardSign,
@@ -487,16 +507,16 @@ private fun DetectionSurface(
         if (counting && !editingLine) {
             OutlinedButton(
                 onClick = { adjusting = true; lastPersonAt = System.currentTimeMillis() },
-                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp)
             ) { Text("Adjust line", color = Color.White, fontSize = 12.sp) }
         }
 
         // Not-charging warning: the counter dies with the battery. Sits just above the HUD.
         if (counting && !charging) {
             Text(
-                "⚡ Not charging — plug the phone in",
+                "⚡ Not charging",
                 color = Color(0xFFFFC94D), fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 176.dp)
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 176.dp)
                     .clip(RoundedCornerShape(8.dp)).background(Color(0xCC000000))
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             )
@@ -515,7 +535,7 @@ private fun DetectionSurface(
                     }
                 }
                 Column(
-                    Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp)
+                    Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 32.dp)
                         .clip(RoundedCornerShape(18.dp))
                         .background(Color(0xCC10231F))
                         .padding(horizontal = 28.dp, vertical = 14.dp),
@@ -534,7 +554,7 @@ private fun DetectionSurface(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "${s.tripId} · " + when {
-                            s.cameraStalled -> "camera stalled — driver counting"
+                            s.cameraStalled -> "camera stalled, driver counting"
                             s.lastFlushOk -> "synced"
                             else -> "sync retrying"
                         },

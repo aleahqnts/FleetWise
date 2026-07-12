@@ -64,7 +64,7 @@ fun Root(vm: CounterViewModel = viewModel()) {
     }
     RsBackground {
         Column(
-            Modifier.fillMaxSize().padding(24.dp),
+            Modifier.fillMaxSize().systemBarsPadding().padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -152,7 +152,7 @@ private fun SetupCard(onBind: (String, String, (String?) -> Unit) -> Unit) {
                             Text("Format: V + 3 digits, e.g. V001", color = RsColor.Error)
                     }
                 )
-                TextButton(onClick = { fleetTried++ }) { Text("Couldn't load the fleet list — retry", color = RsColor.Teal) }
+                TextButton(onClick = { fleetTried++ }) { Text("Couldn't load the fleet list. Retry", color = RsColor.Teal) }
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -163,7 +163,7 @@ private fun SetupCard(onBind: (String, String, (String?) -> Unit) -> Unit) {
             isError = touchedPass && passcode.isNotEmpty() && !passOk,
             supportingText = {
                 if (touchedPass && passcode.isNotEmpty() && !passOk)
-                    Text("At least ${CounterViewModel.MIN_PASSCODE} characters — needed later to unbind.", color = RsColor.Error)
+                    Text("At least ${CounterViewModel.MIN_PASSCODE} characters, needed later to unbind.", color = RsColor.Error)
             }
         )
         bindError?.let {
@@ -247,7 +247,7 @@ private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waitin
             s.lastError?.let {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Offline — retrying…", color = RsColor.Error, fontWeight = FontWeight.Bold,
+                    "Offline, retrying…", color = RsColor.Error, fontWeight = FontWeight.Bold,
                     modifier = Modifier.clip(RoundedCornerShape(8.dp))
                         .background(RsColor.Mint1).padding(horizontal = 12.dp, vertical = 6.dp)
                 )
@@ -281,7 +281,7 @@ private fun StandbyCard(vm: CounterViewModel, s: CounterViewModel.UiState.Standb
             Spacer(Modifier.height(8.dp))
             Text(
                 "Another device is already counting trip ${s.tripId} on ${s.vehicleId}. " +
-                    "Each bus must have exactly ONE counter phone — unbind the phone that " +
+                    "Each bus must have exactly ONE counter phone. Unbind the phone that " +
                     "doesn't belong. Counts are safe: only one device is being accepted.",
                 color = RsColor.Muted, textAlign = TextAlign.Center
             )

@@ -61,6 +61,21 @@ else
             }
         </div>
 
+        <!-- Phase 8: remote camera calibration — everything happens on the photo editor;
+             this card is just the door in (plus an is-it-alive chip). -->
+        @if (!string.IsNullOrEmpty(CamDeviceId))
+        {
+            <div class="cam-card">
+                <div class="cam-head-row">
+                    <span class="cam-title">Camera</span>
+                    <span class="cam-chip @CamChipClass">@CamChipLabel</span>
+                </div>
+                <button class="cam-btn calib" @onclick="@(() => Nav.NavigateTo($"/camera-calibrate/{TripId}"))">
+                    Calibrate Camera
+                </button>
+            </div>
+        }
+
         <div class="stat-row">
             <div class="stat-card">
                 <p class="stat-label">Total Passengers</p>
@@ -307,6 +322,8 @@ else
         // two writers never fight. Manual flush resumes automatically when stale.
         if (tick % 15 == 0 && !cameraAlive) _ = Flush();
         if (tick % 5 == 0) _ = RefreshCameraStateAsync();
+        // Liveness chip on the camera card.
+        if (tick % 5 == 0) _ = RefreshCameraPanelAsync();
         InvokeAsync(StateHasChanged);
     }
 
@@ -344,6 +361,29 @@ else
             // driver can keep counting; camera's monotonic max() reconciles later.
             if (++hbPollFails >= 3) cameraAlive = false;
         }
+    }
+
+    // ---------------- Phase 8: camera liveness chip ----------------
+    // All calibration moved to the photo editor (/camera-calibrate); this page only
+    // shows whether the counter phone is alive (device_status heartbeat, ~12s).
+
+    private DeviceStatusDto? camStatus;
+    private static readonly TimeSpan CamStale = TimeSpan.FromSeconds(30);
+
+    private string? CamDeviceId => vehicle?.CounterDeviceId;
+
+    private bool CamOnline => camStatus?.LastSeen is DateTimeOffset seen
+        && DateTimeOffset.UtcNow - seen < CamStale;
+
+    private string CamChipClass => CamOnline ? "on" : "off";
+    private string CamChipLabel => CamOnline ? "Online" : "Offline";
+
+    private async Task RefreshCameraPanelAsync()
+    {
+        if (CamDeviceId is not string dev || string.IsNullOrEmpty(dev)) return;
+        try { camStatus = await Data.GetDeviceStatusAsync(dev); }
+        catch { /* offline: keep the last known state */ }
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task Inc()

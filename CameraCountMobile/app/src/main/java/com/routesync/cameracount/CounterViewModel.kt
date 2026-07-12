@@ -111,18 +111,18 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                     SupabaseApi.deviceJwt = tok.token
                 }
                 SupabaseApi.TokenResult.Denied -> {
-                    onResult("Wrong fleet passcode — binding is verified by the server now.")
+                    onResult("Wrong fleet passcode. Binding is verified by the server now.")
                     return@launch
                 }
                 SupabaseApi.TokenResult.Unreachable -> {
-                    onResult("Can't reach the server — check the internet connection and try again.")
+                    onResult("Can't reach the server. Check the internet connection and try again.")
                     return@launch
                 }
             }
             val p = try {
                 SupabaseApi.findVehiclePlate(v)
             } catch (_: Exception) {
-                onResult("Can't reach the server — check the internet connection and try again.")
+                onResult("Can't reach the server. Check the internet connection and try again.")
                 return@launch
             }
             if (p == null) {
@@ -133,7 +133,7 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
             val claimed = try {
                 SupabaseApi.claimVehicle(v, deviceId)
             } catch (_: Exception) {
-                onResult("Can't reach the server — check the internet connection and try again.")
+                onResult("Can't reach the server. Check the internet connection and try again.")
                 return@launch
             }
             if (!claimed) {
@@ -288,10 +288,98 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                 prefs.applyRemoteConfig(
                     cfg.ax, cfg.ay, cfg.bx, cfg.by, cfg.inwardSign, cfg.useBackCamera, cfg.version
                 )
-                SupabaseApi.upsertDeviceStatus(deviceId, cfg.version, justApplied = true)
+                // Remote calibration applied -> its snapshot has served its purpose (§ dec 9:
+                // no lingering bus-interior images).
+                if (snapshotUpAt != null) {
+                    snapshotUpAt = null
+                    runCatching { SupabaseApi.deleteSnapshot(deviceId) }
+                    SupabaseApi.upsertDeviceStatus(deviceId, cfg.version, justApplied = true, wakeState = "applied")
+                } else {
+                    SupabaseApi.upsertDeviceStatus(deviceId, cfg.version, justApplied = true)
+                }
             }
             cfgTick % 3 == 0 -> SupabaseApi.upsertDeviceStatus(deviceId, localV)
         }
+        handleWake(cfg?.wakeRequestedAt, localV)
+    }
+
+    // ------------------------------------------------------------------
+    // Phase 8c maintenance-wake: driver PATCHes wake_requested_at -> we capture ONE
+    // still (headless while Waiting; a frame tap off the live analyzer while Counting),
+    // upload it, hold "preview" until the driver saves / cancels / ~2 min timeout,
+    // then aggressively purge — no history of bus interiors ever accumulates.
+    // ------------------------------------------------------------------
+
+    /** Live analyzer while Counting (CameraScreen attaches/detaches) — snapshot source. */
+    @Volatile var liveAnalyzer: com.routesync.cameracount.camera.DetectorAnalyzer? = null
+
+    private var lastWakeHandled: java.time.Instant? = null
+    private var snapshotUpAt: java.time.Instant? = null
+    private var capturing = false
+
+    private suspend fun handleWake(wakeAt: java.time.Instant?, localV: Int) {
+        val now = java.time.Instant.now()
+
+        // New wake request: newer than the last one we served, and fresh (<3 min) so a
+        // stale row from before an app restart can't fire a surprise capture.
+        if (wakeAt != null && !capturing &&
+            wakeAt.isAfter(now.minusSeconds(180)) &&
+            (lastWakeHandled == null || wakeAt.isAfter(lastWakeHandled))
+        ) {
+            lastWakeHandled = wakeAt
+            capturing = true
+            try {
+                SupabaseApi.upsertDeviceStatus(deviceId, localV, wakeState = "capturing")
+                val bmp = captureFrame()
+                if (bmp == null) {
+                    SupabaseApi.upsertDeviceStatus(deviceId, localV, wakeState = "idle")
+                    return
+                }
+                SupabaseApi.uploadSnapshot(deviceId, toJpeg(bmp))
+                snapshotUpAt = java.time.Instant.now()
+                SupabaseApi.upsertDeviceStatus(deviceId, localV, wakeState = "preview", snapshotReady = true)
+            } catch (_: Exception) {
+                runCatching { SupabaseApi.upsertDeviceStatus(deviceId, localV, wakeState = "idle") }
+            } finally {
+                capturing = false
+            }
+            return
+        }
+
+        // Timeout purge: preview held ~2 min with no apply -> delete + idle. (Apply-path
+        // purge lives in followDeviceConfig where the new version lands.)
+        if (snapshotUpAt != null && now.isAfter(snapshotUpAt!!.plusSeconds(120))) {
+            snapshotUpAt = null
+            runCatching { SupabaseApi.deleteSnapshot(deviceId) }
+            SupabaseApi.upsertDeviceStatus(deviceId, localV, wakeState = "idle")
+        }
+    }
+
+    /** Counting: tap the live analyzer (no second camera session). Waiting: headless one-shot. */
+    private suspend fun captureFrame(): android.graphics.Bitmap? {
+        liveAnalyzer?.let { an ->
+            return kotlinx.coroutines.withTimeoutOrNull(10_000) {
+                kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+                    an.frameTap = { bmp -> if (cont.isActive) cont.resume(bmp) {} }
+                    cont.invokeOnCancellation { an.frameTap = null }
+                }
+            }
+        }
+        return com.routesync.cameracount.camera.SnapshotCapture.captureOnce(
+            getApplication(), prefs.useBackCamera.first()
+        )
+    }
+
+    /** Downscale (max 1280 long side) + JPEG 80 — plenty for line placement, tiny upload. */
+    private fun toJpeg(src: android.graphics.Bitmap): ByteArray {
+        val maxSide = 1280f
+        val scale = minOf(1f, maxSide / maxOf(src.width, src.height))
+        val bmp = if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(
+            src, (src.width * scale).toInt(), (src.height * scale).toInt(), true
+        ) else src
+        val out = java.io.ByteArrayOutputStream()
+        bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out)
+        return out.toByteArray()
     }
 
     private fun startFlushing() {

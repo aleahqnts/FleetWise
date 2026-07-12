@@ -1,0 +1,343 @@
+@page "/camera-calibrate/{TripId}"
+@layout LoginLayout
+@inject SessionService Session
+@inject DriverDataService Data
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* Phase 8d — Tier-2 remote calibration: drag the counting line on a real photo of the
+   doorway (the camera's wake snapshot), Save writes device_config, the camera adopts it. *@
+
+<div class="cc">
+    <div class="cc-head">
+        <button class="back" @onclick="GoBack">&#8592;</button>
+        <h1>Calibrate Camera</h1>
+        <span class="spacer"></span>
+    </div>
+
+    @if (stage == Stage.Waking)
+    {
+        <div class="cc-wait">
+            <div class="cc-spin"></div>
+            <p class="cc-wait-t">Waking the camera&#8230;</p>
+            <p class="cc-wait-s">The counter phone is taking a fresh photo of the doorway.</p>
+        </div>
+    }
+    else if (stage == Stage.Error)
+    {
+        <div class="cc-wait">
+            <p class="cc-wait-t">@errMsg</p>
+            <button class="cc-btn retry" @onclick="StartWakeAsync">Try again</button>
+        </div>
+    }
+    else
+    {
+        <p class="cc-hint">
+            Drag the two dots so the line crosses the boarding pathway.
+            The arrow points into the bus.
+        </p>
+
+        <div id="calib-stage" class="cc-stage">
+            <img src="@imgSrc" draggable="false" />
+            <svg id="calib-svg" preserveAspectRatio="none">
+                <line id="cl-ln" stroke="#FFC94D" stroke-width="4" stroke-dasharray="12 8" />
+                <line id="cl-ar" stroke="#FFC94D" stroke-width="3" />
+                <circle id="cl-art" r="5" fill="#FFC94D" />
+                <circle id="cl-hao" r="15" fill="#ffffff" />
+                <circle id="cl-ha" r="10" fill="#FFC94D" />
+                <circle id="cl-hbo" r="15" fill="#ffffff" />
+                <circle id="cl-hb" r="10" fill="#FFC94D" />
+            </svg>
+            @if (refreshing)
+            {
+                <div class="cc-refresh-veil"><div class="cc-spin"></div></div>
+            }
+        </div>
+
+        <div class="cc-row">
+            <button class="cc-btn" @onclick="FlipSideAsync" disabled="@busy">Flip Boarding Side</button>
+            <button class="cc-btn" @onclick="FlipCameraAsync" disabled="@busy">Flip Camera</button>
+            <button class="cc-btn" @onclick="RefreshSnapAsync" disabled="@busy">Refresh</button>
+        </div>
+
+        <button class="cc-save" @onclick="SaveAsync" disabled="@(busy || stage == Stage.Applied)">
+            @(stage == Stage.Applied ? "✓ Applied" : busy ? "Saving…" : "Save")
+        </button>
+
+        @if (note is not null)
+        {
+            <p class="cc-note @(stage == Stage.Applied ? "ok" : "")">@note</p>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public string TripId { get; set; } = "";
+
+    private enum Stage { Waking, Editing, Error, Applied }
+
+    private Stage stage = Stage.Waking;
+    private bool busy;
+    private bool refreshing;
+    private string? errMsg;
+    private string? note;
+    private string? imgSrc;
+    private string? dev;
+
+    // Line state (normalized, display space — the §2 coordinate contract).
+    private double ax = 0.5, ay = 0.05, bx = 0.5, by = 0.95;
+    private int inwardSign = 1;
+    private int version;
+    private bool useBack;
+
+    private bool editorWired;
+    private DotNetObjectReference<CameraCalibrate>? selfRef;
+    private DateTimeOffset wakeSentAt;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
+
+        try
+        {
+            var trip = await Data.GetTripAsync(TripId);
+            var vehicle = trip is null ? null : await Data.GetVehicleAsync(trip.VehicleId);
+            dev = vehicle?.CounterDeviceId;
+        }
+        catch { /* falls through to the error below */ }
+
+        if (string.IsNullOrEmpty(dev))
+        {
+            stage = Stage.Error;
+            errMsg = "No counter phone is bound to this bus.";
+            return;
+        }
+        await StartWakeAsync();
+    }
+
+    private async Task StartWakeAsync()
+    {
+        stage = Stage.Waking;
+        errMsg = null;
+        StateHasChanged();
+
+        try
+        {
+            // Current config first: the editor starts from the line the camera runs NOW.
+            var cfg = await Data.GetDeviceConfigAsync(dev!);
+            if (cfg is not null)
+            {
+                ax = cfg.LineAx ?? 0.5; ay = cfg.LineAy ?? 0.05;
+                bx = cfg.LineBx ?? 0.5; by = cfg.LineBy ?? 0.95;
+                inwardSign = cfg.InwardSign == 0 ? 1 : cfg.InwardSign;
+                version = cfg.Version;
+                useBack = cfg.UseBackCamera;
+            }
+
+            wakeSentAt = DateTimeOffset.UtcNow;
+            await Data.PatchDeviceConfigAsync(dev!, new Dictionary<string, object?>
+            {
+                ["wake_requested_at"] = DateTime.UtcNow
+            });
+        }
+        catch
+        {
+            stage = Stage.Error;
+            errMsg = "Can't reach the server — check the connection and try again.";
+            return;
+        }
+
+        if (!await WaitForSnapshotAsync())
+        {
+            stage = Stage.Error;
+            errMsg = "The camera didn't respond. Is the counter phone on and connected?";
+            return;
+        }
+
+        editorWired = false; // (re)wire JS after this render
+        stage = Stage.Editing;
+        StateHasChanged();
+    }
+
+    // Poll device_status until a snapshot NEWER than our wake request lands, then pull it.
+    private async Task<bool> WaitForSnapshotAsync()
+    {
+        for (var i = 0; i < 20; i++) // ~30s: wake + AE warm-up + upload fits comfortably
+        {
+            await Task.Delay(1500);
+            try
+            {
+                var st = await Data.GetDeviceStatusAsync(dev!);
+                if (st?.SnapshotReadyAt is DateTimeOffset ready &&
+                    ready >= wakeSentAt.AddSeconds(-5)) // small clock-skew slack
+                {
+                    var bytes = await Data.DownloadSnapshotAsync(dev!);
+                    if (bytes is { Length: > 0 })
+                    {
+                        imgSrc = $"data:image/jpeg;base64,{Convert.ToBase64String(bytes)}";
+                        return true;
+                    }
+                }
+            }
+            catch { /* poll again */ }
+        }
+        return false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (stage == Stage.Editing && !editorWired)
+        {
+            editorWired = true;
+            selfRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("calib.init", selfRef);
+            await JS.InvokeVoidAsync("calib.set", ax, ay, bx, by, inwardSign);
+        }
+    }
+
+    [JSInvokable]
+    public void OnLineChanged(double nAx, double nAy, double nBx, double nBy)
+    {
+        ax = nAx; ay = nAy; bx = nBx; by = nBy;
+        if (stage == Stage.Applied) { stage = Stage.Editing; note = null; } // re-edit after apply
+    }
+
+    private async Task FlipSideAsync()
+    {
+        inwardSign = -inwardSign;
+        if (stage == Stage.Applied) { stage = Stage.Editing; note = null; }
+        await JS.InvokeVoidAsync("calib.set", ax, ay, bx, by, inwardSign);
+    }
+
+    // Lens swap (front <-> back). The scene changes completely, so: save the lens to
+    // device_config, wait for the camera to echo it, then pull a fresh photo through
+    // the normal wake path. The dragged line is kept (driver re-drags for the new view).
+    private async Task FlipCameraAsync()
+    {
+        busy = true; refreshing = true; note = null;
+        StateHasChanged();
+        var newVersion = await NextVersionAsync();
+        try
+        {
+            useBack = !useBack;
+            await Data.PatchDeviceConfigAsync(dev!, new Dictionary<string, object?>
+            {
+                ["use_back_camera"] = useBack,
+                ["version"] = newVersion,
+                ["updated_by"] = $"driver:{Session.CurrentUser?.UserId}",
+                ["updated_at"] = PhTime.Now
+            });
+            version = newVersion;
+
+            // Wait for the camera to actually switch lenses before re-shooting.
+            for (var i = 0; i < 8; i++)
+            {
+                await Task.Delay(1500);
+                try
+                {
+                    var st = await Data.GetDeviceStatusAsync(dev!);
+                    if (st?.ConfigVersionApplied >= newVersion) break;
+                }
+                catch { }
+            }
+
+            wakeSentAt = DateTimeOffset.UtcNow;
+            await Data.PatchDeviceConfigAsync(dev!, new Dictionary<string, object?>
+            {
+                ["wake_requested_at"] = DateTime.UtcNow
+            });
+            if (!await WaitForSnapshotAsync())
+                note = "Camera switched, but no new photo arrived — tap Refresh.";
+        }
+        catch { note = "Couldn't flip the camera — check the connection."; }
+        busy = false; refreshing = false;
+    }
+
+    // Refresh: re-wake, keep the dragged line exactly where the driver put it.
+    private async Task RefreshSnapAsync()
+    {
+        busy = true; refreshing = true; note = null;
+        StateHasChanged();
+        try
+        {
+            wakeSentAt = DateTimeOffset.UtcNow;
+            await Data.PatchDeviceConfigAsync(dev!, new Dictionary<string, object?>
+            {
+                ["wake_requested_at"] = DateTime.UtcNow
+            });
+            if (!await WaitForSnapshotAsync())
+                note = "Couldn't get a new photo — the camera didn't respond.";
+        }
+        catch { note = "Couldn't get a new photo — check the connection."; }
+        busy = false; refreshing = false;
+    }
+
+    // The version must beat whatever is in the DB RIGHT NOW, not the value read when the
+    // editor opened — otherwise a concurrent write (camera's on-phone save, another
+    // editor) that landed the same number would make the follower's `>` compare skip us,
+    // silently desyncing. Re-read, take the max, +1.
+    private async Task<int> NextVersionAsync()
+    {
+        try
+        {
+            var fresh = await Data.GetDeviceConfigAsync(dev!);
+            if (fresh is not null) version = Math.Max(version, fresh.Version);
+        }
+        catch { /* offline: fall back to the cached version */ }
+        return version + 1;
+    }
+
+    private async Task SaveAsync()
+    {
+        busy = true; note = null;
+        StateHasChanged();
+        var newVersion = await NextVersionAsync();
+        try
+        {
+            await Data.PatchDeviceConfigAsync(dev!, new Dictionary<string, object?>
+            {
+                ["line_ax"] = ax, ["line_ay"] = ay, ["line_bx"] = bx, ["line_by"] = by,
+                ["inward_sign"] = inwardSign,
+                ["version"] = newVersion,
+                ["updated_by"] = $"driver:{Session.CurrentUser?.UserId}",
+                ["updated_at"] = PhTime.Now
+            });
+            version = newVersion;
+        }
+        catch
+        {
+            note = "Couldn't save — check the connection and try again.";
+            busy = false;
+            return;
+        }
+
+        // Echo: the ✓ means the camera RUNS this line now (not just that the row changed).
+        for (var i = 0; i < 8; i++)
+        {
+            await Task.Delay(1500);
+            try
+            {
+                var st = await Data.GetDeviceStatusAsync(dev!);
+                if (st?.ConfigVersionApplied >= newVersion)
+                {
+                    stage = Stage.Applied;
+                    note = "Camera adopted the new line.";
+                    busy = false;
+                    return;
+                }
+            }
+            catch { /* poll again */ }
+        }
+        note = "Saved — the camera will apply it as soon as it reconnects.";
+        busy = false;
+    }
+
+    private async Task GoBack() => await JS.InvokeVoidAsync("history.back");
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("calib.dispose"); } catch { }
+        selfRef?.Dispose();
+    }
+}
