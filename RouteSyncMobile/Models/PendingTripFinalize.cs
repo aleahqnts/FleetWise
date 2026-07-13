@@ -14,4 +14,8 @@ public class PendingTripFinalize
     public int TotalBoarded { get; set; }
     public decimal Revenue { get; set; }
     public DateTime EndTime { get; set; }
+
+    // Needed so the finalize can also release the bus (vehicle_status On Trip ->
+    // Ready to Deploy). Empty on rows queued before this field existed -> skipped.
+    public string VehicleId { get; set; } = "";
 }

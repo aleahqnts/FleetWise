@@ -9,6 +9,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Phase 9b: relaunch after a power-blip reboot (fixed dashboard fixture). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Phase 9b watcher: specialUse is the one FGS type allowed to start from boot on
+         API 34+; the overlay grant lets it open the UI directly on trip start. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:label="RouteSync Counter"
@@ -30,5 +37,24 @@
             android:name=".CountingService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Phase 9b: bring the counter back up after a reboot. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Phase 9b: always-on trip watcher; reopens the UI when a trip starts. -->
+        <service
+            android:name=".WatcherService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Dedicated bus-mounted passenger counter: watches for trip start and reopens the counting UI" />
+        </service>
     </application>
 </manifest>

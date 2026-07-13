@@ -29,7 +29,35 @@ import com.routesync.cameracount.ui.*
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Phase 9b: the watcher outlives the UI — it reopens this activity when a trip
+        // starts while the app is closed/backgrounded. Started here so it's always
+        // alive once the app has been opened once after install.
+        WatcherService.start(this)
         setContent { RsTheme { Root() } }
+    }
+
+    override fun onResume() { super.onResume(); uiVisible = true }
+    override fun onPause() { super.onPause(); uiVisible = false }
+
+    companion object {
+        /** Watcher skips trip-launch polling while the UI is on screen. */
+        @Volatile var uiVisible = false
+    }
+}
+
+/** One overlay-settings hop per app start (re-asked on next start if still denied). */
+private var overlayPrompted = false
+
+private fun promptOverlayPermission(context: android.content.Context) {
+    if (overlayPrompted || android.provider.Settings.canDrawOverlays(context)) return
+    overlayPrompted = true
+    runCatching {
+        context.startActivity(
+            android.content.Intent(
+                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                android.net.Uri.parse("package:${context.packageName}")
+            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
     }
 }
 
@@ -39,16 +67,21 @@ fun Root(vm: CounterViewModel = viewModel()) {
     val s = vm.state.collectAsState().value
 
     // Phase 6: the trip foreground-service notification needs this on API 33+.
+    // Phase 9b: "Display over other apps" is REQUIRED (the watcher opens this app when
+    // a trip starts). Android has no dialog for it, only its Settings page — so open
+    // that page automatically, chained AFTER the notification dialog so the two system
+    // prompts never stack. Once per app start until granted.
     val context = androidx.compose.ui.platform.LocalContext.current
     val askNotif = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { }
+    ) { promptOverlayPermission(context) }
     LaunchedEffect(Unit) {
         if (android.os.Build.VERSION.SDK_INT >= 33 &&
             androidx.core.content.ContextCompat.checkSelfPermission(
                 context, android.Manifest.permission.POST_NOTIFICATIONS
             ) != android.content.pm.PackageManager.PERMISSION_GRANTED
         ) askNotif.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        else promptOverlayPermission(context)
     }
 
     // Trip active -> this device IS the counter. Camera + tracker run for the whole
@@ -69,7 +102,7 @@ fun Root(vm: CounterViewModel = viewModel()) {
             verticalArrangement = Arrangement.Center
         ) {
             when (s) {
-                is CounterViewModel.UiState.NeedsSetup -> SetupCard(onBind = vm::bind)
+                is CounterViewModel.UiState.NeedsSetup -> SetupCard(vm, onBind = vm::bind)
                 is CounterViewModel.UiState.Waiting -> WaitingCard(vm, s, onCamera = { showPreview = true })
                 is CounterViewModel.UiState.Standby -> StandbyCard(vm, s)
                 else -> {}
@@ -80,24 +113,37 @@ fun Root(vm: CounterViewModel = viewModel()) {
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-private fun SetupCard(onBind: (String, String, (String?) -> Unit) -> Unit) {
+private fun SetupCard(vm: CounterViewModel, onBind: (String, String, (String?) -> Unit) -> Unit) {
     var vehicle by remember { mutableStateOf("") }
     var passcode by remember { mutableStateOf("") }
     var touchedVehicle by remember { mutableStateOf(false) }
-    var touchedPass by remember { mutableStateOf(false) }
     var binding by remember { mutableStateOf(false) }
     var bindError by remember { mutableStateOf<String?>(null) }
 
-    // Fleet list for the picker. null = loading; empty = fetch failed -> manual entry.
+    // Post-7d: the fleet list is behind auth, so the passcode comes FIRST. A verified
+    // passcode mints the device token, then the bus dropdown loads with it.
     var fleet by remember { mutableStateOf<List<com.routesync.cameracount.data.SupabaseApi.FleetVehicle>?>(null) }
-    var fleetTried by remember { mutableIntStateOf(0) }
-    LaunchedEffect(fleetTried) {
-        fleet = null
-        fleet = try { com.routesync.cameracount.data.SupabaseApi.listVehicles() } catch (_: Exception) { emptyList() }
+    var fleetError by remember { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    var serverDown by remember { mutableStateOf(false) }
+
+    val passOk = passcode.length >= CounterViewModel.MIN_PASSCODE
+
+    // Debounced: retyping cancels the previous attempt (LaunchedEffect restart).
+    LaunchedEffect(passcode) {
+        fleet = null; fleetError = null; serverDown = false; vehicle = ""
+        if (!passOk) return@LaunchedEffect
+        kotlinx.coroutines.delay(900)
+        checking = true
+        vm.prepareFleet(passcode) { list, err ->
+            checking = false
+            fleet = list
+            fleetError = err
+            serverDown = err?.contains("server") == true
+        }
     }
 
     val vehicleOk = CounterViewModel.VEHICLE_ID_RE.matches(vehicle)
-    val passOk = passcode.length >= CounterViewModel.MIN_PASSCODE
 
     RsWordmark("Passenger Counter")
     Spacer(Modifier.height(24.dp))
@@ -106,19 +152,29 @@ private fun SetupCard(onBind: (String, String, (String?) -> Unit) -> Unit) {
         Spacer(Modifier.height(4.dp))
         Text("Bind this phone to the bus it is mounted in.", color = RsColor.Muted)
         Spacer(Modifier.height(20.dp))
-        val f = fleet
+
+        OutlinedTextField(
+            passcode, { passcode = it; bindError = null }, singleLine = true,
+            label = { Text("Fleet passcode") }, modifier = Modifier.fillMaxWidth(),
+            visualTransformation = PasswordVisualTransformation(),
+            supportingText = {
+                if (!passOk) Text("Enter the fleet passcode to load the bus list.", color = RsColor.Muted)
+            }
+        )
+        Spacer(Modifier.height(12.dp))
+
         when {
-            f == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+            checking -> Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(10.dp))
-                Text("Loading fleet…", color = RsColor.Muted)
+                Text("Checking passcode…", color = RsColor.Muted)
             }
-            f.isNotEmpty() -> {
+            fleet != null -> {
                 // Picker: no typos possible; shows the plate so the installer matches the bus.
                 var open by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
                     OutlinedTextField(
-                        value = f.firstOrNull { it.vehicleId == vehicle }
+                        value = fleet!!.firstOrNull { it.vehicleId == vehicle }
                             ?.let { "${it.vehicleId} · ${it.plate}" } ?: "",
                         onValueChange = {}, readOnly = true,
                         label = { Text("Select vehicle") },
@@ -126,7 +182,7 @@ private fun SetupCard(onBind: (String, String, (String?) -> Unit) -> Unit) {
                         modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
                     ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                        f.forEach { v ->
+                        fleet!!.forEach { v ->
                             DropdownMenuItem(
                                 text = { Text("${v.vehicleId} · ${v.plate}") },
                                 onClick = { vehicle = v.vehicleId; bindError = null; open = false }
@@ -135,8 +191,9 @@ private fun SetupCard(onBind: (String, String, (String?) -> Unit) -> Unit) {
                     }
                 }
             }
-            else -> {
-                // Offline / fetch failed: manual entry with format validation + retry.
+            serverDown -> {
+                // Offline: manual entry with format validation. The bind itself will
+                // retry the network anyway.
                 OutlinedTextField(
                     vehicle,
                     {
@@ -150,22 +207,15 @@ private fun SetupCard(onBind: (String, String, (String?) -> Unit) -> Unit) {
                     supportingText = {
                         if (touchedVehicle && vehicle.isNotEmpty() && !vehicleOk)
                             Text("Format: V + 3 digits, e.g. V001", color = RsColor.Error)
+                        else Text("Offline: type the vehicle ID from the dashboard sticker.", color = RsColor.Muted)
                     }
                 )
-                TextButton(onClick = { fleetTried++ }) { Text("Couldn't load the fleet list. Retry", color = RsColor.Teal) }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            passcode, { passcode = it; touchedPass = true; bindError = null }, singleLine = true,
-            label = { Text("Bind passcode") }, modifier = Modifier.fillMaxWidth(),
-            visualTransformation = PasswordVisualTransformation(),
-            isError = touchedPass && passcode.isNotEmpty() && !passOk,
-            supportingText = {
-                if (touchedPass && passcode.isNotEmpty() && !passOk)
-                    Text("At least ${CounterViewModel.MIN_PASSCODE} characters, needed later to unbind.", color = RsColor.Error)
-            }
-        )
+        fleetError?.takeIf { !serverDown }?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, color = RsColor.Error)
+        }
         bindError?.let {
             Spacer(Modifier.height(8.dp))
             Text(it, color = RsColor.Error)
@@ -292,6 +342,7 @@ private fun StandbyCard(vm: CounterViewModel, s: CounterViewModel.UiState.Standb
 @Composable
 private fun Header(vm: CounterViewModel, vehicleId: String, onCamera: () -> Unit) {
     var showUnbind by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     Row(
         Modifier.fillMaxWidth().widthIn(max = 380.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -299,6 +350,11 @@ private fun Header(vm: CounterViewModel, vehicleId: String, onCamera: () -> Unit
     ) {
         RsWordmark("Passenger Counter")
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Phase 9b kiosk: screen-pin the app so it can't be swiped away or
+            // backgrounded on the mounted phone. Unpin = system gesture (Back+Recents).
+            TextButton(onClick = {
+                runCatching { (context as? android.app.Activity)?.startLockTask() }
+            }) { Text("Pin", color = RsColor.Muted, fontWeight = FontWeight.Bold) }
             TextButton(onClick = onCamera) { Text("Calibrate", color = RsColor.Navy, fontWeight = FontWeight.Bold) }
             TextButton(onClick = { showUnbind = true }) { Text(vehicleId, color = RsColor.Teal, fontWeight = FontWeight.Bold) }
         }
