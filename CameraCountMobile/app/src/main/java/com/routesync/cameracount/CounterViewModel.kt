@@ -95,6 +95,29 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Setup step 1 (post-7d fix): the fleet dropdown needs a DB read, but anon has zero
+     * access — so the passcode comes FIRST, mints the device JWT, and only then can the
+     * vehicle list load. onResult(list, null) = ready; (null, error) = show why.
+     */
+    fun prepareFleet(passcode: String, onResult: (List<SupabaseApi.FleetVehicle>?, String?) -> Unit) {
+        viewModelScope.launch {
+            when (val tok = SupabaseApi.fetchDeviceToken(deviceId, passcode)) {
+                is SupabaseApi.TokenResult.Ok -> {
+                    prefs.saveDeviceJwt(tok.token)
+                    SupabaseApi.deviceJwt = tok.token
+                    val list = try { SupabaseApi.listVehicles() } catch (_: Exception) { null }
+                    if (list == null) onResult(null, "Can't reach the server. Check the internet connection.")
+                    else onResult(list, null)
+                }
+                SupabaseApi.TokenResult.Denied ->
+                    onResult(null, "Wrong fleet passcode.")
+                SupabaseApi.TokenResult.Unreachable ->
+                    onResult(null, "Can't reach the server. Check the internet connection.")
+            }
+        }
+    }
+
+    /**
      * Validated bind: format is checked in the UI; here we verify the vehicle actually
      * EXISTS in the fleet before committing — a typo'd bind would otherwise sit silently
      * "waiting for trip" forever. onResult(null) = bound; else a user-facing error.
