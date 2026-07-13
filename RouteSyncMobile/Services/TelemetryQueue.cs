@@ -98,6 +98,25 @@ public class TelemetryQueue
 
             var res = await _http.SendAsync(req);
             if (!res.IsSuccessStatusCode) return; // keep, retry later
+
+            // Release the bus: the trip is now Completed, so vehicle_status must leave
+            // "On Trip" or the vehicles row stays stuck (the web only shows Ready via a
+            // derived fallback; other consumers read the raw column). Order matters —
+            // the RLS policy that lets a driver touch this vehicle needs the just-
+            // written Completed trip (driver_id = me) to already exist. Best-effort:
+            // a failure here doesn't re-queue the finalize (trip is already Completed).
+            if (!string.IsNullOrEmpty(f.VehicleId))
+            {
+                var vBody = new { vehicle_status = "Ready to Deploy", updated_at = f.EndTime };
+                var vReq = new HttpRequestMessage(HttpMethod.Patch,
+                    $"{SupabaseConfig.Url}/rest/v1/vehicles?vehicle_id=eq.{Uri.EscapeDataString(f.VehicleId)}&vehicle_status=eq.On%20Trip");
+                vReq.Headers.TryAddWithoutValidation("apikey", SupabaseConfig.Key);
+                vReq.Headers.TryAddWithoutValidation("Authorization", $"Bearer {SupabaseConfig.Bearer}");
+                vReq.Headers.TryAddWithoutValidation("Prefer", "return=minimal");
+                vReq.Content = new StringContent(JsonSerializer.Serialize(vBody), Encoding.UTF8, "application/json");
+                await _http.SendAsync(vReq); // ignore result: trip finalize already landed
+            }
+
             await _db.DeleteAsync(f);
         }
     }

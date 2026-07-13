@@ -423,7 +423,8 @@ else
                 TripId = TripId,
                 TotalBoarded = finalTotal,
                 Revenue = finalRevenue,
-                EndTime = PhTime.Now
+                EndTime = PhTime.Now,
+                VehicleId = vehicle?.VehicleId ?? trip?.VehicleId ?? ""
             });
 
             // Stop tracking BEFORE clearing the count key so no stray tick logs a 0.

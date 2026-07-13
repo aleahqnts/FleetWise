@@ -180,8 +180,10 @@ private fun DetectionSurface(
         prefs.useBackCamera.collect { back -> if (!(calibrate || adjusting)) useBack = back }
     }
 
-    // Dim mode: nobody in frame for 60s -> near-black overlay (heat + burn-in relief).
-    // Detection keeps running underneath; a person in frame or a tap wakes the screen.
+    // Dim mode: nobody in frame for 60s -> near-black overlay (burn-in relief) AND
+    // Phase 9a resting throttle: while dimmed, inference drops to 1-of-4 frames (the
+    // real heat cut — YOLO is the dominant heat source, not the screen). Un-dim is
+    // INSTANT (analyzer callback below), so full rate resumes the moment someone shows.
     var lastPersonAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var dimmed by remember { mutableStateOf(false) }
     if (counting) LaunchedEffect(Unit) {
@@ -298,10 +300,17 @@ private fun DetectionSurface(
                                 DetectorAnalyzer(
                                     detector, mirrored = front,
                                     onError = { frameError = it },
-                                    throttle = { thermalSkip }
+                                    // Phase 9a: resting (dimmed) throttles harder than thermal;
+                                    // whichever wants fewer inferences wins.
+                                    throttle = { maxOf(thermalSkip, if (dimmed) 4 else 1) }
                                 ) { dets, w, h, ms ->
                                     vm?.noteFrame() // stall guard: silence -> heartbeat stops -> manual fallback
-                                    if (dets.isNotEmpty()) lastPersonAt = System.currentTimeMillis()
+                                    if (dets.isNotEmpty()) {
+                                        lastPersonAt = System.currentTimeMillis()
+                                        // Phase 9a instant un-dim: don't wait for the 5s loop —
+                                        // full inference rate resumes on the very next frame.
+                                        if (dimmed) dimmed = false
+                                    }
                                     boxes = if (counting) {
                                         // Real counting path: tracker IDs -> line-cross -> count.
                                         // (crossings ignored until the saved line is loaded, and
