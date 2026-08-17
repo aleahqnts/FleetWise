@@ -12,6 +12,7 @@ import {
   verifyAspNetHash,
   verifyJwt,
 } from "../_shared/auth.ts";
+import { audit } from "../_shared/audit.ts";
 
 const service = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -52,6 +53,16 @@ Deno.serve(async (req) => {
   const user = rows?.[0];
   if (!user || user.account_status !== "Activated") return json(401, { error: "Not signed in." });
   if (!user.password_hash || !(await verifyAspNetHash(oldPwd, user.password_hash))) {
+    await audit(req, {
+      action: "change_password",
+      actorType: "user",
+      actorId: userId,
+      actorRole: "app_driver",
+      targetTable: "users",
+      targetId: userId,
+      outcome: "denied",
+      summary: `Password change refused for user ${userId} (wrong current password)`,
+    });
     return json(400, { error: "Current password is incorrect." });
   }
 
@@ -61,6 +72,18 @@ Deno.serve(async (req) => {
     .update({ password_hash: newHash, updated_at: new Date().toISOString() })
     .eq("user_id", userId);
   if (upErr) return json(500, { error: "Update failed" });
+
+  // The DB trigger also logs 'password_hash_changed' (the fact, no values);
+  // this row records WHO asked and through which surface.
+  await audit(req, {
+    action: "change_password",
+    actorType: "user",
+    actorId: userId,
+    actorRole: "app_driver",
+    targetTable: "users",
+    targetId: userId,
+    summary: `Driver ${userId} changed their own password`,
+  });
 
   return json(200, { ok: true });
 });
