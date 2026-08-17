@@ -18,6 +18,12 @@ namespace FleetWise.Services
         // PH calendar date (for DATE columns like vehicles.last_maintenance_date).
         public static DateTime Today => Now.Date;
 
+        // A true UTC instant read back from the DB, shown as PH wall-clock. Rows written by
+        // Postgres now() (the audit trail) are real UTC, not the PH-wall-clock convention
+        // above, so they need converting before display.
+        public static DateTime ToPh(DateTimeOffset instant) =>
+            TimeZoneInfo.ConvertTime(instant, Tz).DateTime;
+
         // One operating cycle runs 06:00 -> 05:59 the NEXT morning, so the 22:00–06:00
         // night shift counts under its START date. Before 6 AM we're still inside
         // yesterday's cycle. Use this (not Today) anywhere a "service day" is meant.
