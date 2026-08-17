@@ -12,8 +12,13 @@ namespace FleetWise.Controllers
     public class HomeController : Controller
     {
         private readonly AuthService _authService;
+        private readonly AuditLog _audit;
 
-        public HomeController(AuthService authService) => _authService = authService;
+        public HomeController(AuthService authService, AuditLog audit)
+        {
+            _authService = authService;
+            _audit = audit;
+        }
 
         public IActionResult Index()
         {
@@ -29,6 +34,13 @@ namespace FleetWise.Controllers
             var user = await _authService.ValidateAsync(model.Email, model.Password);
             if (user is null)
             {
+                // The dashboard is the one door the edge functions never see, so a failed
+                // attempt at it was invisible until now. The typed email is recorded (that
+                // is the whole point of the row) but trimmed, and the password never is.
+                await _audit.WriteSignInAsync("login_failed",
+                    $"Failed dashboard sign-in for {Attempted(model.Email)}",
+                    null, "denied");
+
                 ModelState.AddModelError("", "Invalid email or password.");
                 return View(model);
             }
@@ -38,6 +50,11 @@ namespace FleetWise.Controllers
             // through the forced change page (middleware blocks the rest of the app meanwhile).
             var mustChange = model.Password == PasswordPolicy.TemporaryPassword;
             await SignInUserAsync(user, mustChange);
+
+            await _audit.WriteSignInAsync("login",
+                $"{user.FullName} ({user.Email}) signed in to the dashboard as {user.RoleName}"
+                    + (mustChange ? ", still on the temporary password" : ""),
+                user.UserId, role: user.RoleName);
 
             return mustChange
                 ? RedirectToAction(nameof(ChangePassword))
@@ -61,6 +78,11 @@ namespace FleetWise.Controllers
 
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
             await _authService.UpdatePasswordAsync(userId, model.NewPassword);
+
+            // Pairs with the DB trigger's 'password_hash_changed': that row proves the hash
+            // moved, this one says the account holder did it themselves (not an admin reset).
+            await _audit.WriteAsync("change_password", "changed their own password",
+                "users", userId);
 
             // Re-issue the cookie without the must-change flag so the app unlocks.
             var authed = new AuthenticatedUser(
@@ -99,8 +121,23 @@ namespace FleetWise.Controllers
         [HttpPost]
         public async Task<IActionResult> Logout()
         {
+            // Logged before the cookie goes, while there is still a principal to name.
+            // Closes the session in the timeline: everything between login and here was
+            // done by this person on this machine.
+            if (User?.Identity?.IsAuthenticated == true)
+                await _audit.WriteAsync("logout", "signed out of the dashboard");
+
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return RedirectToAction("Index", "Home");
+        }
+
+        // The email as typed on a failed attempt: untrusted input, so it is length-capped
+        // before it goes anywhere near a stored row.
+        private static string Attempted(string? email)
+        {
+            var e = (email ?? "").Trim();
+            if (e.Length == 0) return "(no email)";
+            return e.Length > 120 ? e[..120] : e;
         }
     }
 }

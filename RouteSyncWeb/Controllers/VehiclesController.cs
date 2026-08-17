@@ -20,8 +20,13 @@ namespace FleetWise.Controllers
             { "No Issues", "Needs Attention", "Under Repair" };
 
         private readonly Supabase.Client _supabase;
+        private readonly AuditLog _audit;
 
-        public VehiclesController(Supabase.Client supabase) => _supabase = supabase;
+        public VehiclesController(Supabase.Client supabase, AuditLog audit)
+        {
+            _supabase = supabase;
+            _audit = audit;
+        }
 
         public async Task<IActionResult> Index(string? route, string? status, string? condition, string? search)
         {
@@ -88,6 +93,10 @@ namespace FleetWise.Controllers
             };
 
             await _supabase.From<Vehicle>().Insert(vehicle);
+
+            await _audit.WriteAsync("vehicle_created",
+                $"added bus {vehicle.VehicleId} (plate {vehicle.PlateNumber})",
+                "vehicles", vehicle.VehicleId);
 
             TempData["Success"] = $"Vehicle \"{model.VehicleId}\" was added successfully.";
             return RedirectToAction(nameof(Index));
@@ -263,6 +272,10 @@ namespace FleetWise.Controllers
 
             await _supabase.From<Vehicle>().Update(vehicle);
 
+            await _audit.WriteAsync("vehicle_updated",
+                $"edited bus {model.VehicleId} (plate {vehicle.PlateNumber})",
+                "vehicles", model.VehicleId);
+
             TempData["Success"] = $"Vehicle \"{model.VehicleId}\" was updated successfully.";
             return RedirectToAction(nameof(Index));
         }
@@ -360,6 +373,13 @@ namespace FleetWise.Controllers
                 Note = string.IsNullOrWhiteSpace(note) ? "Incident resolved." : note.Trim(),
                 CreatedAt = PhClock.NowForDb,
             });
+
+            // Clearing an incident puts a bus back on the road. If it later turns out the
+            // fault was real, this row says who signed it off.
+            await _audit.WriteAsync("incident_resolved",
+                $"cleared the incident on bus {vehicleId} and returned it to service",
+                "vehicles", vehicleId);
+
             return Ok();
         }
 
@@ -433,6 +453,15 @@ namespace FleetWise.Controllers
                     CreatedAt = PhClock.NowForDb,
                 });
             }
+
+            var reason = string.IsNullOrWhiteSpace(note) ? "" : $": {note.Trim()}";
+            await _audit.WriteAsync(
+                outOfService ? "vehicle_grounded" : "vehicle_returned",
+                outOfService
+                    ? $"took bus {vehicleId} out of service ({ms}){reason}"
+                    : $"returned bus {vehicleId} to service{reason}",
+                "vehicles", vehicleId);
+
             return Ok();
         }
 
@@ -481,6 +510,12 @@ namespace FleetWise.Controllers
                 vehicle.UpdatedAt = PhClock.Now;
                 await _supabase.From<Vehicle>().Update(vehicle);
             }
+
+            await _audit.WriteAsync("maintenance_scheduled",
+                $"sent bus {vehicleId} to maintenance"
+                    + (string.IsNullOrWhiteSpace(note) ? "" : $": {note.Trim()}"),
+                "vehicles", vehicleId);
+
             return Ok();
         }
 
@@ -928,6 +963,16 @@ namespace FleetWise.Controllers
                 updated_by = "admin",
                 updated_at = DateTime.UtcNow
             });
+
+            // The counting line decides the passenger count, and the count decides the
+            // revenue figure. The DB trigger already records what moved; this says who.
+            // Only Save is logged, never the per-frame refresh (that PATCHes a doorbell
+            // column, which the trigger deliberately ignores for the same reason).
+            if (ok)
+                await _audit.WriteAsync("camera_calibrated",
+                    $"saved a new counting line for camera {deviceId} (v{newV})",
+                    "device_config", deviceId);
+
             return ok ? Json(new { version = newV }) : StatusCode(502);
         }
     }
