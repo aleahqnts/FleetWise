@@ -13,6 +13,7 @@ import {
   RateLimiter,
   verifyAspNetHash,
 } from "../_shared/auth.ts";
+import { audit } from "../_shared/audit.ts";
 
 const DRIVER_ROLE_ID = 2;
 const TOKEN_DAYS = 30;
@@ -42,6 +43,11 @@ Deno.serve(async (req) => {
 
   const rlKey = email.toLowerCase();
   if (limiter.blocked(rlKey)) {
+    await audit(req, {
+      action: "login_failed",
+      outcome: "denied",
+      summary: `Login blocked by rate limit for ${email}`,
+    });
     return json(429, { error: "Too many attempts. Try again in a few minutes." });
   }
 
@@ -53,15 +59,28 @@ Deno.serve(async (req) => {
   if (error) return json(500, { error: "Lookup failed" });
 
   const user = rows?.[0];
-  const invalid = () => {
+  // The CLIENT always sees the same 401 (no account enumeration); the audit row
+  // keeps the real reason so an admin can tell a typo from a probe.
+  const invalid = async (reason: string) => {
     limiter.fail(rlKey);
+    await audit(req, {
+      action: "login_failed",
+      actorType: user ? "user" : "anon",
+      actorId: user?.user_id ?? null,
+      targetTable: "users",
+      targetId: user?.user_id ?? null,
+      outcome: "denied",
+      summary: `Failed login for ${email} (${reason})`,
+    });
     return json(401, { error: "Invalid email or password." });
   };
 
-  if (!user || !user.password_hash) return invalid();
-  if (user.role_id !== DRIVER_ROLE_ID) return invalid(); // driver app is drivers-only
-  if (user.account_status !== "Activated") return invalid();
-  if (!(await verifyAspNetHash(password, user.password_hash))) return invalid();
+  if (!user || !user.password_hash) return await invalid("no such account");
+  if (user.role_id !== DRIVER_ROLE_ID) return await invalid("not a driver account");
+  if (user.account_status !== "Activated") return await invalid(`account ${user.account_status}`);
+  if (!(await verifyAspNetHash(password, user.password_hash))) {
+    return await invalid("wrong password");
+  }
 
   limiter.clear(rlKey);
 
@@ -75,11 +94,23 @@ Deno.serve(async (req) => {
     secret,
   );
 
-  // last_login stamp (best-effort; login must not fail on it)
+  // last_login stamp (best-effort; login must not fail on it). The users trigger
+  // deliberately ignores last_login-only updates, so this adds no duplicate row.
   await service
     .from("users")
     .update({ last_login: new Date().toISOString() })
     .eq("user_id", user.user_id);
+
+  await audit(req, {
+    action: "login",
+    actorType: "user",
+    actorId: user.user_id,
+    actorRole: "app_driver",
+    targetTable: "users",
+    targetId: user.user_id,
+    summary: `Driver ${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() +
+      ` (${email}) signed in`,
+  });
 
   const { password_hash: _hash, ...safeUser } = user;
   return json(200, { token, user: safeUser });
