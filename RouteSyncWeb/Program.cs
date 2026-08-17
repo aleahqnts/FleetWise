@@ -29,6 +29,11 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<FareCalculator>();
 
+// Phase 10b: audit writer. Needs the request context to read who is signed in (the DB
+// only ever sees the shared service key) and the caller's IP.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<AuditLog>();
+
 builder.Services.AddControllersWithViews();
 
 // Tell the app how to create a Supabase connection

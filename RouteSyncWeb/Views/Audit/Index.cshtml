@@ -1,0 +1,664 @@
+@model AuditIndexViewModel
+@using FleetWise.Services
+@{
+    ViewData["Title"] = "Audit Log";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // Event vocabulary, grouped the way an operator thinks about it. Writers live in three
+    // places (DB triggers, edge functions, web controllers), so this list is the one spot
+    // that names them all. Add here when a new event starts being written.
+    var eventGroups = new (string Group, (string Value, string Label)[] Items)[]
+    {
+        ("Sign in", new[]
+        {
+            ("login", "Signed in"),
+            ("login_failed", "Sign in failed"),
+            ("logout", "Signed out"),
+            ("access_denied", "Blocked from a page"),
+        }),
+        ("Accounts", new[]
+        {
+            ("user_created", "Account created"),
+            ("user_updated", "Account edited"),
+            ("password_reset", "Password reset by admin"),
+            ("change_password", "Password changed by owner"),
+            ("password_hash_changed", "Password hash changed"),
+            ("role_created", "Role created"),
+            ("role_updated", "Role changed"),
+        }),
+        ("Cameras", new[]
+        {
+            ("camera_calibrated", "Counting line saved"),
+            ("token_mint", "Camera provisioned"),
+            ("token_refused", "Camera refused"),
+        }),
+        ("Fleet", new[]
+        {
+            ("vehicle_created", "Bus added"),
+            ("vehicle_updated", "Bus edited"),
+            ("vehicle_grounded", "Bus taken out of service"),
+            ("vehicle_returned", "Bus returned to service"),
+            ("maintenance_scheduled", "Sent to maintenance"),
+            ("incident_resolved", "Incident cleared"),
+        }),
+        ("Operations", new[]
+        {
+            ("trip_created", "Trip created"),
+            ("trip_reassigned", "Trip reassigned"),
+            ("trip_removed", "Trip removed"),
+            ("schedule_saved", "Schedule saved"),
+            ("message_sent", "Message sent"),
+            ("driver_availability", "Driver availability set"),
+        }),
+        ("Raw row changes", new[]
+        {
+            ("insert", "Row added"),
+            ("update", "Row changed"),
+            ("delete", "Row deleted"),
+        }),
+    };
+
+    var eventLabels = eventGroups
+        .SelectMany(g => g.Items)
+        .ToDictionary(i => i.Value, i => i.Label);
+
+    string Label(string action) => eventLabels.TryGetValue(action, out var l) ? l : action;
+
+    // actor_type is the SURFACE (dashboard operator, driver, camera), not the privilege
+    // level: an Admin and a Dispatcher both write rows as "admin". The privilege is in
+    // actor_role, so prefer that whenever it holds a real dashboard role. The Postgres
+    // role names that arrive on database rows are not privileges anyone holds.
+    string[] machineRoles = { "service_role", "app_driver", "app_camera", "db" };
+
+    string ActorLine(AuditEntryViewModel e)
+    {
+        var role = e.ActorRole;
+        var hasDashboardRole = !string.IsNullOrWhiteSpace(role) && !machineRoles.Contains(role);
+
+        return e.ActorType switch
+        {
+            // No id means the database saw only the shared service key, which is the whole
+            // reason the web writes its own rows.
+            "admin" when e.ActorId is null => "Server",
+            "admin" when hasDashboardRole => $"{role} #{e.ActorId}",
+            // Role unknown (the early login rows, written before the role was carried).
+            // Plain "Dashboard": an id with no privilege next to it says less than the
+            // summary line already does, and invites being read as a rank.
+            "admin" => "Dashboard",
+            "user" => e.ActorId is null ? "Driver" : $"Driver #{e.ActorId}",
+            "device" => e.ActorId ?? "Camera",
+            "anon" => "Not signed in",
+            _ => "System",
+        };
+    }
+
+    // Paging links have to carry the filters, or page 2 quietly drops them.
+    string PageUrl(int p) => Url.Action("Index", "Audit", new
+    {
+        type = Model.Type,
+        source = Model.Source,
+        outcome = Model.Outcome,
+        q = Model.Query,
+        from = Model.From,
+        to = Model.To,
+        page = p,
+    })!;
+
+    var first = Model.Total == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1;
+    var last = Math.Min(Model.Page * Model.PageSize, Model.Total);
+}
+
+<h2 class="au-title">Audit Log</h2>
+<p class="au-subtitle">
+    Every sign in, account change, and fleet decision, recorded by the server as it happened.
+    Entries can be read but never edited or deleted, including by an admin.
+</p>
+
+<!-- FILTERS -->
+<form method="get" class="au-filters">
+    <div class="au-filter">
+        <label for="auQuery">Search</label>
+        <input type="text" id="auQuery" name="q" value="@Model.Query" class="au-input"
+               placeholder="Name, bus, camera, IP" />
+    </div>
+
+    <div class="au-filter">
+        <label for="auType">Event</label>
+        <select id="auType" name="type" class="au-input">
+            <option value="">All events</option>
+            @foreach (var group in eventGroups)
+            {
+                <optgroup label="@group.Group">
+                    @foreach (var item in group.Items)
+                    {
+                        <option value="@item.Value" selected="@(Model.Type == item.Value)">@item.Label</option>
+                    }
+                </optgroup>
+            }
+        </select>
+    </div>
+
+    <div class="au-filter">
+        <label for="auSource">Came from</label>
+        <select id="auSource" name="source" class="au-input">
+            <option value="">Anywhere</option>
+            <option value="web" selected="@(Model.Source == "web")">Web dashboard</option>
+            <option value="edge" selected="@(Model.Source == "edge")">Mobile sign in</option>
+            <option value="db" selected="@(Model.Source == "db")">Database</option>
+        </select>
+    </div>
+
+    <div class="au-filter">
+        <label for="auOutcome">Result</label>
+        <select id="auOutcome" name="outcome" class="au-input">
+            <option value="">Any result</option>
+            <option value="ok" selected="@(Model.Outcome == "ok")">Allowed</option>
+            <option value="denied" selected="@(Model.Outcome == "denied")">Refused</option>
+            <option value="error" selected="@(Model.Outcome == "error")">Error</option>
+        </select>
+    </div>
+
+    <div class="au-filter">
+        <label for="auFrom">From</label>
+        <input type="date" id="auFrom" name="from" value="@Model.From" class="au-input" />
+    </div>
+
+    <div class="au-filter">
+        <label for="auTo">To</label>
+        <input type="date" id="auTo" name="to" value="@Model.To" class="au-input" />
+    </div>
+
+    <div class="au-filter-actions">
+        <button type="submit" class="au-btn au-btn--primary">Apply</button>
+        @if (Model.HasFilters)
+        {
+            <a href="@Url.Action("Index", "Audit")" class="au-btn au-btn--outline">Clear</a>
+        }
+    </div>
+</form>
+
+<!-- TABLE -->
+<div class="au-card">
+    <div class="au-card-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <polyline points="9 12 11 14 15 10" />
+        </svg>
+        <span>Recorded activity</span>
+        @if (!Model.LoadFailed && Model.Total > 0)
+        {
+            <span class="au-count">@first to @last of @Model.Total</span>
+        }
+    </div>
+
+    <div class="au-table-wrap">
+        <table class="au-table">
+            <thead>
+                <tr>
+                    <th style="width:150px">When</th>
+                    <th style="width:130px">Who</th>
+                    <th>What happened</th>
+                    <th style="width:120px">Result</th>
+                    <th style="width:60px"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.LoadFailed)
+                {
+                    <tr>
+                        <td colspan="5" class="au-empty">
+                            Could not load the audit log. The records are safe, this page just
+                            could not reach them. Try again in a moment.
+                        </td>
+                    </tr>
+                }
+                else if (Model.Entries.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="au-empty">
+                            @(Model.HasFilters ? "No entries match these filters." : "Nothing recorded yet.")
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var e in Model.Entries)
+                    {
+                        var when = PhClock.ToPh(e.OccurredAt);
+                        var outcomeClass = e.Outcome switch
+                        {
+                            "denied" => "au-pill--denied",
+                            "error" => "au-pill--error",
+                            _ => "au-pill--ok",
+                        };
+                        var outcomeLabel = e.Outcome switch
+                        {
+                            "denied" => "Refused",
+                            "error" => "Error",
+                            _ => "Allowed",
+                        };
+                        var hasDetail = e.Changes is not null || e.Ip is not null || e.TargetTable is not null;
+
+                        <tr class="au-row @(hasDetail ? "au-row--clickable" : "")"
+                            data-detail="@(hasDetail ? $"auDetail{e.Id}" : null)">
+                            <td class="au-when">
+                                <span class="au-when-date">@when.ToString("MMM d, yyyy")</span>
+                                <span class="au-when-time">@when.ToString("h:mm:ss tt")</span>
+                            </td>
+                            <td class="au-who">@ActorLine(e)</td>
+                            <td>
+                                <div class="au-summary">@(e.Summary ?? Label(e.Action))</div>
+                                <div class="au-meta">
+                                    <span class="au-tag">@Label(e.Action)</span>
+                                    @if (!string.IsNullOrEmpty(e.TargetTable))
+                                    {
+                                        <span class="au-meta-dim">@e.TargetTable@(string.IsNullOrEmpty(e.TargetId) ? "" : $" #{e.TargetId}")</span>
+                                    }
+                                </div>
+                            </td>
+                            <td><span class="au-pill @outcomeClass">@outcomeLabel</span></td>
+                            <td class="au-toggle-cell">
+                                @if (hasDetail)
+                                {
+                                    <span class="au-toggle" aria-hidden="true">+</span>
+                                }
+                            </td>
+                        </tr>
+
+                        if (hasDetail)
+                        {
+                            <tr class="au-detail-row" id="auDetail@(e.Id)" hidden>
+                                <td colspan="5">
+                                    <div class="au-detail">
+                                        <div class="au-detail-facts">
+                                            <div><span>Entry</span>#@e.Id</div>
+                                            <div><span>Recorded by</span>@(e.Source switch { "web" => "Web dashboard", "edge" => "Sign in service", _ => "Database" })</div>
+                                            @if (!string.IsNullOrEmpty(e.ActorRole))
+                                            {
+                                                <div><span>Role</span>@e.ActorRole</div>
+                                            }
+                                            @if (!string.IsNullOrEmpty(e.Ip))
+                                            {
+                                                <div><span>IP address</span>@e.Ip</div>
+                                            }
+                                        </div>
+                                        @if (e.Changes is not null)
+                                        {
+                                            <div class="au-detail-diff">
+                                                <div class="au-detail-diff-label">What changed</div>
+                                                <pre>@e.Changes</pre>
+                                            </div>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (!Model.LoadFailed && Model.TotalPages > 1)
+{
+    <div class="au-pager">
+        @if (Model.Page > 1)
+        {
+            <a href="@PageUrl(Model.Page - 1)" class="au-btn au-btn--outline">Previous</a>
+        }
+        else
+        {
+            <span class="au-btn au-btn--outline au-btn--off">Previous</span>
+        }
+
+        <span class="au-pager-info">Page @Model.Page of @Model.TotalPages</span>
+
+        @if (Model.Page < Model.TotalPages)
+        {
+            <a href="@PageUrl(Model.Page + 1)" class="au-btn au-btn--outline">Next</a>
+        }
+        else
+        {
+            <span class="au-btn au-btn--outline au-btn--off">Next</span>
+        }
+    </div>
+}
+
+<script>
+    // Click a row to open its detail row underneath. Plain DOM, no fetch: the detail is
+    // already on the page, so opening it is instant and works with the browser's back button.
+    document.querySelectorAll('.au-row--clickable').forEach(function (row) {
+        row.addEventListener('click', function () {
+            const detail = document.getElementById(row.dataset.detail);
+            if (!detail) return;
+            detail.hidden = !detail.hidden;
+            const toggle = row.querySelector('.au-toggle');
+            if (toggle) toggle.textContent = detail.hidden ? '+' : '-';
+            row.classList.toggle('au-row--open', !detail.hidden);
+        });
+    });
+</script>
+
+<style>
+    :root {
+        --au-teal: #4AADA8;
+        --au-text: #2D3748;
+        --au-muted: #9AA5B4;
+        --au-border: #E8ECF0;
+        --au-bg: #F8F9FA;
+        --au-white: #FFFFFF;
+    }
+
+    /* ── Heading ────────────────────────────────────────────── */
+    .au-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--au-text);
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 6px;
+    }
+
+    .au-subtitle {
+        font-size: 0.875rem;
+        color: var(--au-muted);
+        font-family: 'Segoe UI', sans-serif;
+        max-width: 720px;
+        margin-bottom: 20px;
+    }
+
+    /* ── Filter bar ─────────────────────────────────────────── */
+    .au-filters {
+        display: flex;
+        align-items: flex-end;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+    }
+
+    .au-filter {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .au-filter label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--au-muted);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .au-input {
+        padding: 7px 12px;
+        border: 1.5px solid var(--au-border);
+        border-radius: 10px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--au-text);
+        background: var(--au-bg);
+        outline: none;
+        transition: border-color 180ms;
+    }
+
+    .au-input:focus { border-color: var(--au-teal); }
+
+    #auQuery { width: 240px; }
+    #auType { width: 210px; }
+
+    .au-filter-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    /* ── Buttons ────────────────────────────────────────────── */
+    .au-btn {
+        padding: 8px 18px;
+        border-radius: 10px;
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        border: 1.5px solid var(--au-border);
+        text-decoration: none;
+        display: inline-block;
+        transition: all 180ms;
+    }
+
+    .au-btn--primary {
+        background: var(--au-teal);
+        border-color: var(--au-teal);
+        color: #fff;
+    }
+
+    .au-btn--outline {
+        background: var(--au-white);
+        color: var(--au-text);
+    }
+
+    .au-btn--outline:hover { border-color: var(--au-teal); color: var(--au-teal); }
+
+    .au-btn--off {
+        opacity: 0.45;
+        cursor: default;
+        pointer-events: none;
+    }
+
+    /* ── Card ───────────────────────────────────────────────── */
+    .au-card {
+        background: var(--au-white);
+        border: 1px solid var(--au-border);
+        border-radius: 14px;
+        padding: 20px 22px;
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+
+    .au-card-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--au-text);
+        font-family: 'Segoe UI', sans-serif;
+        padding-bottom: 14px;
+        margin-bottom: 4px;
+        border-bottom: 1px solid var(--au-border);
+    }
+
+    .au-card-header svg { color: var(--au-teal); flex-shrink: 0; }
+
+    .au-count {
+        margin-left: auto;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--au-muted);
+    }
+
+    /* ── Table ──────────────────────────────────────────────── */
+    .au-table-wrap { overflow-x: auto; }
+
+    .au-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 0.875rem;
+    }
+
+    .au-table thead tr { border-bottom: 1.5px solid var(--au-border); }
+
+    .au-table th {
+        padding: 10px 14px;
+        text-align: left;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--au-muted);
+        white-space: nowrap;
+    }
+
+    .au-table td {
+        padding: 12px 14px;
+        color: var(--au-text);
+        border-bottom: 1px solid var(--au-border);
+        vertical-align: top;
+    }
+
+    .au-row--clickable { cursor: pointer; }
+    .au-row--clickable:hover { background: #FAFBFC; }
+    .au-row--open { background: #FAFBFC; }
+
+    .au-empty {
+        text-align: center;
+        color: var(--au-muted);
+        padding: 28px 14px;
+    }
+
+    /* ── Cells ──────────────────────────────────────────────── */
+    .au-when { white-space: nowrap; }
+
+    .au-when-date {
+        display: block;
+        font-weight: 600;
+        font-size: 0.82rem;
+    }
+
+    .au-when-time {
+        display: block;
+        font-size: 0.78rem;
+        color: var(--au-muted);
+    }
+
+    .au-who {
+        font-size: 0.82rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .au-summary { line-height: 1.4; }
+
+    .au-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 5px;
+        flex-wrap: wrap;
+    }
+
+    .au-tag {
+        display: inline-block;
+        padding: 2px 9px;
+        border-radius: 20px;
+        background: #EEF2F6;
+        color: #5A6B7F;
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+
+    .au-meta-dim {
+        font-size: 0.72rem;
+        color: var(--au-muted);
+    }
+
+    /* ── Outcome pill ───────────────────────────────────────── */
+    .au-pill {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .au-pill--ok { background: #E8F8EE; color: #27AE60; }
+    .au-pill--denied { background: #FDECEC; color: #C0392B; }
+    .au-pill--error { background: #FEF3E2; color: #B7791F; }
+
+    /* ── Expand toggle ──────────────────────────────────────── */
+    .au-toggle-cell { text-align: center; }
+
+    .au-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        border: 1.5px solid var(--au-border);
+        color: var(--au-muted);
+        font-size: 0.9rem;
+        line-height: 1;
+        font-weight: 700;
+    }
+
+    /* ── Detail drawer ──────────────────────────────────────── */
+    .au-detail-row td {
+        background: #FAFBFC;
+        padding-top: 0;
+    }
+
+    .au-detail {
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+        padding: 4px 0 8px;
+    }
+
+    .au-detail-facts {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 220px;
+        font-size: 0.8rem;
+    }
+
+    .au-detail-facts div {
+        display: flex;
+        gap: 8px;
+    }
+
+    .au-detail-facts span {
+        color: var(--au-muted);
+        min-width: 96px;
+    }
+
+    .au-detail-diff { flex: 1; min-width: 320px; }
+
+    .au-detail-diff-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--au-muted);
+        margin-bottom: 6px;
+    }
+
+    .au-detail-diff pre {
+        margin: 0;
+        padding: 12px 14px;
+        background: var(--au-white);
+        border: 1px solid var(--au-border);
+        border-radius: 10px;
+        font-family: Consolas, 'Courier New', monospace;
+        font-size: 0.76rem;
+        line-height: 1.5;
+        color: #4A5568;
+        max-height: 320px;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    /* ── Pager ──────────────────────────────────────────────── */
+    .au-pager {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        margin-top: 18px;
+    }
+
+    .au-pager-info {
+        font-size: 0.82rem;
+        color: var(--au-muted);
+        font-family: 'Segoe UI', sans-serif;
+    }
+</style>

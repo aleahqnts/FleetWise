@@ -13,13 +13,18 @@ namespace FleetWise.Controllers
     {
         // Keys match the stored web_permissions / mobile_permissions JSON exactly (lowercase).
         private static readonly string[] WebPermissionKeys =
-            { "dashboard", "routes", "vehicles", "reports", "users" };
+            { "dashboard", "routes", "vehicles", "reports", "users", "audit" };
 
         private static readonly string[] MobilePermissionKeys = { "tracking", "messages", "checklist" };
 
         private readonly Supabase.Client _supabase;
+        private readonly AuditLog _audit;
 
-        public UsersController(Supabase.Client supabase) => _supabase = supabase;
+        public UsersController(Supabase.Client supabase, AuditLog audit)
+        {
+            _supabase = supabase;
+            _audit = audit;
+        }
 
         public async Task<IActionResult> Index(string? role, string? search)
         {
@@ -82,7 +87,13 @@ namespace FleetWise.Controllers
             // Every new account starts on the shared temp password. First login forces a change.
             user.PasswordHash = hasher.HashPassword(user, PasswordPolicy.TemporaryPassword);
 
-            await _supabase.From<UserModel>().Insert(user);
+            var created = (await _supabase.From<UserModel>().Insert(user)).Models.FirstOrDefault();
+
+            // A new account is a new way into the system: always worth a permanent record.
+            // The temp password is public policy, not a secret, but it still never goes in.
+            await _audit.WriteAsync("user_created",
+                $"created the account {model.FirstName} {model.LastName} ({model.Email.Trim()})",
+                "users", created?.UserId);
 
             TempData["Success"] = $"User \"{model.FirstName} {model.LastName}\" created. Temporary password: {PasswordPolicy.TemporaryPassword}. They'll be asked to change it on first login.";
             return RedirectToAction(nameof(Index));
@@ -120,6 +131,11 @@ namespace FleetWise.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
+            // Kept for the audit line: a deactivation or a role swap is the part of an
+            // edit that changes what this account can do.
+            var wasStatus = user.AccountStatus;
+            var wasRole = user.RoleId;
+
             user.FirstName = model.FirstName.Trim();
             user.MiddleName = string.IsNullOrWhiteSpace(model.MiddleName) ? null : model.MiddleName.Trim();
             user.LastName = model.LastName.Trim();
@@ -129,6 +145,17 @@ namespace FleetWise.Controllers
             user.UpdatedAt = PhClock.Now;
 
             await _supabase.From<UserModel>().Update(user);
+
+            var changes = new List<string>();
+            if (!string.Equals(wasStatus, model.AccountStatus, StringComparison.OrdinalIgnoreCase))
+                changes.Add($"status {wasStatus} to {model.AccountStatus}");
+            if (wasRole != model.RoleId)
+                changes.Add("role changed");
+            var detail = changes.Count > 0 ? $" ({string.Join(", ", changes)})" : "";
+
+            await _audit.WriteAsync("user_updated",
+                $"edited the account {model.FirstName} {model.LastName}{detail}",
+                "users", model.UserId);
 
             TempData["Success"] = $"User \"{model.FirstName} {model.LastName}\" was updated successfully.";
             return RedirectToAction(nameof(Index));
@@ -155,6 +182,12 @@ namespace FleetWise.Controllers
             user.UpdatedAt = PhClock.Now;
 
             await _supabase.From<UserModel>().Update(user);
+
+            // One admin can now sign in as this person until they change it. The DB trigger
+            // logs that the hash moved; this row is the one that names who did it.
+            await _audit.WriteAsync("password_reset",
+                $"reset the password for {user.FirstName} {user.LastName}",
+                "users", userId);
 
             TempData["Success"] = $"Password for \"{user.FirstName} {user.LastName}\" was reset. Temporary password: {PasswordPolicy.TemporaryPassword}. They'll be asked to change it on next login.";
             return RedirectToAction(nameof(Index));
@@ -191,7 +224,13 @@ namespace FleetWise.Controllers
                 MobilePermissions = NormalizePermissions(model.MobilePermissions, MobilePermissionKeys),
             };
 
-            await _supabase.From<Role>().Insert(role);
+            var newRole = (await _supabase.From<Role>().Insert(role)).Models.FirstOrDefault();
+
+            // A role IS the permission system. Editing one silently widens what a whole
+            // group of accounts can reach, so both create and update are logged.
+            await _audit.WriteAsync("role_created",
+                $"created the role {role.RoleName}, dashboard access: {DescribeAccess(role.WebPermissions)}",
+                "roles", newRole?.RoleId);
 
             TempData["Success"] = $"Role \"{model.RoleName}\" was created successfully.";
             return RedirectToAction(nameof(Index));
@@ -239,6 +278,10 @@ namespace FleetWise.Controllers
             role.MobilePermissions = NormalizePermissions(model.MobilePermissions, MobilePermissionKeys);
 
             await _supabase.From<Role>().Update(role);
+
+            await _audit.WriteAsync("role_updated",
+                $"changed the role {role.RoleName}, dashboard access is now: {DescribeAccess(role.WebPermissions)}",
+                "roles", role.RoleId);
 
             TempData["Success"] = $"Role \"{model.RoleName}\" was updated successfully.";
             return RedirectToAction(nameof(Index));
@@ -314,6 +357,13 @@ namespace FleetWise.Controllers
             ViewBag.OpenModal = openModal;
 
             return View("Index", new List<UserListItemViewModel>());
+        }
+
+        // Granted sections as a readable list, for the audit line.
+        private static string DescribeAccess(Dictionary<string, bool>? permissions)
+        {
+            var granted = permissions?.Where(kv => kv.Value).Select(kv => kv.Key).ToList() ?? new();
+            return granted.Count == 0 ? "none" : string.Join(", ", granted);
         }
 
         private static Dictionary<string, bool> NormalizePermissions(Dictionary<string, bool> posted, string[] keys)

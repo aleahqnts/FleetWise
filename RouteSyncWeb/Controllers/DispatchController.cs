@@ -13,10 +13,12 @@ namespace FleetWise.Controllers
     public class DispatchController : Controller
     {
         private readonly Supabase.Client _supabase;
+        private readonly AuditLog _audit;
 
-        public DispatchController(Supabase.Client supabase)
+        public DispatchController(Supabase.Client supabase, AuditLog audit)
         {
             _supabase = supabase;
+            _audit = audit;
         }
 
         public async Task<IActionResult> Index(string date)
@@ -502,6 +504,13 @@ namespace FleetWise.Controllers
             var inserted = insertResult.Models.FirstOrDefault();
             await SyncTripStatuses();
 
+            // An override means the dispatcher was warned about a clash and went ahead
+            // anyway. That decision is exactly what an auditor wants to find later.
+            await _audit.WriteAsync("trip_created",
+                $"created a {req.ShiftType} trip for bus {req.VehicleId} with driver {req.DriverId}"
+                    + (req.Override ? ", overriding a scheduling conflict" : ""),
+                "trips", inserted?.TripId);
+
             return Ok(new { tripId = inserted?.TripId });
         }
 
@@ -609,6 +618,11 @@ namespace FleetWise.Controllers
             var trip = tripResp.Models.FirstOrDefault();
             if (trip == null) return NotFound("Trip not found.");
 
+            // Kept for the audit line: a reassignment only means something if you can see
+            // what it moved away from.
+            var wasVehicle = trip.VehicleId;
+            var wasDriver = trip.DriverId;
+
             // Only update what was explicitly changed
             if (!string.IsNullOrEmpty(req.VehicleId))
                 trip.VehicleId = req.VehicleId;
@@ -635,6 +649,16 @@ namespace FleetWise.Controllers
 
             await SyncTripStatuses();
 
+            var moved = new List<string>();
+            if (wasVehicle != trip.VehicleId) moved.Add($"bus {wasVehicle} to {trip.VehicleId}");
+            if (wasDriver != trip.DriverId) moved.Add($"driver {wasDriver} to {trip.DriverId}");
+
+            await _audit.WriteAsync("trip_reassigned",
+                $"reassigned trip {trip.TripId}"
+                    + (moved.Count > 0 ? $": {string.Join(", ", moved)}" : " (no change)")
+                    + (req.Override ? ", overriding a scheduling conflict" : ""),
+                "trips", trip.TripId);
+
             return Ok(new { tripId = trip.TripId });
         }
 
@@ -659,6 +683,11 @@ namespace FleetWise.Controllers
             await _supabase.From<Trip>()
                 .Filter("trip_id", Operator.Equals, req.TripId)
                 .Delete();
+
+            // The trip row is gone for good, so this line is the only surviving trace.
+            await _audit.WriteAsync("trip_removed",
+                $"removed the {trip.ShiftType} trip {trip.TripId} (bus {trip.VehicleId}, driver {trip.DriverId})",
+                "trips", trip.TripId);
 
             return Ok();
         }
@@ -712,6 +741,12 @@ namespace FleetWise.Controllers
                 CreatedAt = PhClock.NowForDb
             });
 
+            // Subject only. The body stays in `messages`, which anyone reading this row
+            // can open; duplicating it here would just double the blast radius of a leak.
+            await _audit.WriteAsync("message_sent",
+                $"broadcast a message to all drivers: {Topic(req.Subject)}",
+                "messages");
+
             return Ok();
         }
 
@@ -735,6 +770,10 @@ namespace FleetWise.Controllers
                 Priority = req.Priority ?? "Normal",
                 CreatedAt = PhClock.NowForDb
             });
+
+            await _audit.WriteAsync("message_sent",
+                $"messaged every driver on route {req.RouteId}: {Topic(req.Subject)}",
+                "messages", req.RouteId);
 
             return Ok();
         }
@@ -766,6 +805,10 @@ namespace FleetWise.Controllers
                 Priority = req.Priority ?? "Normal",
                 CreatedAt = PhClock.NowForDb
             });
+
+            await _audit.WriteAsync("message_sent",
+                $"messaged driver {trip.DriverId} on trip {trip.TripId}: {Topic(req.Subject)}",
+                "messages", trip.DriverId);
 
             return Ok();
         }
@@ -799,8 +842,16 @@ namespace FleetWise.Controllers
                 });
             }
 
+            await _audit.WriteAsync("driver_availability",
+                $"marked driver {userId} as {status}",
+                "driver_availability", userId);
+
             return Ok();
         }
+
+        // Message subject for an audit line, never the body.
+        private static string Topic(string? subject) =>
+            string.IsNullOrWhiteSpace(subject) ? "no subject" : subject.Trim();
 
         // Format a trip's shift window on ITS OWN date; an overnight shift (end <= start)
         // rolls the end onto the next morning and gets a "(+1)" hint so it's never read as

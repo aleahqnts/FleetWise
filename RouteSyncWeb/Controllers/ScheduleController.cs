@@ -11,7 +11,13 @@ namespace FleetWise.Controllers
     public class ScheduleController : Controller
     {
         private readonly Supabase.Client _supabase;
-        public ScheduleController(Supabase.Client supabase) => _supabase = supabase;
+        private readonly AuditLog _audit;
+
+        public ScheduleController(Supabase.Client supabase, AuditLog audit)
+        {
+            _supabase = supabase;
+            _audit = audit;
+        }
 
         // Fixed shift windows (mirrors the Add Trip modal's SHIFT_TIMES).
         private static readonly Dictionary<string, (TimeSpan start, TimeSpan end)> ShiftTimes = new()
@@ -136,6 +142,7 @@ namespace FleetWise.Controllers
 
             // Trip ids that survive this save (existing rows kept/updated).
             var keptIds = new HashSet<string>();
+            int added = 0, changed = 0, deleted = 0;   // counted for the audit line
 
             foreach (var c in cells)
             {
@@ -156,6 +163,7 @@ namespace FleetWise.Controllers
                         .Set(t => t.VehicleId, c.VehicleId)
                         .Set(t => t.DriverId, c.DriverId)
                         .Update();
+                    changed++;
                 }
                 else
                 {
@@ -172,6 +180,7 @@ namespace FleetWise.Controllers
                         TripStatus = "Not Yet Started",
                         EstimatedRevenue = 0
                     });
+                    added++;
                 }
             }
 
@@ -184,6 +193,18 @@ namespace FleetWise.Controllers
                 await _supabase.From<Trip>()
                     .Filter("trip_id", Operator.Equals, t.TripId)
                     .Delete();
+                deleted++;
+            }
+
+            // A planner save is one click that can rewrite a whole week, so the counts go
+            // in the line. Nothing changed means nothing to log.
+            if (added + changed + deleted > 0)
+            {
+                await _audit.WriteAsync("schedule_saved",
+                    $"saved the schedule for {weekStart:MMM d} to {weekEnd:MMM d}: "
+                        + $"{added} added, {changed} changed, {deleted} removed"
+                        + (req.Override ? ", overriding a conflict warning" : ""),
+                    "trips");
             }
 
             return Ok();
