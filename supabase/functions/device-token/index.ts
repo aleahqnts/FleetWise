@@ -7,6 +7,7 @@
 // Deploy with --no-verify-jwt (callers have no JWT yet).
 
 import { CORS_HEADERS, fixedTimeEquals, json, mintJwt, nowSec, RateLimiter } from "../_shared/auth.ts";
+import { audit } from "../_shared/audit.ts";
 
 const TOKEN_DAYS = 365;
 const DEVICE_ID_RE = /^cam-[0-9a-f]{8}$/;
@@ -30,6 +31,13 @@ Deno.serve(async (req) => {
   }
   if (!DEVICE_ID_RE.test(deviceId)) return json(400, { error: "Bad device_id" });
   if (limiter.blocked(deviceId)) {
+    await audit(req, {
+      action: "token_refused",
+      actorType: "device",
+      actorId: deviceId,
+      outcome: "denied",
+      summary: `Device token blocked by rate limit for ${deviceId}`,
+    });
     return json(429, { error: "Too many attempts. Try again in a few minutes." });
   }
 
@@ -41,6 +49,13 @@ Deno.serve(async (req) => {
   ]);
   if (!fixedTimeEquals(new Uint8Array(a), new Uint8Array(b))) {
     limiter.fail(deviceId);
+    await audit(req, {
+      action: "token_refused",
+      actorType: "device",
+      actorId: deviceId,
+      outcome: "denied",
+      summary: `Wrong fleet passcode from device ${deviceId}`,
+    });
     return json(401, { error: "Invalid passcode." });
   }
 
@@ -54,5 +69,16 @@ Deno.serve(async (req) => {
     },
     secret,
   );
+
+  // A mint is a provisioning event: this device may now write counts for
+  // whatever bus it binds to, for a year. Worth a permanent record.
+  await audit(req, {
+    action: "token_mint",
+    actorType: "device",
+    actorId: deviceId,
+    actorRole: "app_camera",
+    summary: `Camera device ${deviceId} provisioned (${TOKEN_DAYS}-day token)`,
+  });
+
   return json(200, { token });
 });
