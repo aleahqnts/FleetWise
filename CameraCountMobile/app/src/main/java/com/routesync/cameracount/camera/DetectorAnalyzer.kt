@@ -25,6 +25,14 @@ class DetectorAnalyzer(
      * sheds most of the CPU load while the tracker's velocity prediction bridges the gap.
      */
     private val throttle: () -> Int = { 1 },
+    /**
+     * Fires for every frame the CAMERA delivers, before throttling and before inference,
+     * so it means "the session is alive" and nothing more. [onResult] cannot answer that
+     * question: it is skipped by the throttle and skipped again whenever inference throws,
+     * so a broken detector on a healthy camera looks identical to a dead camera. The
+     * watchdog needs to tell those apart, because only one of them is fixed by rebinding.
+     */
+    private val onFrame: () -> Unit = {},
     private val onResult: (dets: List<YoloDetector.Det>, frameW: Int, frameH: Int, inferMs: Long) -> Unit
 ) : ImageAnalysis.Analyzer {
 
@@ -44,6 +52,7 @@ class DetectorAnalyzer(
     private var squareCanvas: Canvas? = null
 
     override fun analyze(image: ImageProxy) {
+        runCatching { onFrame() } // liveness ping: must not be able to skip the frame below
         try {
             val n = throttle().coerceAtLeast(1)
             if (frameNo++ % n == 0L) analyzeInner(image)
