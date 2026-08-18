@@ -81,6 +81,18 @@ private fun rebindBackoffMs(failures: Int): Long = when (failures) {
 /** Consecutive failed rebinds before the HUD stops implying a fix is imminent. */
 private const val REBINDS_BEFORE_GIVING_UP_QUIETLY = 3
 
+/**
+ * How long frames must keep arriving after a rebind before the camera counts as fixed.
+ *
+ * Measured, not guessed. A camera another app is holding does not block cleanly: it
+ * yields for a moment, our rebind succeeds, about two seconds of frames arrive, and then
+ * it is taken again. Treating the first frame as recovery reset the failure count on
+ * every one of those blips, so the backoff never advanced past its first step and the
+ * watchdog rebound every six seconds for as long as the other app was open - the exact
+ * retry storm the backoff exists to prevent. Recovery has to mean sustained, not seen.
+ */
+private const val HEALTHY_AFTER_REBIND_MS = 20_000L
+
 /** Immutable per-frame snapshot for the overlay (built on the analyzer thread). */
 private data class OverlayBox(val l: Float, val t: Float, val r: Float, val b: Float, val counted: Boolean)
 
@@ -316,14 +328,19 @@ private fun DetectionSurface(
             lastFrameMs = android.os.SystemClock.elapsedRealtime()
             var failures = 0
             var nextAttemptAt = 0L
+            var lastRebindAt = 0L
             android.util.Log.i(WATCHDOG_TAG, "watching (stall=${STALL_MS}ms)")
             while (true) {
                 kotlinx.coroutines.delay(WATCHDOG_TICK_MS)
                 val now = android.os.SystemClock.elapsedRealtime()
                 if (framesFlowing()) {
-                    if (failures > 0) android.util.Log.i(WATCHDOG_TAG, "frames back after $failures rebind(s)")
-                    failures = 0
-                    cameraUnreachable = false
+                    // Only a sustained run counts as fixed. Clearing on the first frame
+                    // back let a flapping camera hold the failure count at zero forever.
+                    if (failures > 0 && now - lastRebindAt >= HEALTHY_AFTER_REBIND_MS) {
+                        android.util.Log.i(WATCHDOG_TAG, "steady again after $failures rebind(s)")
+                        failures = 0
+                        cameraUnreachable = false
+                    }
                     continue
                 }
                 if (now < nextAttemptAt) continue
@@ -336,6 +353,7 @@ private fun DetectionSurface(
                 tracker.resetCrossingState()
                 // Grace: the camera needs time to open before the next tick judges it.
                 lastFrameMs = now
+                lastRebindAt = now
                 val backoff = rebindBackoffMs(failures)
                 nextAttemptAt = now + STALL_MS + backoff
                 cameraUnreachable = failures > REBINDS_BEFORE_GIVING_UP_QUIETLY
