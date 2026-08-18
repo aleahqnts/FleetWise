@@ -1,0 +1,4 @@
+**/bin/
+**/obj/
+# The one file that must never enter an image. On a host the key is an env var.
+**/appsettings.Secret.json

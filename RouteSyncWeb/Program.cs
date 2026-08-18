@@ -7,8 +7,28 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 // Phase 7: Supabase service (secret) key lives in an untracked local override so it
-// never commits. Overrides Supabase:Key from appsettings.json when present.
+// never commits. Overrides Supabase:Key from appsettings.json when present. Added last,
+// so it also beats the environment - a deployed host that has no file sets the env var
+// Supabase__Key instead and this line quietly does nothing.
 builder.Configuration.AddJsonFile("appsettings.Secret.json", optional: true, reloadOnChange: true);
+
+// Refuse to start on the wrong key.
+//
+// appsettings.json ships the PUBLISHABLE key, which is fine to commit and useless to this
+// server: Phase 7 took the users table away from anon, and Phase 10a took audit_log away
+// too. A fresh clone with no secret file therefore booted happily and then failed in a way
+// that pointed everywhere except the cause - every sign-in answered "Invalid email or
+// password" on a correct password, and not one attempt reached the audit log. Cost a
+// colleague an afternoon. Better to not start at all and say which file is missing.
+var supabaseKey = builder.Configuration["Supabase:Key"];
+if (supabaseKey is null || !supabaseKey.StartsWith("sb_secret_", StringComparison.Ordinal))
+{
+    throw new InvalidOperationException(
+        "Supabase:Key is not a service key, so sign-in and the audit log cannot work. " +
+        "Copy RouteSyncWeb/appsettings.Secret.json.example to appsettings.Secret.json and " +
+        "paste the secret key, or set the environment variable Supabase__Key when hosting. " +
+        "The key is never committed, so ask for it directly.");
+}
 
 // Add services to the container.
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
