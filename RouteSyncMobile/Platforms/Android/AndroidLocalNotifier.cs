@@ -6,8 +6,10 @@ using FleetWiseMobile.Services;
 
 namespace FleetWiseMobile.Platforms.Android;
 
-// System-tray notification for new in-app messages. Separate channel from the
-// trip-tracking foreground service so the user can manage them independently.
+/// <summary>
+/// System-tray notification for new messages, on its own channel so it can be managed
+/// separately from the trip-tracking service's notification.
+/// </summary>
 public class AndroidLocalNotifier : ILocalNotifier
 {
     private const string ChannelId = "routesync_messages";
@@ -23,7 +25,7 @@ public class AndroidLocalNotifier : ILocalNotifier
             mgr.CreateNotificationChannel(channel);
         }
 
-        // tapping opens the app (main activity)
+        // Tapping the notification opens the app.
         var launch = ctx.PackageManager?.GetLaunchIntentForPackage(ctx.PackageName!);
         launch?.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
         var pending = PendingIntent.GetActivity(ctx, 0, launch,

@@ -227,8 +227,8 @@ else
 
     private bool IsAvailable => availability == "Available";
 
-    // Admin grounded the assigned bus -> block starting a trip on it (an already-Active
-    // trip can still be resumed so the driver isn't stranded mid-route).
+    // A bus grounded by an admin cannot have a trip started on it. An already active trip
+    // can still be resumed, so a driver is never stranded mid-route.
     private bool VehicleGrounded => vehicle?.OutOfService == true;
 
     private string Greeting
@@ -257,7 +257,7 @@ else
         ? DateTime.MinValue
         : assignment.Date.Date + assignment.ShiftStartTime;
 
-    // Unlock window: from LeadHours before shift start onward.
+    // The trip unlocks LeadHours before the shift starts.
     private bool CanStart => assignment is not null && PhTime.Now >= ShiftStart - TimeSpan.FromHours(LeadHours);
 
     private string LockLabel
@@ -278,15 +278,15 @@ else
     protected override async Task OnInitializedAsync()
     {
         if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
-        // Await: push any queued trip finalize FIRST so Load() reads the trip as
-        // Completed (not a stale "Active" -> phantom "Resume Trip").
+        // Queued trip finalizations are pushed before loading, so the trip reads as
+        // completed rather than active, which would offer a resume that no longer applies.
         try { await Queue.FlushAsync(); } catch { /* offline: stays queued */ }
         await Load();
         _ = PollLoop(); // background: new assignments appear without pull-to-refresh
     }
 
-    // Dispatcher assigns a trip -> it must show up on its own. Silent re-fetch every
-    // 15s while the page is open: no spinner, no flicker, the card just appears.
+    // A trip assigned by a dispatcher has to appear without the driver doing anything, so
+    // the page re-fetches every 15 seconds with no spinner and no flicker.
     private readonly CancellationTokenSource pollCts = new();
 
     private async Task PollLoop()
@@ -296,7 +296,7 @@ else
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
             while (await timer.WaitForNextTickAsync(pollCts.Token))
             {
-                // Don't yank state mid-interaction (modal open / toggle in flight).
+                // Never replace state mid-interaction, with a modal open or a toggle in flight.
                 if (toggling || showUnavailModal || loading) continue;
                 await InvokeAsync(async () =>
                 {
@@ -341,9 +341,9 @@ else
         }
         catch (Exception ex)
         {
-            // Background polls fail quietly (a blip must not flash an error over a fine
-            // page); manual loads show the real failure reason instead of a blanket
-            // "network" message — a parse error is NOT a connectivity problem.
+            // Background polls fail quietly, since a brief outage must not flash an error
+            // over a working page. A manual load reports the real reason instead: a parse
+            // failure is not a connectivity problem and should not claim to be one.
             if (!silent)
             {
                 statusMsg = ex is System.Net.Http.HttpRequestException or System.Threading.Tasks.TaskCanceledException
@@ -364,7 +364,7 @@ else
 
         if (IsAvailable)
         {
-            // Going Unavailable while holding a shift -> warn + capture reason.
+            // Going unavailable while holding a shift warns the driver and records a reason.
             if (assignment is not null)
             {
                 reasonChoice = null;

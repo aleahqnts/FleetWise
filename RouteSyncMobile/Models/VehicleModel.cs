@@ -22,11 +22,11 @@ public class Vehicle : BaseModel
     [Column("vehicle_status")]
     public string VehicleStatus { get; set; }
 
-    // Admin grounded the bus -> driver must not start a trip on it.
+    // Set when an admin grounds the bus, which blocks starting a trip on it.
     [Column("out_of_service")]
     public bool OutOfService { get; set; }
 
-    // Phase 8: the counter phone bound to this bus (camera app claims it at bind).
+    // The counter phone bound to this bus, claimed by the camera app when it binds.
     [Column("counter_device_id")]
     public string CounterDeviceId { get; set; }
 

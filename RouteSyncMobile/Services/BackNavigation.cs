@@ -1,43 +1,59 @@
 namespace FleetWiseMobile.Services;
 
-// Bridge between the Android back button and Blazor's routing.
-//
-// The two live in different worlds: the hardware back press arrives on the Android
-// activity, which knows nothing about which Blazor page is on screen. The activity used
-// to answer every press with the exit dialog, so back never once went back - from Trip
-// Details it asked you to quit the app.
-//
-// Deliberately NOT the WebView's own history. That history includes the login page and
-// any redirect bounce, so "back" could land a signed-in driver on the sign-in screen, or
-// on a page their session no longer allows. An explicit up-target per route is one line
-// to read and cannot surprise anyone.
+/// <summary>
+/// Bridge between the Android back button and Blazor's routing.
+/// </summary>
+/// <remarks>
+/// A hardware back press arrives at the Android activity, which has no knowledge of which
+/// Blazor page is on screen. This class lets the page decide first, and leaves the exit
+/// prompt for when there is nowhere further up.
+///
+/// The WebView's own history is deliberately not used. It includes the sign-in page and
+/// any redirect that bounced through it, so going back could land a signed-in driver on
+/// the sign-in screen or a page their session no longer permits. An explicit up-target
+/// per route cannot do that.
+/// </remarks>
 public static class BackNavigation
 {
-    /// <summary>Set by MainLayout while a signed-in page is on screen. Returns true if it
-    /// handled the press (navigated), false when there is nowhere up and the caller should
-    /// ask about exiting.</summary>
+    /// <summary>
+    /// Set while a signed-in page is on screen. Returns true if the press was handled by
+    /// navigating, and false when there is nowhere up and the caller should offer to exit.
+    /// </summary>
     public static Func<bool>? AppHandler { get; set; }
 
-    /// <summary>Set by a page that owns its own back behaviour, e.g. a form with steps
-    /// where back means "previous step". Takes priority over <see cref="AppHandler"/>, and
-    /// the page must clear it on dispose or it will outlive the page.</summary>
+    /// <summary>
+    /// Set by a page that owns its own back behaviour, such as a form with steps where
+    /// back means the previous step. Takes priority over <see cref="AppHandler"/>.
+    /// </summary>
+    /// <remarks>The page must clear this on dispose, or the handler outlives the page.</remarks>
     public static Func<bool>? PageHandler { get; set; }
 
-    /// <summary>Set by BackNavHost. Shows the app's own exit confirmation and returns true
-    /// if it took the press. The activity only falls back to a system AlertDialog when this
-    /// is null, i.e. before the WebView has rendered anything.</summary>
+    /// <summary>
+    /// Shows the app's own exit confirmation, returning true if it took the press.
+    /// </summary>
+    /// <remarks>
+    /// The activity falls back to a system dialog only while this is null, which is the
+    /// window before the WebView has rendered anything.
+    /// </remarks>
     public static Func<bool>? ExitPrompt { get; set; }
 
-    /// <summary>Set by the activity, called by the Blazor dialog's Exit button. Blazor has
-    /// no way to background an Android task on its own.</summary>
+    /// <summary>
+    /// Sends the app to the background, called by the exit confirmation. Set by the
+    /// activity, because Blazor cannot background an Android task on its own.
+    /// </summary>
     public static Action? ExitApp { get; set; }
 
     public static bool TryGoBack() =>
         (PageHandler?.Invoke() ?? false) || (AppHandler?.Invoke() ?? false);
 
-    /// <summary>Where each route goes when the driver presses back. Null = already at the
-    /// top, so the exit dialog is the right answer. Mirrors the on-screen back arrows the
-    /// pages already draw, so hardware back and the arrow agree.</summary>
+    /// <summary>
+    /// Where each route goes when the driver presses back, or null when the route is
+    /// already at the top and the exit prompt is the correct response.
+    /// </summary>
+    /// <remarks>
+    /// Mirrors the back arrows the pages already draw, so the hardware button and the
+    /// on-screen control agree.
+    /// </remarks>
     public static string? UpFrom(string path)
     {
         // Trailing id segment, for the routes that carry a trip.

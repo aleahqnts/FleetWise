@@ -10,10 +10,15 @@ using Microsoft.Maui.Storage;
 
 namespace FleetWiseMobile.Platforms.Android;
 
-// Foreground service: polls GPS every ~5s while a trip is active and buffers
-// telemetry rows via TelemetryQueue. Writes a row only when the bus moved
-// >=25m, the passenger count changed, or >=60s passed (heartbeat) — keeps the
-// free-tier DB small while never losing a boarding recorded at a stop.
+/// <summary>
+/// Foreground service that polls GPS roughly every 5 seconds during a trip and buffers
+/// telemetry rows.
+/// </summary>
+/// <remarks>
+/// A row is written only when the bus has moved at least 25 metres, the passenger count
+/// changed, or 60 seconds have passed. That keeps stored volume low without losing a
+/// boarding recorded while the bus is stationary at a stop.
+/// </remarks>
 [Service(ForegroundServiceType = ForegroundService.TypeLocation, Exported = false)]
 public class LocationTrackingService : Service
 {
@@ -65,8 +70,8 @@ public class LocationTrackingService : Service
             if (loc is null) return;
 
             var countStr = await SecureStorage.Default.GetAsync($"trip_count_{_tripId}");
-            // Key removed = trip ended / not counting -> stop logging (never write a
-            // bogus 0 row that would corrupt the telemetry last-log audit).
+            // A missing key means the trip has ended or counting stopped, so logging stops
+            // rather than writing a zero row that would corrupt the telemetry audit.
             if (string.IsNullOrEmpty(countStr)) return;
             int count = int.TryParse(countStr, out var c) ? c : 0;
 

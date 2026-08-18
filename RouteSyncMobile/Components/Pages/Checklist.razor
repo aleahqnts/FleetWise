@@ -100,9 +100,10 @@ else
     private Section CurrentSection => sections[currentSection];
     private bool IsLast => currentSection == sections.Count - 1;
 
-    // Trimmed to what a driver can realistically walk-around check before a trip.
-    // Section titles must stay in sync with the web's hardcoded names
-    // (VehiclesController.DeriveInspectionIssue / DeriveInspectionSections).
+    // Limited to what a driver can check on a walk-around before a trip.
+    //
+    // The section titles must match the names the dashboard expects in
+    // VehiclesController.DeriveInspectionIssue and DeriveInspectionSections.
     private readonly List<Section> sections = new()
     {
         new("Exterior Inspection", "exterior_inspection", new[]
@@ -149,8 +150,8 @@ else
         else Nav.NavigateTo("/home");
     }
 
-    // Hardware back has to walk the sections too, or it would jump straight out of a
-    // part-filled checklist from section 4.
+    // The hardware back button steps through the sections as well, so it cannot leave a
+    // part-filled checklist from the middle of the form.
     public void Dispose()
     {
         if (BackNavigation.PageHandler == HandleHardwareBack) BackNavigation.PageHandler = null;
@@ -206,9 +207,9 @@ else
 
             var inserted = await Data.SubmitChecklistAsync(checklist);
 
-            // A failed inspection opens a maintenance incident so the flag is recorded and
-            // reviewable on the web (Vehicles tab / Trip Detail), not just a volatile status
-            // that the next shift overwrites. Lists the exact items that failed.
+            // A failed inspection opens a maintenance incident, so the fault is a reviewable
+            // record on the dashboard rather than a status the next shift overwrites. The
+            // incident lists the exact items that failed.
             if (!allPass && inserted is not null)
             {
                 var issues = sections

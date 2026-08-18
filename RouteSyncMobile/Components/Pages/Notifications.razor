@@ -104,7 +104,7 @@ else
 
     private static string Aud(MessageModel n) => (n.TargetAudience ?? "").ToLowerInvariant();
 
-    // unread dot + mark-read only apply to driver-targeted msgs (1 recipient)
+    // The unread dot and mark-as-read apply only to messages with a single recipient.
     private static bool IsUnread(MessageModel n) => Aud(n) == "driver" && !n.IsRead;
 
     private int UnreadCount => items.Count(IsUnread);
@@ -126,7 +126,8 @@ else
         finally { markingAll = false; }
     }
 
-    /** Compact age for the card head: 5m / 3h / else clock time (groups carry the date). */
+    // Compact age for the card heading: minutes, then hours, then a clock time. The
+    // group heading carries the date.
     private static string When(MessageModel n)
     {
         var t = PhTime.Raw(n.CreatedAt);
@@ -154,7 +155,7 @@ else
         _       => "scope-driver"
     };
 
-    // icon always matches audience (uniform); priority shown via the red tag
+    // The icon reflects the audience and stays uniform. Priority is shown by the tag instead.
     private static string IconClass(MessageModel n) => Aud(n) switch
     {
         "all"   => "completed",
@@ -180,8 +181,8 @@ else
         _ = PollLoop();             // background: new messages appear without pull-to-refresh
     }
 
-    // Silent re-fetch every 15s while the tab is open. New messages just appear; the
-    // driver is looking at the list, so the badge is kept cleared too (MarkSeenNow).
+    // Re-fetches every 15 seconds while the tab is open, so new messages appear on their
+    // own. The badge is kept clear at the same time, since the driver is reading the list.
     private readonly CancellationTokenSource pollCts = new();
 
     private async Task PollLoop()

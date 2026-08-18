@@ -6,11 +6,16 @@ using FleetWiseMobile.Models;
 
 namespace FleetWiseMobile.Services;
 
-// Phase 7: thin client for the Supabase edge functions (auth-login / change-password).
-// These are the ONLY places a password ever travels — always over TLS, verified and
-// hashed server-side. Outcomes are three-way so callers can fall back to the legacy
-// anon path when the function itself is unreachable (7a migration window) without
-// ever falling back on a definitive "wrong password".
+/// <summary>
+/// Client for the auth-login and change-password edge functions.
+/// </summary>
+/// <remarks>
+/// These are the only paths a password travels, always over TLS, and it is verified and
+/// hashed server-side.
+///
+/// Results are three-way rather than a boolean so a caller can tell an unreachable
+/// function apart from a definitive rejection, and never treats the two the same way.
+/// </remarks>
 public class AuthApi
 {
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(12) };
@@ -37,7 +42,7 @@ public class AuthApi
                 return new(Outcome.Ok, token, user, null);
             }
 
-            // 401/400/429 = the server ruled — do NOT fall back to client-side verify.
+            // A 400, 401 or 429 is a decision by the server, not a transport failure.
             if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.BadRequest
                 or HttpStatusCode.TooManyRequests)
                 return new(Outcome.Denied, null, null, ErrorOf(body) ?? "Invalid email or password.");
@@ -93,7 +98,7 @@ public class AuthApi
         catch { return null; }
     }
 
-    // The fn returns the raw users row (minus password_hash) in snake_case.
+    // The function returns the users row in snake_case, without the password hash.
     private static UserModel? MapUser(JsonElement u)
     {
         try

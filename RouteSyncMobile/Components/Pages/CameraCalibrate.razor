@@ -6,8 +6,9 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-@* Phase 8d — Tier-2 remote calibration: drag the counting line on a real photo of the
-   doorway (the camera's wake snapshot), Save writes device_config, the camera adopts it. *@
+@* Remote calibration. The driver drags the counting line onto a real photo of the
+   doorway, taken by the camera on request. Saving writes device_config, which the camera
+   then adopts. *@
 
 <div class="cc">
     <div class="cc-head">
@@ -85,7 +86,8 @@
     private string? imgSrc;
     private string? dev;
 
-    // Line state (normalized, display space — the §2 coordinate contract).
+    // Line endpoints, normalized to the displayed photo. This is the same space the
+    // camera stores its line in, so a line dragged here maps directly onto the camera's.
     private double ax = 0.5, ay = 0.05, bx = 0.5, by = 0.95;
     private int inwardSign = 1;
     private int version;
@@ -124,7 +126,8 @@
 
         try
         {
-            // Current config first: the editor starts from the line the camera runs NOW.
+            // The current configuration is read first, so the editor opens on the line the
+            // camera is running.
             var cfg = await Data.GetDeviceConfigAsync(dev!);
             if (cfg is not null)
             {
@@ -160,7 +163,8 @@
         StateHasChanged();
     }
 
-    // Poll device_status until a snapshot NEWER than our wake request lands, then pull it.
+    // Polls device_status until a snapshot newer than the wake request appears, then
+    // downloads it.
     private async Task<bool> WaitForSnapshotAsync()
     {
         for (var i = 0; i < 20; i++) // ~30s: wake + AE warm-up + upload fits comfortably
@@ -210,9 +214,10 @@
         await JS.InvokeVoidAsync("calib.set", ax, ay, bx, by, inwardSign);
     }
 
-    // Lens swap (front <-> back). The scene changes completely, so: save the lens to
-    // device_config, wait for the camera to echo it, then pull a fresh photo through
-    // the normal wake path. The dragged line is kept (driver re-drags for the new view).
+    // Lens swap between front and back. The scene changes entirely, so the lens is saved
+    // to device_config, the camera is given time to echo the change, and a fresh photo is
+    // requested through the usual wake path. The dragged line is left in place for the
+    // driver to move onto the new view.
     private async Task FlipCameraAsync()
     {
         busy = true; refreshing = true; note = null;
@@ -230,7 +235,7 @@
             });
             version = newVersion;
 
-            // Wait for the camera to actually switch lenses before re-shooting.
+            // Wait for the camera to report the new lens before requesting a photo.
             for (var i = 0; i < 8; i++)
             {
                 await Task.Delay(1500);
@@ -254,7 +259,7 @@
         busy = false; refreshing = false;
     }
 
-    // Refresh: re-wake, keep the dragged line exactly where the driver put it.
+    // Requests a new photo, leaving the dragged line where the driver put it.
     private async Task RefreshSnapAsync()
     {
         busy = true; refreshing = true; note = null;
@@ -273,10 +278,11 @@
         busy = false; refreshing = false;
     }
 
-    // The version must beat whatever is in the DB RIGHT NOW, not the value read when the
-    // editor opened — otherwise a concurrent write (camera's on-phone save, another
-    // editor) that landed the same number would make the follower's `>` compare skip us,
-    // silently desyncing. Re-read, take the max, +1.
+    // The version must exceed whatever is stored at this moment, not the value read when
+    // the editor opened. A concurrent write, from a calibration made on the phone or
+    // another editor, could have taken the same number, and the camera skips any version
+    // that is not strictly greater. So the row is re-read and the version raised above
+    // whichever is higher.
     private async Task<int> NextVersionAsync()
     {
         try
@@ -312,7 +318,8 @@
             return;
         }
 
-        // Echo: the ✓ means the camera RUNS this line now (not just that the row changed).
+        // The confirmation appears only once the camera reports it is running this line,
+        // not merely that the row was written.
         for (var i = 0; i < 8; i++)
         {
             await Task.Delay(1500);

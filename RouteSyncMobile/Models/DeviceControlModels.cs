@@ -2,9 +2,11 @@ using System.Text.Json.Serialization;
 
 namespace FleetWiseMobile.Models;
 
-// Phase 8 remote camera control. Plain JSON DTOs (raw REST, not postgrest models):
-// device_config = DESIRED state (driver/admin write, camera follows),
-// device_status = REPORTED state (camera writes, driver reads).
+// Remote camera control. Plain JSON objects rather than postgrest models, because these
+// tables are read and written through the REST endpoint directly.
+//
+// device_config holds the desired state, written by the driver app or the dashboard and
+// followed by the camera. device_status holds what the camera reports back.
 
 public class DeviceConfigDto
 {
@@ -22,10 +24,12 @@ public class DeviceConfigDto
 public class DeviceStatusDto
 {
     [JsonPropertyName("device_id")] public string DeviceId { get; set; } = "";
-    // Camera writes true-UTC instants; DateTimeOffset keeps the zone intact.
+    // The camera writes real UTC instants, unlike the local-time convention used
+    // elsewhere, so the offset is preserved rather than discarded.
     [JsonPropertyName("last_seen")] public DateTimeOffset? LastSeen { get; set; }
     [JsonPropertyName("config_version_applied")] public int ConfigVersionApplied { get; set; } = -1;
-    // Phase 8c/8d wake lifecycle: idle|capturing|preview|applied + when the snapshot landed.
+    // Wake lifecycle, one of idle, capturing, preview or applied, with the time the
+    // snapshot became available.
     [JsonPropertyName("wake_state")] public string? WakeState { get; set; }
     [JsonPropertyName("snapshot_ready_at")] public DateTimeOffset? SnapshotReadyAt { get; set; }
 }
