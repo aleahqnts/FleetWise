@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace FleetWise.ViewModels
 {
     // Rendered by GET /Schedule — the weekly bulk planner grid.
@@ -31,8 +33,16 @@ namespace FleetWise.ViewModels
     // Posted by POST /Schedule/Save
     public class SaveScheduleRequest
     {
+        // [Required] on a list only checks it is present, and nothing walks into the items
+        // unless the property itself carries a validator, so the cap below is also what
+        // makes each cell get checked at all.
+        [Required, MaxLength(500, ErrorMessage = "Too many cells in one save.")]
         public List<ScheduleCellInput> Cells { get; set; } = new();
+
+        [Required, RegularExpression(@"^\d{4}-\d{2}-\d{2}$", ErrorMessage = "Week start must be yyyy-MM-dd.")]
         public string WeekStart { get; set; }
+
+        [Required, RegularExpression(@"^\d{4}-\d{2}-\d{2}$", ErrorMessage = "Week end must be yyyy-MM-dd.")]
         public string WeekEnd { get; set; }
         // Dispatcher acknowledged the conflict modal and chose to save anyway.
         public bool Override { get; set; }
@@ -40,11 +50,26 @@ namespace FleetWise.ViewModels
 
     public class ScheduleCellInput
     {
+        // Empty means "new trip", so this one allows blank but still bounds the shape.
+        [RegularExpression(@"^([A-Za-z0-9_-]{1,64})?$", ErrorMessage = "That is not a trip ID.")]
         public string TripId { get; set; }     // null/empty = new trip to insert
+
+        [Range(1, int.MaxValue, ErrorMessage = "A route is required.")]
         public int RouteId { get; set; }
+
+        [Required, RegularExpression("^(Morning|Afternoon|Evening)$",
+            ErrorMessage = "Shift must be Morning, Afternoon or Evening.")]
         public string Shift { get; set; }
+
+        [Required, RegularExpression(@"^\d{4}-\d{2}-\d{2}$", ErrorMessage = "Date must be yyyy-MM-dd.")]
         public string Date { get; set; }       // yyyy-MM-dd
+
+        // Blank clears the slot.
+        [RegularExpression(@"^([A-Za-z0-9-]{1,20})?$", ErrorMessage = "That is not a vehicle ID.")]
         public string VehicleId { get; set; }
+
+        // 0 clears the slot, so no lower bound of 1 here.
+        [Range(0, int.MaxValue, ErrorMessage = "That is not a driver.")]
         public int DriverId { get; set; }
     }
 }
