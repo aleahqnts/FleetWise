@@ -1,19 +1,22 @@
 namespace FleetWiseMobile;
 
-// Supabase connection settings.
-// NOTE: this is the PUBLISHABLE (client-safe) key — it is designed to ship inside
-// client apps. Do NOT put the service_role/secret key here.
+/// <summary>
+/// Supabase connection settings.
+/// </summary>
+/// <remarks>
+/// The key here is the publishable one, which is intended to ship inside client apps. The
+/// service key must never be placed here: it bypasses row-level security entirely.
+/// </remarks>
 public static class SupabaseConfig
 {
     public const string Url = "https://vrtluruqaxutecydbrsq.supabase.co";
     public const string Key = "sb_publishable_sjkjW2K7QOPRKmixJdhSgA_8rPtoFzD";
     public const string FunctionsUrl = $"{Url}/functions/v1";
 
-    // Phase 7: app_driver JWT minted by the auth-login edge function. Null until
-    // login succeeds (or when the fn is unreachable and we fell back to anon).
+    // Driver JWT issued by the auth-login edge function. Null until sign-in succeeds.
     public static string? Jwt { get; set; }
 
-    // What every REST call sends as the Authorization bearer: the driver JWT when
-    // we have one, else the anon key (works until the 7d cutover kills anon).
+    // Sent as the authorization bearer on every request: the driver JWT once there is
+    // one, and the publishable key before that.
     public static string Bearer => Jwt ?? Key;
 }

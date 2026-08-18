@@ -209,8 +209,8 @@ else
             emNumber = FormatPhone(Digits(user.EmergencyContactNumber));
         }
 
-        // Real driving record, not decoration: completed trips, passengers served,
-        // this month's runs. Failures degrade to zeros — profile still loads offline-ish.
+        // The driver's actual record: completed trips, passengers served, and this
+        // month's runs. A failed read shows zeros rather than blocking the page.
         try
         {
             available = await Data.GetAvailabilityAsync(uid) == "Available";
@@ -268,8 +268,8 @@ else
         savingPwd = true;
         try
         {
-            // Phase 7 (7d: JWT-only): server-side verify + hash via the change-password
-            // edge fn — the ONLY password writer for this app. No offline path.
+            // The change-password edge function verifies and hashes server-side, and is
+            // the only password writer this app has. There is no offline path.
             var r = await Api.ChangePasswordAsync(curPwd, newPwd);
             if (r.Outcome == AuthApi.Outcome.Denied)
             {
@@ -301,7 +301,7 @@ else
         return d.Length > 11 ? d[..11] : d;
     }
 
-    // 09XX XXX XXXX  (groups of 4-3-4)
+    // Formatted as 09XX XXX XXXX, in groups of four, three and four.
     private static string FormatPhone(string digits)
         => digits.Length <= 4 ? digits
          : digits.Length <= 7 ? $"{digits[..4]} {digits[4..]}"

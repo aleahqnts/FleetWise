@@ -6,9 +6,14 @@ using SQLite;
 
 namespace FleetWiseMobile.Services;
 
-// On-device buffer for GPS telemetry. Rows are written locally first (survives
-// dead zones / app kill), then a flush loop pushes them to Supabase via raw REST
-// POST and deletes the local copy on success.
+/// <summary>
+/// On-device buffer for GPS telemetry.
+/// </summary>
+/// <remarks>
+/// Rows are written locally first, so they survive dead zones and the app being killed.
+/// A flush loop then posts them to the database and deletes the local copy once the
+/// write succeeds.
+/// </remarks>
 public class TelemetryQueue
 {
     private readonly SQLiteAsyncConnection _db;
@@ -29,8 +34,8 @@ public class TelemetryQueue
 
     public Task<int> CountAsync() => _db.Table<PendingTelemetry>().CountAsync();
 
-    // Push buffered rows to Supabase in batches. Best-effort: stops on first
-    // network failure (rows stay queued for the next flush).
+    /// <summary>Pushes buffered rows in batches, stopping at the first network failure.
+    /// Anything not sent stays queued for the next flush.</summary>
     public async Task FlushAsync()
     {
         if (!await _flushLock.WaitAsync(0)) return; // a flush is already running
@@ -76,7 +81,8 @@ public class TelemetryQueue
         finally { _flushLock.Release(); }
     }
 
-    // Push queued trip finalizes -> sets trips Completed + authoritative totals.
+    /// <summary>Pushes queued trip finalizations, marking each trip completed and writing
+    /// its authoritative totals.</summary>
     private async Task FlushFinalizesAsync()
     {
         var fins = await _db.Table<PendingTripFinalize>().OrderBy(f => f.Id).ToListAsync();
@@ -99,12 +105,16 @@ public class TelemetryQueue
             var res = await _http.SendAsync(req);
             if (!res.IsSuccessStatusCode) return; // keep, retry later
 
-            // Release the bus: the trip is now Completed, so vehicle_status must leave
-            // "On Trip" or the vehicles row stays stuck (the web only shows Ready via a
-            // derived fallback; other consumers read the raw column). Order matters —
-            // the RLS policy that lets a driver touch this vehicle needs the just-
-            // written Completed trip (driver_id = me) to already exist. Best-effort:
-            // a failure here doesn't re-queue the finalize (trip is already Completed).
+            // Release the bus. With the trip completed, vehicle_status has to leave "On
+            // Trip" or the row stays stuck: the dashboard derives Ready as a fallback, but
+            // other consumers read the raw column.
+            //
+            // The order is required. The row-level security policy that lets a driver
+            // update this vehicle checks for a completed trip of theirs, so that trip must
+            // already be written.
+            //
+            // Best effort: a failure here does not re-queue the finalization, which has
+            // already succeeded.
             if (!string.IsNullOrEmpty(f.VehicleId))
             {
                 var vBody = new { vehicle_status = "Ready to Deploy", updated_at = f.EndTime };

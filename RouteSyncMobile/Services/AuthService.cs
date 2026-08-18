@@ -2,13 +2,19 @@ using FleetWiseMobile.Models;
 
 namespace FleetWiseMobile.Services;
 
-// Phase 7 login (7d: JWT-only): the auth-login edge function verifies the password
-// SERVER-side and mints a 30-day app_driver JWT. Anon has zero DB access, so there is
-// no client-side fallback anymore — fn unreachable means login cannot proceed.
+/// <summary>
+/// Signs a driver in through the auth-login edge function, which verifies the password
+/// server-side and issues a JWT valid for 30 days.
+/// </summary>
+/// <remarks>
+/// There is no client-side fallback. Anonymous callers have no database access, so an
+/// unreachable edge function means sign-in cannot proceed at all.
+/// </remarks>
 public class AuthService
 {
-    // Shared temp password new accounts start on (mirrors web PasswordPolicy). A login that
-    // used exactly this value means the driver hasn't set their own password yet.
+    /// <summary>The temporary password new accounts start on, matching the dashboard's
+    /// policy. Signing in with exactly this value means the driver has not yet chosen
+    /// their own password.</summary>
     public const string TemporaryPassword = "@Temp123";
 
     private readonly AuthApi _authApi;
@@ -19,8 +25,8 @@ public class AuthService
     /// <exception cref="HttpRequestException">Edge function unreachable (offline / outage).</exception>
     public async Task<UserModel?> ValidateAsync(string email, string password)
     {
-        // Setting SupabaseConfig.Jwt is all it takes — the postgrest GetHeaders closure
-        // and the raw REST helpers both read SupabaseConfig.Bearer per request.
+        // Setting the JWT here is enough: the postgrest header closure and the REST
+        // helpers both read SupabaseConfig.Bearer on every request.
         var login = await _authApi.LoginAsync(email, password);
         return login.Outcome switch
         {

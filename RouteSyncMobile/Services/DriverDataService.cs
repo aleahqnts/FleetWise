@@ -6,8 +6,13 @@ using static Postgrest.Constants;
 
 namespace FleetWiseMobile.Services;
 
-// Supabase reads/writes the driver app needs. Mirrors the patterns used by the
-// web DispatchController (same tables, same status strings).
+/// <summary>
+/// Every database read and write the driver app performs.
+/// </summary>
+/// <remarks>
+/// Uses the same tables and status strings as the web dashboard's dispatch controller, so
+/// the two surfaces agree on what a trip looks like.
+/// </remarks>
 public class DriverDataService
 {
     private readonly Supabase.Client _supabase;
@@ -16,8 +21,11 @@ public class DriverDataService
 
     private static readonly HttpClient _http = new();
 
-    // Raw Supabase REST PATCH. Avoids postgrest-csharp expression Update (breaks on
-    // Android) AND full-model Upsert (round-trips/corrupts the `date` column).
+    /// <summary>Sends a PATCH straight to the REST endpoint.</summary>
+    /// <remarks>
+    /// The postgrest client's expression-based Update does not work on Android, and its
+    /// full-model Upsert round-trips the whole row, which corrupts the `date` column.
+    /// </remarks>
     private static async Task PatchAsync(string pathWithFilter, object body)
     {
         var req = new HttpRequestMessage(HttpMethod.Patch, $"{FleetWiseMobile.SupabaseConfig.Url}/rest/v1/{pathWithFilter}");
@@ -28,7 +36,8 @@ public class DriverDataService
         res.EnsureSuccessStatusCode();
     }
 
-    // Raw Supabase REST POST (insert). Same Android-safe rationale as PatchAsync.
+    /// <summary>Sends an insert straight to the REST endpoint, for the same reason as
+    /// <see cref="PatchAsync"/>.</summary>
     private static async Task PostAsync(string path, object body)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, $"{FleetWiseMobile.SupabaseConfig.Url}/rest/v1/{path}");
@@ -39,8 +48,11 @@ public class DriverDataService
         res.EnsureSuccessStatusCode();
     }
 
-    // Raw Supabase REST GET returning the first row (or null). device_config/device_status
-    // are plain DTOs, not postgrest models — no BaseModel ceremony needed.
+    /// <summary>Reads the first row from the REST endpoint, or null when there is none.</summary>
+    /// <remarks>
+    /// `device_config` and `device_status` are plain data transfer objects rather than
+    /// postgrest models, so they do not need a model base class.
+    /// </remarks>
     private static async Task<T?> GetJsonAsync<T>(string pathWithQuery)
     {
         var req = new HttpRequestMessage(HttpMethod.Get, $"{FleetWiseMobile.SupabaseConfig.Url}/rest/v1/{pathWithQuery}");
@@ -53,8 +65,8 @@ public class DriverDataService
         return list is { Count: > 0 } ? list[0] : default;
     }
 
-    // ---- Phase 8: remote camera control (RLS scopes both tables to the driver's
-    //      ACTIVE-trip camera via driver_active_camera(); no trip -> empty reads) ----
+    // Remote camera control. Row-level security scopes both tables to the camera on the
+    // driver's active trip, so with no trip running these reads return nothing.
 
     public Task<DeviceConfigDto?> GetDeviceConfigAsync(string deviceId)
         => GetJsonAsync<DeviceConfigDto>($"device_config?device_id=eq.{Uri.EscapeDataString(deviceId)}");
@@ -65,11 +77,18 @@ public class DriverDataService
     public Task PatchDeviceConfigAsync(string deviceId, object body)
         => PatchAsync($"device_config?device_id=eq.{Uri.EscapeDataString(deviceId)}", body);
 
-    // 8d: the camera's wake snapshot — authenticated Storage GET; RLS only serves the
-    // ACTIVE trip's camera object. Null = not there (purged / not captured yet / denied).
-    // The ?t= buster is load-bearing: the object is OVERWRITTEN in place on every wake,
-    // and the storage CDN caches by URL — without a unique query the driver gets the
-    // previous photo back on Refresh.
+    /// <summary>
+    /// Downloads the camera's most recent wake snapshot, or null when there is none.
+    /// </summary>
+    /// <remarks>
+    /// An authenticated storage read. Row-level security serves only the object belonging
+    /// to the active trip's camera, so null covers a purged image, one not captured yet,
+    /// and a denied request alike.
+    ///
+    /// The timestamp query parameter is required, not decorative. The object is
+    /// overwritten in place on every wake and storage caches by URL, so without a unique
+    /// query string a refresh returns the previous photo.
+    /// </remarks>
     public async Task<byte[]?> DownloadSnapshotAsync(string deviceId)
     {
         var req = new HttpRequestMessage(HttpMethod.Get,
@@ -91,9 +110,9 @@ public class DriverDataService
 
     public async Task SetAvailabilityAsync(int userId, string status, string? reason = null)
     {
-        // Reads via postgrest-csharp are fine; WRITES go through raw REST like every other
-        // write in this service — postgrest-csharp Insert/Upsert is unreliable on MAUI and
-        // was silently failing here (new drivers could never flip to Available).
+        // Reads through the postgrest client are reliable, but writes go through the REST
+        // endpoint like every other write in this service. Its Insert and Upsert fail
+        // silently on MAUI, which left new drivers unable to set themselves available.
         var existing = await _supabase.From<DriverAvailability>()
             .Filter("user_id", Operator.Equals, userId.ToString())
             .Get();
@@ -110,11 +129,11 @@ public class DriverDataService
         }
     }
 
-    // Today's assignment for this driver (anything not yet completed).
+    /// <summary>The driver's current assignment: any trip today that is not yet completed.</summary>
     public async Task<Trip?> GetTodayAssignmentAsync(int userId)
     {
-        // Include yesterday so an overnight shift (e.g. 10pm -> 6am) started on the
-        // previous calendar day is still picked up after midnight.
+        // Yesterday is included so an overnight shift, for example 10pm to 6am, is still
+        // found after midnight even though it belongs to the previous calendar day.
         var yesterday = DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd");
         var r = await _supabase.From<Trip>()
             .Filter("driver_id", Operator.Equals, userId.ToString())
@@ -122,9 +141,8 @@ public class DriverDataService
             .Filter("date", Operator.LessThanOrEqual, DateTime.Today.ToString("yyyy-MM-dd"))
             .Get();
 
-        // Drop missed shifts: once shift end passes and the trip was never started,
-        // it disappears. An Active trip running past its end stays (driver still on
-        // it). Completed already excluded.
+        // A shift that ended without ever being started is dropped. One that is Active
+        // stays even past its end time, because the driver is still on it.
         var now = PhTime.Now;
         return r.Models
             .Where(t => t.TripStatus != "Completed")
@@ -133,11 +151,13 @@ public class DriverDataService
             .FirstOrDefault();
     }
 
-    // Wall-clock end of the shift. Overnight shifts (end <= start) roll to next day.
+    /// <summary>Wall-clock end of a shift. An end at or before the start means the shift
+    /// runs overnight, so it rolls to the next day.</summary>
     private static DateTime ShiftEnd(Trip t)
         => t.Date.Date + t.ShiftEndTime + (t.ShiftEndTime <= t.ShiftStartTime ? TimeSpan.FromDays(1) : TimeSpan.Zero);
 
-    // Nearest future (date > today) non-completed trip, for the Home preview.
+    /// <summary>The nearest trip after today that is not completed, shown as a preview on
+    /// the home screen.</summary>
     public async Task<Trip?> GetUpcomingAssignmentAsync(int userId)
     {
         var today = DateTime.Today.ToString("yyyy-MM-dd");
@@ -169,7 +189,7 @@ public class DriverDataService
         return r.Models.FirstOrDefault();
     }
 
-    // Latest checklist submitted for a trip (null = none yet).
+    /// <summary>The most recent checklist submitted for a trip, or null if there is none.</summary>
     public async Task<BusChecklist?> GetChecklistAsync(string tripId)
     {
         var r = await _supabase.From<BusChecklist>()
@@ -205,21 +225,25 @@ public class DriverDataService
         return r.Models;
     }
 
-    // Messages the driver should see: broadcast (all) + route msgs for any route
-    // the driver runs + driver-targeted msgs. Capped to the last 14 days so the
-    // history stays small. Volume is tiny -> resolve route/driver match client-side.
+    /// <summary>
+    /// Messages this driver should see: broadcasts, messages for any route they run, and
+    /// messages addressed to them directly.
+    /// </summary>
+    /// <remarks>
+    /// Limited to the last 14 days to keep the history small. Message volume is low
+    /// enough that route and driver matching is resolved on the device.
+    /// </remarks>
     public async Task<List<MessageModel>> GetMessagesAsync(int userId)
     {
         var cutoff = PhTime.Now.AddDays(-14);
 
-        // Never surface messages sent before this account existed. Without this a brand
-        // new driver inherits the whole 14-day broadcast/route backlog (broadcasts match
-        // everyone; route msgs match any route they're assigned to). Clamp cutoff up to
-        // the account's creation time.
+        // Messages sent before the account existed are never shown. Broadcasts match
+        // every driver and route messages match any route they are assigned to, so
+        // without this clamp a new driver would inherit the entire 14-day backlog.
         var user = await GetUserAsync(userId);
         if (user is not null && user.CreatedAt > cutoff) cutoff = user.CreatedAt;
 
-        // route ids this driver runs (all-time; small set)
+        // Route identifiers this driver has ever run. A small set.
         var trips = await _supabase.From<Trip>()
             .Filter("driver_id", Operator.Equals, userId.ToString())
             .Get();
@@ -242,7 +266,8 @@ public class DriverDataService
         }).ToList();
     }
 
-    // Read state only meaningful for driver-targeted msgs (1 recipient).
+    /// <summary>Read state, which is meaningful only for messages addressed to a single
+    /// driver.</summary>
     public async Task MarkMessageReadAsync(long id)
         => await PatchAsync($"messages?message_id=eq.{id}", new { is_read = true });
 
@@ -263,8 +288,8 @@ public class DriverDataService
         return (u is not null && u.RoleId == 2 && u.AccountStatus == "Activated") ? u : null;
     }
 
-    // Phase 7: profile writes go through the users_app view (no hash column there,
-    // and the view pins a JWT caller to their own row).
+    // Profile writes go through the users_app view, which exposes no password hash column
+    // and restricts an authenticated caller to their own row.
     public async Task StampLoginAsync(int userId)
         => await PatchAsync($"users_app?user_id=eq.{userId}", new { last_login = PhTime.Now });
 
@@ -278,21 +303,28 @@ public class DriverDataService
             updated_at = PhTime.Now
         });
 
-    // (7d: legacy on-device password paths removed — change-password edge fn is the
-    // ONLY writer of password_hash outside the web dashboard.)
+    // Outside the web dashboard, the change-password edge function is the only writer of
+    // password_hash. The app never touches it.
 
-    // Returns the inserted row so the caller has the generated checklist_id (needed to
-    // link a maintenance incident when the inspection fails).
+    /// <summary>
+    /// Submits a checklist and returns the inserted row, so the caller has the generated
+    /// identifier needed to link a maintenance incident when the inspection fails.
+    /// </summary>
     public async Task<BusChecklist?> SubmitChecklistAsync(BusChecklist checklist)
     {
         var r = await _supabase.From<BusChecklist>().Insert(checklist);
         return r.Models.FirstOrDefault();
     }
 
-    // A failed inspection opens a maintenance incident (an unresolved maintenance_log) so the
-    // flag becomes a permanent, reviewable record — surviving the bus later going On Trip —
-    // instead of only flipping the volatile vehicle_status. checklist_id links it back to the
-    // submitted inspection.
+    /// <summary>
+    /// Opens a maintenance incident for a failed inspection.
+    /// </summary>
+    /// <remarks>
+    /// The incident is an unresolved maintenance log entry, which makes the fault a
+    /// permanent reviewable record that survives the bus later going on trip. Flipping
+    /// vehicle_status alone would not, because that value is overwritten. The checklist
+    /// identifier links the incident back to the inspection that raised it.
+    /// </remarks>
     public async Task OpenInspectionIncidentAsync(int checklistId, string vehicleId, string tripId, List<string> issues)
     {
         await PostAsync("maintenance_logs", new
@@ -320,7 +352,8 @@ public class DriverDataService
         return r.Models.FirstOrDefault()?.StandardFare ?? 0m;
     }
 
-    // Trip writes via raw REST PATCH (column-targeted, no `date` clobber, Android-safe).
+    // Trip writes use a column-targeted REST PATCH, which works on Android and leaves the
+    // `date` column alone.
     public async Task StartTripAsync(string tripId)
     {
         var t = await GetTripAsync(tripId);

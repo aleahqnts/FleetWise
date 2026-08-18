@@ -3,7 +3,7 @@ using SQLite;
 namespace FleetWiseMobile.Models;
 
 // Durable "trip ended" record. EndTrip enqueues this so the final boarded count
-// + revenue reach Supabase even if the driver was offline when ending — fixes
+// + revenue reach Supabase even if the driver was offline when ending. Fixes
 // trips.total_boarded drifting below the telemetry last-log (audit accuracy).
 public class PendingTripFinalize
 {

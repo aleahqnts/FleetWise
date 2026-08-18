@@ -29,15 +29,15 @@ public class MainActivity : MauiAppCompatActivity
     protected override void OnResume()
     {
         base.OnResume();
-        // Register on first resume (after BlazorWebView wired its own back handler) so
-        // OURS has top priority. We route the press through Blazor by explicit up-target
-        // rather than letting the WebView walk its own history, which can hold the login
-        // page and redirect bounces.
+        // Registered on the first resume, after the BlazorWebView has installed its own
+        // back handler, so this one takes priority. The press is routed through Blazor by
+        // explicit up-target rather than through the WebView's history, which can contain
+        // the sign-in page and any redirect that bounced through it.
         if (_backCallback is null)
         {
             _backCallback = new ConfirmExitCallback(this);
             OnBackPressedDispatcher.AddCallback(this, _backCallback);
-            // Blazor cannot background an Android task, so it asks us to.
+            // Blazor cannot background an Android task, so the confirmation calls back here.
             BackNavigation.ExitApp = () => MoveTaskToBack(true);
         }
     }
@@ -49,11 +49,11 @@ public class MainActivity : MauiAppCompatActivity
 
         public override void HandleOnBackPressed()
         {
-            // Somewhere to go up to -> go there. The prompt is only for the top of the app.
+            // Navigate up where there is somewhere to go. The prompt is only for the top.
             if (BackNavigation.TryGoBack()) return;
 
-            // The app draws its own confirmation, in the app's own colours. The system
-            // dialog below is the fallback for the moment before the WebView is ready.
+            // The app draws its own confirmation in its own colours. The system dialog
+            // below covers the window before the WebView has rendered.
             if (BackNavigation.ExitPrompt?.Invoke() == true) return;
 
             new AndroidX.AppCompat.App.AlertDialog.Builder(_activity)

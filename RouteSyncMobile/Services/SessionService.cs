@@ -3,9 +3,10 @@ using Microsoft.Maui.Storage;
 
 namespace FleetWiseMobile.Services;
 
-// Holds the logged-in driver for the app session and persists a lightweight
-// "remember me" token (user_id + Phase-7 JWT) in SecureStorage so the driver
-// stays logged in across launches.
+/// <summary>
+/// Holds the signed-in driver for the session, and persists a small token, the user
+/// identifier and JWT, in secure storage so the driver stays signed in across launches.
+/// </summary>
 public class SessionService
 {
     private const string UidKey = "fw_uid";
@@ -34,15 +35,15 @@ public class SessionService
         CurrentUser = user;
         await SecureStorage.Default.SetAsync(UidKey, user.UserId.ToString());
 
-        // Persist the driver JWT (set by AuthService on a successful edge-fn login;
-        // null on the anon fallback path — then remember-me works exactly as before).
+        // Persist the driver JWT, which the authentication service sets on a successful
+        // sign-in.
         if (SupabaseConfig.Jwt is not null)
             await SecureStorage.Default.SetAsync(JwtKey, SupabaseConfig.Jwt);
         else
             SecureStorage.Default.Remove(JwtKey);
     }
 
-    // Re-hydrate the session from SecureStorage on app launch.
+    /// <summary>Restores the session from secure storage at launch.</summary>
     public async Task<bool> RestoreAsync()
     {
         if (IsLoggedIn) return true;
@@ -50,9 +51,9 @@ public class SessionService
         var uid = await SecureStorage.Default.GetAsync(UidKey);
         if (string.IsNullOrEmpty(uid)) return false;
 
-        // Re-attach the saved JWT BEFORE the user fetch so the read itself is
-        // authenticated (required once RLS flips; harmless before). The postgrest
-        // GetHeaders closure picks it up from SupabaseConfig.Bearer automatically.
+        // The saved JWT is reattached before the user is fetched, so that read is itself
+        // authenticated. The postgrest header closure takes it from SupabaseConfig.Bearer
+        // on every request.
         var jwt = await SecureStorage.Default.GetAsync(JwtKey);
         if (!string.IsNullOrEmpty(jwt))
             SupabaseConfig.Jwt = jwt;
@@ -67,8 +68,8 @@ public class SessionService
         }
         catch (Exception ex)
         {
-            // Expired/revoked JWT makes PostgREST reject the request outright.
-            // Treat as logged out and clear the stale token so anon paths recover.
+            // An expired or revoked JWT makes the request fail outright. Treat that as
+            // signed out and clear the stale token.
             System.Diagnostics.Debug.WriteLine($"[Session.Restore] {ex.Message}");
             ClearJwt();
             return false;
