@@ -108,11 +108,21 @@
     var last = Math.Min(Model.Page * Model.PageSize, Model.Total);
 }
 
-<h2 class="au-title">Audit Log</h2>
-<p class="au-subtitle">
-    Every sign in, account change, and fleet decision, recorded by the server as it happened.
-    Entries can be read but never edited or deleted, including by an admin.
-</p>
+@* Refresh sits with the title, not with Apply: it is not a filter, and down in the filter
+   row it was the first thing to wrap onto a line of its own. *@
+<div class="au-head">
+    <div>
+        <h2 class="au-title">Audit Log</h2>
+        <p class="au-subtitle">Read-only. Entries cannot be edited or deleted.</p>
+    </div>
+    <div class="au-head-actions">
+        <span class="au-updated" id="auUpdated" title="Refreshes on its own every 30 seconds"></span>
+        <button type="button" class="au-btn au-btn--outline au-btn--icon" id="auRefreshBtn"
+                onclick="auRefresh(true)" title="Load new entries without losing your filters">
+            <i class="ti ti-refresh" aria-hidden="true"></i> Refresh
+        </button>
+    </div>
+</div>
 
 <!-- FILTERS -->
 <form method="get" class="au-filters">
@@ -178,6 +188,7 @@
 </form>
 
 <!-- TABLE -->
+<div id="auResults">
 <div class="au-card">
     <div class="au-card-header">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -325,20 +336,79 @@
         }
     </div>
 }
+</div>
 
 <script>
     // Click a row to open its detail row underneath. Plain DOM, no fetch: the detail is
-    // already on the page, so opening it is instant and works with the browser's back button.
-    document.querySelectorAll('.au-row--clickable').forEach(function (row) {
-        row.addEventListener('click', function () {
-            const detail = document.getElementById(row.dataset.detail);
-            if (!detail) return;
-            detail.hidden = !detail.hidden;
-            const toggle = row.querySelector('.au-toggle');
-            if (toggle) toggle.textContent = detail.hidden ? '+' : '-';
-            row.classList.toggle('au-row--open', !detail.hidden);
+    // already on the page, so opening it is instant and works with the browser's back
+    // button. Re-run after a refresh swaps the table out, or the new rows are dead.
+    function auBindRows() {
+        document.querySelectorAll('.au-row--clickable').forEach(function (row) {
+            row.addEventListener('click', function () {
+                const detail = document.getElementById(row.dataset.detail);
+                if (!detail) return;
+                detail.hidden = !detail.hidden;
+                const toggle = row.querySelector('.au-toggle');
+                if (toggle) toggle.textContent = detail.hidden ? '+' : '-';
+                row.classList.toggle('au-row--open', !detail.hidden);
+            });
         });
-    });
+    }
+    auBindRows();
+
+    // Refresh in place. Re-fetches THIS url, so every filter and the page number come
+    // along, and swaps only #auResults. The filter form sits outside it on purpose: a
+    // half-typed search stays half-typed instead of being wiped by the 30s poll.
+    let auBusy = false;
+
+    function auStamp() {
+        const el = document.getElementById('auUpdated');
+        if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    async function auRefresh(manual) {
+        if (auBusy) return;
+        auBusy = true;
+        const btn = document.getElementById('auRefreshBtn');
+        if (manual && btn) btn.classList.add('spinning');
+        try {
+            // Rows the reader had expanded. Ids are audit_log ids and the table is
+            // append-only, so a row that is still on the page is still the same row.
+            const open = [...document.querySelectorAll('.au-detail-row:not([hidden])')].map(el => el.id);
+
+            const res = await fetch(window.location.href, { headers: { 'X-Requested-With': 'fetch' } });
+            const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+            const fresh = doc.getElementById('auResults');
+            const cur = document.getElementById('auResults');
+            if (fresh && cur) {
+                cur.innerHTML = fresh.innerHTML;
+                auBindRows();
+                open.forEach(function (id) {
+                    const detail = document.getElementById(id);
+                    if (!detail) return; // scrolled onto another page by newer entries
+                    detail.hidden = false;
+                    const row = document.querySelector('[data-detail="' + id + '"]');
+                    if (!row) return;
+                    row.classList.add('au-row--open');
+                    const toggle = row.querySelector('.au-toggle');
+                    if (toggle) toggle.textContent = '-';
+                });
+            }
+            auStamp();
+        } catch (e) {
+            console.warn('audit refresh failed', e);
+        } finally {
+            auBusy = false;
+            if (btn) btn.classList.remove('spinning');
+        }
+    }
+
+    setInterval(function () {
+        if (document.hidden) return; // nobody is looking; do not poll a background tab
+        auRefresh(false);
+    }, 30000);
+
+    auStamp();
 </script>
 
 <style>
@@ -357,15 +427,14 @@
         font-weight: 700;
         color: var(--au-text);
         font-family: 'Segoe UI', sans-serif;
-        margin-bottom: 6px;
+        margin: 0;
     }
 
     .au-subtitle {
         font-size: 0.875rem;
         color: var(--au-muted);
         font-family: 'Segoe UI', sans-serif;
-        max-width: 720px;
-        margin-bottom: 20px;
+        margin: 4px 0 0;
     }
 
     /* ── Filter bar ─────────────────────────────────────────── */
@@ -438,6 +507,34 @@
     }
 
     .au-btn--outline:hover { border-color: var(--au-teal); color: var(--au-teal); }
+
+    .au-btn--icon {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .au-btn--icon i { font-size: 15px; line-height: 1; }
+    .au-btn--icon.spinning i { animation: auSpin .7s linear infinite; }
+
+    @@keyframes auSpin { to { transform: rotate(360deg); } }
+
+    .au-updated { font-size: .78rem; color: var(--au-muted); }
+
+    .au-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+    }
+
+    .au-head-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
 
     .au-btn--off {
         opacity: 0.45;
