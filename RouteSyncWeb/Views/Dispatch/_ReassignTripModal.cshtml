@@ -522,17 +522,35 @@
         });
 
         
+
+    // Options are built as elements with textContent, never glued together as HTML.
+    // Plate numbers and driver names are typed by admins and come straight from the
+    // database, so with innerHTML a name like `<img src=x onerror=...>` ran in the
+    // session of whoever opened this modal next.
+    function rtmFillSelect(sel, placeholder, items, selectedId) {
+        sel.replaceChildren();
+        const blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = placeholder;
+        sel.appendChild(blank);
+        (items || []).forEach(function (it) {
+            const opt = document.createElement('option');
+            opt.value = it.value;
+            opt.textContent = it.label;
+            if (selectedId != null && it.value == selectedId) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    }
+
             function refreshRtmVehicles(selectedId) {
         if (!_rtmOptions) return;
 
         const list = _rtmOptions.vehicles;
 
-        vehicleSel.innerHTML = list.length === 0
-            ? '<option value="">No vehicles available for this shift</option>'
-            : '<option value="">Select a vehicle…</option>'
-              + list.map(v =>
-                  `<option value="${v.vehicleId}" ${v.vehicleId === selectedId ? 'selected' : ''}>${v.vehicleId} | ${v.plateNumber}</option>`
-              ).join('');
+        rtmFillSelect(vehicleSel,
+            list.length === 0 ? 'No vehicles available for this shift' : 'Select a vehicle…',
+            list.map(v => ({ value: v.vehicleId, label: v.vehicleId + ' | ' + v.plateNumber })),
+            selectedId);
 
         vehicleHint.textContent = list.length === 0
             ? 'No non-flagged vehicles are free for this shift.'
@@ -545,12 +563,10 @@
 
             const list = _rtmOptions.drivers;
 
-            driverSel.innerHTML = list.length === 0
-                ? '<option value="">No drivers available for this shift</option>'
-                : '<option value="">Select a driver…</option>'
-                  + list.map(d =>
-                      `<option value="${d.driverId}" ${d.driverId == selectedId ? 'selected' : ''}>${d.driverName}</option>`
-                  ).join('');
+            rtmFillSelect(driverSel,
+                list.length === 0 ? 'No drivers available for this shift' : 'Select a driver…',
+                list.map(d => ({ value: d.driverId, label: d.driverName })),
+                selectedId);
 
             driverHint.textContent = list.length === 0
                 ? 'No available drivers are free for this shift.'
