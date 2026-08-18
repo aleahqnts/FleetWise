@@ -241,7 +241,15 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                         active != null && tripId == active.tripId -> {
                             // Manual may have counted while we were dead -> absorb, never lower.
                             count = maxOf(count, active.totalBoarded)
-                            publishCounting(lastFlushOk = (state.value as? UiState.Counting)?.lastFlushOk ?: true)
+                            // Carry the stall flag too. This poll runs alongside the flush
+                            // loop, so dropping it here let the two loops fight: flush set
+                            // "camera stalled", this republished without it, and the status
+                            // line flickered between stalled and "sync retrying" while the
+                            // camera stayed dead the whole time.
+                            publishCounting(
+                                lastFlushOk = (state.value as? UiState.Counting)?.lastFlushOk ?: true,
+                                cameraStalled = cameraStalled()
+                            )
                         }
                         active == null && tripId != null -> {
                             // Trip ended. Finalize owns status/times, but total_boarded gets

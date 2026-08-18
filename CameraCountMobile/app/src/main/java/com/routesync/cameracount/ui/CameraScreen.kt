@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -44,6 +45,13 @@ import com.routesync.cameracount.data.Prefs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
+
+/**
+ * Frame silence that counts as a dead camera. Deliberately under the ViewModel's own
+ * 12s stall threshold, so the watchdog gets a rebind in before the trip is handed to
+ * the driver's manual counter. A normal frame gap is milliseconds, even throttled.
+ */
+private const val STALL_MS = 10_000L
 
 /** Immutable per-frame snapshot for the overlay (built on the analyzer thread). */
 private data class OverlayBox(val l: Float, val t: Float, val r: Float, val b: Float, val counted: Boolean)
@@ -186,10 +194,41 @@ private fun DetectionSurface(
     // INSTANT (analyzer callback below), so full rate resumes the moment someone shows.
     var lastPersonAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var dimmed by remember { mutableStateOf(false) }
+
+    // Camera watchdog. A CameraX session can die on its own (HAL wedge, another app
+    // grabbing the camera, a thermal kill of the pipeline) and it dies QUIETLY: the
+    // preview goes black, the analyzer simply stops being called, and nothing throws.
+    // The ViewModel notices and reports "camera stalled", but reporting was all that
+    // ever happened - the binding is built once in the AndroidView factory, so the only
+    // way back was a lens toggle or an app restart. On a bus with the phone mounted on
+    // the dashboard, "go touch it" is not a recovery plan.
+    //
+    // Bumping bindEpoch re-keys the AndroidView below, which tears the session down and
+    // builds a fresh one. Frames restart -> the stall clears by itself.
+    var lastFrameMs by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    var bindEpoch by remember { mutableIntStateOf(0) }
+    val framesFlowing = { android.os.SystemClock.elapsedRealtime() - lastFrameMs < STALL_MS }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(5_000)
+            if (!framesFlowing()) {
+                // Reset first: the rebind needs its own grace window, or the next tick
+                // fires again while the camera is still opening.
+                lastFrameMs = android.os.SystemClock.elapsedRealtime()
+                bindEpoch++
+            }
+        }
+    }
+
     if (counting) LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(5_000)
-            dimmed = System.currentTimeMillis() - lastPersonAt > 60_000 && !editingLine
+            // Never dim over a dead camera. No frames means no detections, which the
+            // idle test reads as an empty bus - so a stalled camera would black out the
+            // screen on top of an already black preview, hiding the fault completely and
+            // leaving a tap as the only way to see anything.
+            dimmed = System.currentTimeMillis() - lastPersonAt > 60_000 &&
+                !editingLine && framesFlowing()
         }
     }
 
@@ -260,8 +299,10 @@ private fun DetectionSurface(
     Box(Modifier.fillMaxSize()) {
         // key(useBack): toggling the lens tears the whole binding down and rebuilds it
         // with the other camera. Gated until the pref loads so the right lens comes up.
+        // key(bindEpoch): same teardown, used by the watchdog above to revive a session
+        // that died on its own.
         useBack?.let { back ->
-            key(back) {
+            key(back, bindEpoch) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
@@ -305,6 +346,7 @@ private fun DetectionSurface(
                                     throttle = { maxOf(thermalSkip, if (dimmed) 4 else 1) }
                                 ) { dets, w, h, ms ->
                                     vm?.noteFrame() // stall guard: silence -> heartbeat stops -> manual fallback
+                                    lastFrameMs = android.os.SystemClock.elapsedRealtime() // watchdog
                                     if (dets.isNotEmpty()) {
                                         lastPersonAt = System.currentTimeMillis()
                                         // Phase 9a instant un-dim: don't wait for the 5s loop —
@@ -447,32 +489,6 @@ private fun DetectionSurface(
                     modifier = Modifier.background(Color(0xAA000000)).padding(horizontal = 10.dp, vertical = 4.dp)
                 )
                 Spacer(Modifier.height(12.dp))
-                // Lens choice lives here with the other mount-time decisions. Switching
-                // flips the scene -> re-drag the line after switching.
-                OutlinedButton(onClick = {
-                    val next = !(useBack ?: false)
-                    scope.launch {
-                        prefs.saveUseBackCamera(next)
-                        // Phase 8a: lens choice is part of device_config — push it up with
-                        // the SAVED line (a drag in progress isn't saved yet). Offline is
-                        // fine: the follower self-heals (DB behind local -> push).
-                        val v = nextConfigVersion(prefs)
-                        runCatching {
-                            val cal = prefs.lineCalibration.first()
-                            com.routesync.cameracount.data.SupabaseApi.upsertDeviceConfig(
-                                prefs.deviceId(), cal.ax, cal.ay, cal.bx, cal.by,
-                                cal.inwardSign, next, v
-                            )
-                        }
-                    }
-                    useBack = next
-                }) {
-                    Text(
-                        if (useBack == true) "Front camera" else "Back camera",
-                        color = Color.White
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
                 Row {
                     OutlinedButton(onClick = { inwardSign = -inwardSign }) {
                         Text("Flip boarding side", color = Color.White)
@@ -509,6 +525,40 @@ private fun DetectionSurface(
                         }
                     }) { Text("Cancel", color = Color.White) }
                 }
+            }
+        }
+
+        // Lens switch. Icon only, and up top: it belongs with the camera itself, not with
+        // the line-editing controls at the bottom. TopCenter on purpose - the HUD owns
+        // TopStart and the calibrate screen's Close button owns TopEnd.
+        if (editingLine) {
+            IconButton(
+                onClick = {
+                    val next = !(useBack ?: false)
+                    scope.launch {
+                        prefs.saveUseBackCamera(next)
+                        // Phase 8a: lens choice is part of device_config - push it up with
+                        // the SAVED line (a drag in progress isn't saved yet). Offline is
+                        // fine: the follower self-heals (DB behind local -> push).
+                        val v = nextConfigVersion(prefs)
+                        runCatching {
+                            val cal = prefs.lineCalibration.first()
+                            com.routesync.cameracount.data.SupabaseApi.upsertDeviceConfig(
+                                prefs.deviceId(), cal.ax, cal.ay, cal.bx, cal.by,
+                                cal.inwardSign, next, v
+                            )
+                        }
+                    }
+                    useBack = next
+                },
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 12.dp)
+                    .clip(CircleShape).background(Color(0xAA000000))
+            ) {
+                Icon(
+                    RsIcons.Cameraswitch,
+                    contentDescription = if (useBack == true) "Switch to front camera" else "Switch to back camera",
+                    tint = Color.White
+                )
             }
         }
 
