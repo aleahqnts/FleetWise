@@ -20,16 +20,18 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * Phase 9b: always-on trip watcher. The driver must NEVER have to touch the camera
- * phone: when Start Trip is tapped on the driver app, THIS service (alive even with the
- * UI closed) sees the Active trip on the next poll and brings MainActivity up itself.
+ * Always-on trip watcher, so a driver never has to touch the camera phone.
  *
- * Launch path: direct startActivity when "Display over other apps" is granted
- * (one-time install setup); otherwise a full-screen-intent notification, which
- * auto-launches on a locked/screen-off fixture and is a one-tap banner otherwise.
+ * The service stays alive with the UI closed. When a trip starts from the driver app it
+ * sees the active trip on its next poll and opens MainActivity itself.
  *
- * Runs from boot (BootReceiver) and from every app open. Skips work while the UI is
- * visible — the ViewModel's own 4s poll owns the live path then.
+ * Two launch paths. With the overlay permission granted, which is part of one-time
+ * installation, the activity is started directly. Without it, a notification carrying a
+ * full-screen intent is posted instead: on a locked or sleeping fixture that launches the
+ * app, and otherwise it is a single-tap banner.
+ *
+ * Runs from boot and from every app launch. While the UI is on screen it does nothing,
+ * because the view model's own poll owns the live path.
  */
 class WatcherService : Service() {
 
@@ -48,7 +50,7 @@ class WatcherService : Service() {
         val prefs = Prefs(this)
         while (true) {
             try {
-                // UI on screen -> its ViewModel handles trips; nothing to do here.
+                // With the UI on screen its view model handles trips.
                 if (!MainActivity.uiVisible) {
                     val vehicle = prefs.vehicleId.first()
                     if (!vehicle.isNullOrBlank()) {
@@ -58,7 +60,7 @@ class WatcherService : Service() {
                     }
                 }
             } catch (_: Exception) {
-                // Offline / transient: try again next tick.
+                // Offline or transient failure. Retried on the next tick.
             }
             delay(15_000)
         }
@@ -68,8 +70,8 @@ class WatcherService : Service() {
         val launch = Intent(this, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-        // Direct background launch is legal with the overlay grant; otherwise fall
-        // back to a full-screen-intent notification.
+        // A direct background launch is permitted only with the overlay grant. Without
+        // it, fall back to a notification carrying a full-screen intent.
         if (Settings.canDrawOverlays(this)) {
             if (runCatching { startActivity(launch) }.isSuccess) return
         }
@@ -124,7 +126,7 @@ class WatcherService : Service() {
         private const val NOTIF_ID = 3001
         private const val TRIP_NOTIF_ID = 3002
 
-        /** Idempotent: safe to call from boot, app open, or bind. */
+        /** Idempotent, so it is safe to call from boot, from an app launch, or on bind. */
         fun start(context: Context) {
             val intent = Intent(context, WatcherService::class.java)
             runCatching {

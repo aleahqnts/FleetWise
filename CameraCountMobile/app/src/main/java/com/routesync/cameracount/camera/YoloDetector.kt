@@ -10,16 +10,17 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * YOLO11n person detector on LiteRT/TFLite. GPU delegate when the device supports it,
- * 4-thread CPU (XNNPACK) otherwise — emulators usually land on CPU.
+ * YOLO11n person detector running on TFLite, with the GPU delegate where it works and
+ * four CPU threads otherwise.
  *
- * Model file: app/src/main/assets/yolo11n_float32.tflite (see assets/README.txt for the
- * one-line Ultralytics export). Missing model -> tryCreate returns null and the UI shows
- * instructions instead of crashing.
+ * The model lives at `app/src/main/assets/yolo11n_float32.tflite`; `assets/README.txt`
+ * has the export command. A missing model makes [tryCreate] return null so the UI can
+ * show instructions rather than crash.
  *
- * Output contract (Ultralytics TFLite export): float32 [1, 84, N] — 4 box coords
- * (cx, cy, w, h, normalized) + 80 COCO class scores per anchor. Person = class 0.
- * Transposed [1, N, 84] exports are auto-detected.
+ * Output from an Ultralytics TFLite export is float32 shaped [1, 84, N]: four normalized
+ * box coordinates as centre x, centre y, width and height, then 80 COCO class scores per
+ * anchor, of which person is class 0. Transposed [1, N, 84] exports are detected and
+ * handled.
  */
 class YoloDetector private constructor(
     private val interpreter: Interpreter,
@@ -27,8 +28,8 @@ class YoloDetector private constructor(
     private val nchw: Boolean, // true = [1,3,s,s] channels-first (ONNX-style export)
     private val outShape: IntArray,
     val usingGpu: Boolean,
-    // Held only so close() can free it: the delegate owns native GL resources that the
-    // interpreter does not release for us.
+    // Held only so close() can free it. The delegate owns native GL resources that the
+    // interpreter does not release.
     private val gpuDelegate: GpuDelegate?
 ) {
     /** Box normalized 0..1 in the letterboxed input-square space. */
@@ -36,28 +37,29 @@ class YoloDetector private constructor(
 
     companion object {
         const val MODEL_ASSET = "yolo11n_float32.tflite"
-        /** UI/new-track confidence. Detector emits down to CONF_THRESHOLD so the
-         *  tracker's second (low-conf rescue) stage can keep occluded tracks alive. */
+        /** Confidence required to display a box or start a new track. The detector emits
+         *  down to CONF_THRESHOLD so the tracker's low-confidence rescue stage can keep
+         *  occluded tracks alive. */
         const val HIGH_CONF = 0.40f
         private const val CONF_THRESHOLD = 0.25f
-        // NMS keeps a box unless it overlaps a higher-scoring one by > this. Set high so
-        // two people standing close (moderate overlap) stay as TWO boxes; only near-
-        // identical duplicates on the SAME person get merged.
+        // Non-maximum suppression keeps a box unless it overlaps a higher-scoring one by
+        // more than this. Set high so two people standing close stay as two boxes, and
+        // only near-identical duplicates of one person are merged.
         private const val IOU_THRESHOLD = 0.55f
         private const val PERSON_CLASS = 0
 
         /**
-         * The GPU delegate is worth real effort: on CPU this model runs ~80ms a frame,
-         * and sustained 4-thread inference is the app's main heat source in a closed bus,
-         * which then trips the thermal guard and cuts the framerate further.
+         * Loads the model, preferring the GPU delegate.
          *
-         * `CompatibilityList` is an allowlist shipped inside TFLite, not a probe of the
-         * actual device, and it is both stale and conservative - it says no to plenty of
-         * hardware that runs the delegate fine. So the list is a hint about which OPTIONS
-         * to use, never a veto: we build the interpreter with GPU and only fall back to
-         * CPU if that genuinely fails. Costs one failed construction on devices that
-         * really cannot do it, and buys the delegate on every device the list is simply
-         * wrong about.
+         * The delegate roughly halves inference time. On CPU the model runs at about 80ms
+         * a frame, and sustained four-thread inference is the largest heat source in a
+         * closed bus, which trips the thermal guard and reduces the frame rate further.
+         *
+         * `CompatibilityList` is an allowlist shipped inside TFLite rather than a probe of
+         * the device, and it is conservative enough to refuse hardware that runs the
+         * delegate correctly. It is therefore treated as a hint about which options to
+         * use, not as a veto: the interpreter is built with the delegate and falls back to
+         * CPU only if that construction fails.
          */
         fun tryCreate(context: Context): YoloDetector? = try {
             val bytes = context.assets.open(MODEL_ASSET).use { it.readBytes() }
@@ -74,7 +76,7 @@ class YoloDetector private constructor(
             var itp = delegate?.let { d ->
                 runCatching { Interpreter(model, Interpreter.Options().addDelegate(d)) }
                     .onFailure {
-                        // Unsupported op, driver refusal, no GL context. Not fatal.
+                        // An unsupported operation, a driver refusal, or no GL context. Not fatal.
                         android.util.Log.w("YoloDetector", "GPU delegate unusable, using CPU: ${it.message}")
                         runCatching { d.close() }
                         delegate = null
@@ -84,7 +86,8 @@ class YoloDetector private constructor(
             }
             if (itp == null) itp = Interpreter(model, Interpreter.Options().setNumThreads(4))
 
-            // NHWC [1,s,s,3] (standard TFLite) or NCHW [1,3,s,s] (ONNX-style) — detect.
+            // Either NHWC [1,s,s,3], standard for TFLite, or NCHW [1,3,s,s] from an
+            // ONNX-style export.
             val inShape = itp.getInputTensor(0).shape()
             val nchw = inShape[1] == 3
             val size = if (nchw) inShape[2] else inShape[1]
@@ -101,30 +104,30 @@ class YoloDetector private constructor(
     private val input: ByteBuffer =
         ByteBuffer.allocateDirect(inputSize * inputSize * 3 * 4).order(ByteOrder.nativeOrder())
     private val pixels = IntArray(inputSize * inputSize)
-    // [1, attrs, anchors] regardless of export layout; normalized after read.
+    // Read as [1, attrs, anchors] whichever layout the export used.
     private val transposed = outShape[1] > outShape[2] // [1, N, 84] instead of [1, 84, N]
     private val attrs = if (transposed) outShape[2] else outShape[1]
     private val anchors = if (transposed) outShape[1] else outShape[2]
     private val out = Array(1) { Array(outShape[1]) { FloatArray(outShape[2]) } }
 
-    // close() can race an in-flight analyze on the camera executor; synchronized +
-    // flag make the last frame drain safely instead of running on freed native memory.
+    // close() can race a frame still being analyzed on the camera executor. The lock and
+    // this flag let that frame drain instead of running against freed native memory.
     @Volatile
     private var closed = false
 
-    /** [bmp] must already be [inputSize] x [inputSize] (letterboxed by the analyzer). */
+    /** [bmp] must already be [inputSize] square, letterboxed by the analyzer. */
     @Synchronized
     fun detect(bmp: Bitmap): List<Det> {
         if (closed) return emptyList()
         bmp.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
         input.rewind()
         if (nchw) {
-            // channels-first: all R, then all G, then all B
+            // Channels first: all red, then all green, then all blue.
             for (p in pixels) input.putFloat(((p shr 16) and 0xFF) / 255f)
             for (p in pixels) input.putFloat(((p shr 8) and 0xFF) / 255f)
             for (p in pixels) input.putFloat((p and 0xFF) / 255f)
         } else {
-            // interleaved RGB per pixel
+            // Interleaved red, green and blue per pixel.
             for (p in pixels) {
                 input.putFloat(((p shr 16) and 0xFF) / 255f)
                 input.putFloat(((p shr 8) and 0xFF) / 255f)
@@ -140,7 +143,7 @@ class YoloDetector private constructor(
             val score = v(4 + PERSON_CLASS, i)
             if (score < CONF_THRESHOLD) continue
             var cx = v(0, i); var cy = v(1, i); var w = v(2, i); var h = v(3, i)
-            // Some exports emit pixel-space boxes; normalize defensively.
+            // Some exports emit boxes in pixel space rather than normalized.
             if (cx > 2f || cy > 2f) { cx /= inputSize; cy /= inputSize; w /= inputSize; h /= inputSize }
             raw.add(Det(RectF(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), score))
         }

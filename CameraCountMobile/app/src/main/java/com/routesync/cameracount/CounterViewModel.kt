@@ -13,14 +13,19 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * Phase-1 core: the whole RouteSync bridge, with a fake +1 button standing in for the
- * camera. Phase 4 swaps the button for YOLO line-cross events — everything else stays.
+ * Bridge between the camera pipeline and the RouteSync database. Owns the trip lifecycle,
+ * the passenger count, and the device's configuration follower.
  *
- * Poll (4s):  GET Active trip for the bound vehicle -> lock on / release.
- * Flush (5s): one PATCH carries total_boarded + count_heartbeat (heartbeat freshness is
- *             how RouteSync decides to hide/show its manual counter).
- * Monotonic:  seed local count from DB on acquire; only ever raise it (max(db, local)) ->
- *             restarts, manual hand-offs, and reconnects reconcile without double counts.
+ * Three loops run against the bound vehicle:
+ *
+ * - Poll, every 4s: look for an Active trip and lock on to it or release it.
+ * - Flush, every 5s: one PATCH carrying `total_boarded` and `count_heartbeat`. Heartbeat
+ *   freshness is how RouteSync decides whether to show the driver's manual counter.
+ * - Config follower, on the same 4s tick: reconcile `device_config` in both directions.
+ *
+ * The count is monotonic. It seeds from the database when a trip is acquired and only
+ * ever rises, so restarts, manual handovers and reconnects reconcile without double
+ * counting.
  */
 class CounterViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -30,9 +35,9 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
             val vehicleId: String,
             val lastError: String?,
             val plate: String? = null,
-            val tripSummary: String? = null // "43 boarded" — shown after a trip ends
+            val tripSummary: String? = null // e.g. "43 boarded", shown after a trip ends
         ) : UiState
-        /** Double-link safeguard: another camera phone owns this trip; we watch, don't count. */
+        /** Another camera phone owns this trip. This device watches without counting. */
         data class Standby(val vehicleId: String, val tripId: String) : UiState
         data class Counting(
             val vehicleId: String,
@@ -59,14 +64,15 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
     private fun waiting(err: String? = null) =
         UiState.Waiting(vehicleId, err, plate, lastSummary)
 
-    /** Phase 6 restart resume: (tripId, count) saved before we died; consumed on re-acquire. */
+    /** Trip and count persisted before the last shutdown, consumed when the trip is re-acquired. */
     private var restored: Prefs.PendingCount? = null
 
     /**
-     * Phase 6 stall guard: the camera pipeline pings this every analyzed frame. If frames
-     * stop (camera stall, thermal shutdown of the pipeline) the flush loop STOPS writing
-     * heartbeats — going silent is the point: a stale heartbeat is exactly what makes the
-     * driver's manual counter reappear. A fake-alive heartbeat would hide a dead camera.
+     * Time of the last analyzed frame, updated by the camera pipeline.
+     *
+     * When frames stop, the flush loop stops sending heartbeats. The silence is the
+     * signal: a stale heartbeat is what makes the driver's manual counter reappear, so a
+     * heartbeat sent regardless would hide a dead camera.
      */
     @Volatile private var lastFrameAt = 0L
 
@@ -77,7 +83,7 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             deviceId = prefs.deviceId()
-            // Phase 7: attach the stored device JWT before the first DB call.
+            // Attach the stored device JWT before the first database call.
             SupabaseApi.deviceJwt = prefs.deviceJwt()
             restored = prefs.pendingCount() // survives kill/reboot mid-trip
             plate = prefs.plate.first()
@@ -93,18 +99,22 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
         const val MIN_PASSCODE = 4
 
         /**
-         * Frame silence that hands the trip to the driver's manual counter. Public because
-         * the camera watchdog in CameraScreen derives its own, shorter window from this one:
-         * a rebind has to land before the handoff, and two hand-tuned numbers in two files
-         * would only stay in that order by luck.
+         * Frame silence that hands the trip to the driver's manual counter.
+         *
+         * Public because the camera watchdog derives its own shorter window from this
+         * value. A rebind has to land before the handoff, and two independently chosen
+         * numbers in two files would hold that order only by coincidence.
          */
         const val STALL_AFTER_MS = 12_000L
     }
 
     /**
-     * Setup step 1 (post-7d fix): the fleet dropdown needs a DB read, but anon has zero
-     * access — so the passcode comes FIRST, mints the device JWT, and only then can the
-     * vehicle list load. onResult(list, null) = ready; (null, error) = show why.
+     * First setup step: exchange the fleet passcode for a device JWT, then load the
+     * vehicle list.
+     *
+     * The order is forced. Anonymous callers have no database access, so the token must
+     * exist before the dropdown can be filled. [onResult] receives either the list or a
+     * user-facing error, never both.
      */
     fun prepareFleet(passcode: String, onResult: (List<SupabaseApi.FleetVehicle>?, String?) -> Unit) {
         viewModelScope.launch {
@@ -125,16 +135,18 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Validated bind: format is checked in the UI; here we verify the vehicle actually
-     * EXISTS in the fleet before committing — a typo'd bind would otherwise sit silently
-     * "waiting for trip" forever. onResult(null) = bound; else a user-facing error.
+     * Binds this device to a vehicle, verifying that the vehicle exists before committing.
+     *
+     * The UI checks the format; this check catches a well-formed identifier for a bus
+     * that is not in the fleet, which would otherwise leave the app waiting for a trip
+     * that never arrives. [onResult] receives null on success, or a user-facing error.
      */
     fun bind(vehicle: String, passcode: String, onResult: (String?) -> Unit) {
         val v = vehicle.trim().uppercase()
         viewModelScope.launch {
-            // Phase 7 (7d: JWT-only): mint the device JWT FIRST — every call below
-            // requires it (anon has zero DB access). Wrong passcode or no server ->
-            // bind refused outright.
+            // Mint the device JWT first: every call below requires it, since anonymous
+            // callers have no database access. A wrong passcode or an unreachable server
+            // refuses the bind outright.
             when (val tok = SupabaseApi.fetchDeviceToken(deviceId, passcode)) {
                 is SupabaseApi.TokenResult.Ok -> {
                     prefs.saveDeviceJwt(tok.token)
@@ -187,8 +199,8 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
             if (!prefs.checkPasscode(passcode)) { onResult(false); return@launch }
             stopCounting()
             pollJob?.cancel()
-            // Best-effort lock release: offline unbind still unbinds locally — the DB lock
-            // then needs the admin to clear vehicles.counter_device_id manually.
+            // Best-effort lock release. An offline unbind still unbinds locally, leaving
+            // the database lock for an admin to clear from vehicles.counter_device_id.
             runCatching { SupabaseApi.releaseVehicle(vehicleId, deviceId) }
             prefs.unbind()
             _state.value = UiState.NeedsSetup
@@ -202,12 +214,12 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
         count++
         persistPending(t)
         // Carry the sync state forward. A boarding says nothing about whether the last
-        // flush reached the server, and claiming `true` here flipped the HUD to "synced"
-        // on every passenger while the bus sat in a dead zone.
+        // flush reached the server, so reporting success here would show "synced" on
+        // every passenger while the bus is in a dead zone.
         publishCounting(lastFlushOk = (state.value as? UiState.Counting)?.lastFlushOk ?: true)
     }
 
-    /** Durable write-behind: tiny DataStore commit per change, cheap at boarding rates. */
+    /** Write-behind to DataStore, one small commit per change. Cheap at boarding rates. */
     private fun persistPending(t: String) {
         val c = count
         viewModelScope.launch { prefs.savePendingCount(t, c) }
@@ -223,20 +235,21 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                     val active = SupabaseApi.findActiveTrip(vehicleId)
                     when {
                         active != null && tripId == null -> {
-                            // Claim first (double-link safeguard): only ONE camera phone may
-                            // count a trip. Losing the claim -> Standby; we retry every poll,
-                            // and the claim's stale-heartbeat rule lets us take over if the
-                            // owner dies (>30s silent).
+                            // Claim first: only one camera phone may count a trip. Losing
+                            // the claim drops this device to Standby, which retries every
+                            // poll. The claim's stale-heartbeat rule allows a takeover once
+                            // the owner has been silent for 30s.
                             if (!SupabaseApi.claimTrip(active.tripId, deviceId)) {
                                 _state.value = UiState.Standby(vehicleId, active.tripId)
                             } else {
-                                // Lock on, seed monotonic count. If we died mid-trip and THIS
-                                // is still that trip, resume from the persisted local count too
-                                // (dead-zone counts survive restart, flush on reconnect).
+                                // Lock on and seed the monotonic count. If the app died
+                                // mid-trip and this is still that trip, the persisted count
+                                // is resumed too, so counts made in a dead zone survive a
+                                // restart and flush on reconnect.
                                 tripId = active.tripId
                                 val saved = restored?.takeIf { it.tripId == active.tripId }?.count ?: 0
-                                // Pending from an OLDER trip (ended while we were dead, new trip
-                                // already started) still deserves its reconcile before we move on.
+                                // A pending count from an earlier trip, one that ended while
+                                // this device was down, still needs its reconcile.
                                 restored?.takeIf { it.tripId != active.tripId }
                                     ?.let { reconcileAndClear(it.tripId, it.count) }
                                 restored = null
@@ -249,18 +262,19 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                             }
                         }
                         active != null && tripId == active.tripId -> {
-                            // Manual may have counted while we were dead -> absorb, never lower.
+                            // The manual counter may have run while this device was down.
+                            // Absorb its total, never lower the local one.
                             count = maxOf(count, active.totalBoarded)
                             publishCounting(
                                 lastFlushOk = (state.value as? UiState.Counting)?.lastFlushOk ?: true
                             )
                         }
                         active == null && tripId != null -> {
-                            // Trip ended. Finalize owns status/times, but total_boarded gets
-                            // ONE raise-only reconcile: if we counted in a dead zone while the
-                            // driver's manual fallback wrote less, our higher count must land
-                            // even though the trip already closed. Raise-only filter -> the
-                            // normal online case is a harmless 0-row no-op.
+                            // Trip ended. Finalizing owns status and times, but total_boarded
+                            // gets one raise-only reconcile: a count made in a dead zone can
+                            // exceed what the driver's manual fallback wrote, and must still
+                            // land after the trip closes. The raise-only filter makes the
+                            // normal online case a no-op that matches no rows.
                             val endedTrip = tripId!!
                             val finalCount = count
                             lastSummary = "$finalCount boarded"
@@ -270,8 +284,8 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     }
                     if (tripId == null && active == null) {
-                        // App (re)started after the trip already ended, counts still on disk
-                        // (phone died offline mid-trip, rebooted later) -> reconcile them now.
+                        // Started up after the trip had already ended, with counts still on
+                        // disk from an offline shutdown. Reconcile them now.
                         restored?.let { r ->
                             restored = null
                             if (r.count > 0) lastSummary = "${r.count} boarded (recovered)"
@@ -281,11 +295,11 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 } catch (e: Exception) {
                     if (tripId == null) _state.value = waiting(e.message)
-                    // While counting, poll errors are tolerated; flush loop keeps trying.
+                    // While counting, poll errors are tolerated. The flush loop keeps trying.
                 }
-                // Phase 8a config follower: independent of trip state so a parked bus
-                // still obeys remote calibration. Own runCatching — a config hiccup
-                // must never break the trip poll.
+                // The config follower runs regardless of trip state, so a parked bus still
+                // obeys a remote calibration. Wrapped separately so a configuration failure
+                // cannot break the trip poll.
                 runCatching { followDeviceConfig() }
                 delay(4_000)
             }
@@ -293,17 +307,20 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Phase 8a: the `device_config` DB row is authoritative; this device FOLLOWS it.
-     * DataStore is only the offline cache (seeds the camera before the first DB read).
+     * Reconciles this device against the `device_config` row, which is authoritative.
+     * DataStore holds only an offline cache, used to seed the camera before the first
+     * successful read.
      *
-     * Per poll tick (~4s):
-     *  - DB row missing or BEHIND our local version (fresh install, or we calibrated
-     *    on-phone while offline) -> push local up. Self-healing: the DB converges to
-     *    the newest edit no matter where it happened.
-     *  - DB row NEWER -> apply it (one atomic DataStore write; CameraScreen collects
-     *    the flows, so the line moves / lens flips live and crossing state resets),
-     *    then echo config_version_applied so the driver/web sees the ✓.
-     *  - In sync -> heartbeat last_seen every ~3rd tick (~12s liveness signal).
+     * One of three things happens per poll tick:
+     *
+     * - The row is missing or behind the local version, after a fresh install or a
+     *   calibration made on the phone while offline. The local config is pushed up, so
+     *   the database converges on the newest edit wherever it was made.
+     * - The row is newer. It is applied in one DataStore write. The camera screen
+     *   collects those flows, so the line and lens change immediately and crossing state
+     *   resets. The applied version is echoed back for the driver and web views.
+     * - The two are in sync. Every third tick sends a liveness heartbeat, roughly every
+     *   12 seconds.
      */
     private var cfgTick = 0
     private suspend fun followDeviceConfig() {
@@ -323,8 +340,8 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                 prefs.applyRemoteConfig(
                     cfg.ax, cfg.ay, cfg.bx, cfg.by, cfg.inwardSign, cfg.useBackCamera, cfg.version
                 )
-                // Remote calibration applied -> its snapshot has served its purpose (§ dec 9:
-                // no lingering bus-interior images).
+                // The snapshot exists only to place the line, so it is deleted as soon as
+                // the calibration is applied. No images of bus interiors are retained.
                 if (snapshotUpAt != null) {
                     snapshotUpAt = null
                     runCatching { SupabaseApi.deleteSnapshot(deviceId) }
@@ -338,14 +355,14 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
         handleWake(cfg?.wakeRequestedAt, localV)
     }
 
-    // ------------------------------------------------------------------
-    // Phase 8c maintenance-wake: driver PATCHes wake_requested_at -> we capture ONE
-    // still (headless while Waiting; a frame tap off the live analyzer while Counting),
-    // upload it, hold "preview" until the driver saves / cancels / ~2 min timeout,
-    // then aggressively purge — no history of bus interiors ever accumulates.
-    // ------------------------------------------------------------------
+    // Maintenance wake. A driver requesting a remote calibration patches
+    // wake_requested_at, which makes this device capture one still: headless while
+    // waiting for a trip, or a frame tap off the live analyzer while counting. The image
+    // is uploaded and held in "preview" until the driver saves or cancels, or two minutes
+    // pass, then deleted. No history of bus interiors accumulates.
 
-    /** Live analyzer while Counting (CameraScreen attaches/detaches) — snapshot source. */
+    /** Analyzer for the running camera session, attached by the camera screen while
+     *  counting. Used as the snapshot source so no second session is opened. */
     @Volatile var liveAnalyzer: com.routesync.cameracount.camera.DetectorAnalyzer? = null
 
     private var lastWakeHandled: java.time.Instant? = null
@@ -355,8 +372,9 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun handleWake(wakeAt: java.time.Instant?, localV: Int) {
         val now = java.time.Instant.now()
 
-        // New wake request: newer than the last one we served, and fresh (<3 min) so a
-        // stale row from before an app restart can't fire a surprise capture.
+        // A wake request counts as new when it is later than the last one served and
+        // less than three minutes old. The age check stops a stale row from before an
+        // app restart triggering an unexpected capture.
         if (wakeAt != null && !capturing &&
             wakeAt.isAfter(now.minusSeconds(180)) &&
             (lastWakeHandled == null || wakeAt.isAfter(lastWakeHandled))
@@ -381,8 +399,8 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
-        // Timeout purge: preview held ~2 min with no apply -> delete + idle. (Apply-path
-        // purge lives in followDeviceConfig where the new version lands.)
+        // Timeout purge: a preview held for two minutes without being applied is deleted
+        // and the device returns to idle. The apply path deletes it in followDeviceConfig.
         if (snapshotUpAt != null && now.isAfter(snapshotUpAt!!.plusSeconds(120))) {
             snapshotUpAt = null
             runCatching { SupabaseApi.deleteSnapshot(deviceId) }
@@ -390,7 +408,8 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Counting: tap the live analyzer (no second camera session). Waiting: headless one-shot. */
+    /** Captures one frame: a tap on the live analyzer while counting, avoiding a second
+     *  camera session, or a headless one-shot capture while waiting. */
     private suspend fun captureFrame(): android.graphics.Bitmap? {
         liveAnalyzer?.let { an ->
             return kotlinx.coroutines.withTimeoutOrNull(10_000) {
@@ -405,7 +424,8 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    /** Downscale (max 1280 long side) + JPEG 80 — plenty for line placement, tiny upload. */
+    /** Encodes to JPEG at quality 80, with the long side capped at 1280px. Enough
+     *  resolution to place a line, small enough to upload over a mobile connection. */
     private fun toJpeg(src: android.graphics.Bitmap): ByteArray {
         val maxSide = 1280f
         val scale = minOf(1f, maxSide / maxOf(src.width, src.height))
@@ -424,9 +444,10 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                 delay(5_000)
                 val t = tripId ?: break
                 if (cameraStalled()) {
-                    // Camera dead -> stop heartbeating so RouteSync reveals manual within
-                    // 12s. The local count is kept + persisted; if frames come back we
-                    // resume flushing and max(db, local) reconciles any manual taps.
+                    // With the camera dead, stop heartbeating so RouteSync reveals the
+                    // manual counter. The local count is kept and persisted; if frames
+                    // return, flushing resumes and the monotonic merge absorbs whatever
+                    // the driver counted by hand.
                     publishCounting(lastFlushOk = false, cameraStalled = true)
                     continue
                 }
@@ -437,9 +458,10 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                     continue
                 }
                 if (!stillOwner) {
-                    // Another device took the claim (we looked dead >30s, it stole per the
-                    // rule). Discard local count — the new owner seeds from DB and counts
-                    // from here; keeping ours would inflate on a later re-claim.
+                    // Another device took the claim, which the stale-heartbeat rule allows
+                    // after 30s of silence. The local count is discarded: the new owner
+                    // seeds from the database and counts on from there, so keeping it
+                    // would inflate the total if this device claimed the trip again.
                     count = 0
                     val trip = t
                     stopCounting()
@@ -457,20 +479,22 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
         tripId = null
         count = 0
         CountingService.stop(getApplication())
-        // Pending count is NOT cleared here: it must survive until the post-trip
-        // reconcile lands (reconcileAndClear), or a dead-zone count would be lost.
+        // The pending count is deliberately left on disk. It must survive until the
+        // post-trip reconcile lands, or a count made in a dead zone would be lost.
     }
 
     /**
-     * Push our final count if it beats the DB (raise-only), then drop the persisted
-     * pending. Reconcile failing (still offline / blip) keeps the pending on disk via
-     * [restored], so the next poll pass — or the next app start — retries it.
+     * Pushes the final count if it exceeds the stored total, then clears the persisted
+     * pending count.
+     *
+     * A failed reconcile, from being offline or a transient error, puts the pending count
+     * back in [restored], so the next poll pass or the next app start retries it.
      */
     private fun reconcileAndClear(trip: String, finalCount: Int) {
         viewModelScope.launch {
             try {
                 if (finalCount > 0) SupabaseApi.reconcileFinalCount(trip, deviceId, finalCount)
-                // Clear only OUR pending — a new trip may have written fresh pending since.
+                // Clear only this trip's pending count. A newer trip may have written its own.
                 if (prefs.pendingCount()?.tripId == trip) prefs.clearPendingCount()
             } catch (_: Exception) {
                 restored = Prefs.PendingCount(trip, finalCount) // retry on a later pass
@@ -478,11 +502,10 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // cameraStalled defaults to the live answer, not to false. Several loops publish this
-    // state independently, and a `false` default meant whichever one published last wiped
-    // a stall the others had detected - the status line flickered between "camera stalled"
-    // and "sync retrying" while the camera stayed dead throughout. Only the flush loop
-    // passes it explicitly, because it has already asked.
+    // cameraStalled defaults to the live answer rather than to false. Several loops
+    // publish this state independently, so a false default lets whichever publishes last
+    // erase a stall the others detected. Only the flush loop passes it explicitly, having
+    // already evaluated it.
     private fun publishCounting(lastFlushOk: Boolean, cameraStalled: Boolean = cameraStalled()) {
         val t = tripId ?: return
         _state.value = UiState.Counting(vehicleId, t, count, lastFlushOk, cameraStalled)
