@@ -2,6 +2,8 @@
 @implements IDisposable
 @inject MessageWatch Watch
 
+<BackNavHost />
+
 <div class="app-shell">
     <div class="app-body">
         <div id="ptr-ind"><span class="ptr-spin"></span></div>
@@ -38,6 +40,8 @@
 
 @code {
     protected override void OnInitialized() => Watch.Changed += OnWatchChanged;
+
     private void OnWatchChanged() => InvokeAsync(StateHasChanged);
+
     public void Dispose() => Watch.Changed -= OnWatchChanged;
 }

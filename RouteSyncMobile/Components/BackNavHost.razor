@@ -1,0 +1,92 @@
+@implements IDisposable
+@inject NavigationManager Nav
+
+@* Answers the Android back button, and owns the exit confirmation.
+
+   Hosted by BOTH layouts: LoginLayout carries the chromeless pages (trip active,
+   checklist, calibrate), which are exactly the ones a driver is deepest inside, and
+   MainLayout carries the tab pages.
+
+   The confirmation is drawn here rather than by the platform so it wears the app's own
+   navy and teal instead of a stock grey system box. Styles are inline for the same reason
+   the message toast inlines its own: scoped CSS on this project has a habit of not
+   applying after structural edits, and a dialog that renders unstyled is worse than one
+   that renders plainly. *@
+
+@if (askingExit)
+{
+    <div style="position:fixed; inset:0; z-index:9500; background:rgba(15,22,44,.55);
+                display:flex; align-items:center; justify-content:center; padding:28px;"
+         @onclick="Stay">
+        <div style="width:100%; max-width:340px; background:#fff; border-radius:20px;
+                    padding:22px 20px 16px; box-shadow:0 24px 60px rgba(15,22,44,.45);"
+             @onclick:stopPropagation="true">
+            <p style="margin:0 0 6px; font:800 18px sans-serif; color:#1b2a56;">Close RouteSync?</p>
+            <p style="margin:0 0 18px; font:14px sans-serif; color:#5a6473; line-height:1.45;">
+                @BodyText
+            </p>
+            <div style="display:flex; gap:10px;">
+                <button @onclick="Stay"
+                        style="flex:1; padding:12px 0; border:1px solid #e2e5ec; border-radius:999px;
+                               background:#fff; color:#1b2a56; font:700 14px sans-serif; cursor:pointer;">
+                    Stay
+                </button>
+                <button @onclick="Exit"
+                        style="flex:1; padding:12px 0; border:none; border-radius:999px;
+                               background:#1b2a56; color:#fff; font:700 14px sans-serif; cursor:pointer;">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool askingExit;
+
+    // "Close" is the honest verb: the activity is sent to the background, not killed, and
+    // the tracking service keeps reporting. Saying "Exit" would suggest the trip stops.
+    private string BodyText => IsOnTrip
+        ? "The app closes but trip tracking keeps running in the background."
+        : "You can open it again any time.";
+
+    private bool IsOnTrip =>
+        Nav.ToBaseRelativePath(Nav.Uri).StartsWith("trip-active/", StringComparison.Ordinal);
+
+    protected override void OnInitialized()
+    {
+        BackNavigation.AppHandler = HandleBack;
+        BackNavigation.ExitPrompt = ShowExitPrompt;
+    }
+
+    private bool HandleBack()
+    {
+        if (askingExit) { Stay(); return true; } // back again dismisses the prompt
+
+        var path = "/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].TrimStart('/');
+        var up = BackNavigation.UpFrom(path);
+        if (up is null) return false; // top of the app -> the prompt below takes it
+        InvokeAsync(() => Nav.NavigateTo(up));
+        return true;
+    }
+
+    private bool ShowExitPrompt()
+    {
+        InvokeAsync(() => { askingExit = true; StateHasChanged(); });
+        return true;
+    }
+
+    private void Stay() => askingExit = false;
+
+    private void Exit()
+    {
+        askingExit = false;
+        BackNavigation.ExitApp?.Invoke();
+    }
+
+    public void Dispose()
+    {
+        if (BackNavigation.AppHandler == HandleBack) BackNavigation.AppHandler = null;
+        if (BackNavigation.ExitPrompt == ShowExitPrompt) BackNavigation.ExitPrompt = null;
+    }
+}
