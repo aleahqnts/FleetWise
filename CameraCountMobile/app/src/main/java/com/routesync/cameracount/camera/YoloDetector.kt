@@ -26,7 +26,10 @@ class YoloDetector private constructor(
     val inputSize: Int,
     private val nchw: Boolean, // true = [1,3,s,s] channels-first (ONNX-style export)
     private val outShape: IntArray,
-    val usingGpu: Boolean
+    val usingGpu: Boolean,
+    // Held only so close() can free it: the delegate owns native GL resources that the
+    // interpreter does not release for us.
+    private val gpuDelegate: GpuDelegate?
 ) {
     /** Box normalized 0..1 in the letterboxed input-square space. */
     data class Det(val box: RectF, val score: Float)
@@ -43,24 +46,52 @@ class YoloDetector private constructor(
         private const val IOU_THRESHOLD = 0.55f
         private const val PERSON_CLASS = 0
 
+        /**
+         * The GPU delegate is worth real effort: on CPU this model runs ~80ms a frame,
+         * and sustained 4-thread inference is the app's main heat source in a closed bus,
+         * which then trips the thermal guard and cuts the framerate further.
+         *
+         * `CompatibilityList` is an allowlist shipped inside TFLite, not a probe of the
+         * actual device, and it is both stale and conservative - it says no to plenty of
+         * hardware that runs the delegate fine. So the list is a hint about which OPTIONS
+         * to use, never a veto: we build the interpreter with GPU and only fall back to
+         * CPU if that genuinely fails. Costs one failed construction on devices that
+         * really cannot do it, and buys the delegate on every device the list is simply
+         * wrong about.
+         */
         fun tryCreate(context: Context): YoloDetector? = try {
             val bytes = context.assets.open(MODEL_ASSET).use { it.readBytes() }
             val model = ByteBuffer.allocateDirect(bytes.size).order(ByteOrder.nativeOrder())
             model.put(bytes)
             model.rewind()
 
-            val options = Interpreter.Options()
-            val compat = CompatibilityList()
-            val gpu = compat.isDelegateSupportedOnThisDevice
-            if (gpu) options.addDelegate(GpuDelegate(compat.bestOptionsForThisDevice))
-            else options.setNumThreads(4)
+            var delegate: GpuDelegate? = runCatching {
+                val compat = CompatibilityList()
+                if (compat.isDelegateSupportedOnThisDevice) GpuDelegate(compat.bestOptionsForThisDevice)
+                else GpuDelegate()
+            }.getOrNull()
 
-            val itp = Interpreter(model, options)
+            var itp = delegate?.let { d ->
+                runCatching { Interpreter(model, Interpreter.Options().addDelegate(d)) }
+                    .onFailure {
+                        // Unsupported op, driver refusal, no GL context. Not fatal.
+                        android.util.Log.w("YoloDetector", "GPU delegate unusable, using CPU: ${it.message}")
+                        runCatching { d.close() }
+                        delegate = null
+                        model.rewind() // the failed Interpreter consumed the buffer
+                    }
+                    .getOrNull()
+            }
+            if (itp == null) itp = Interpreter(model, Interpreter.Options().setNumThreads(4))
+
             // NHWC [1,s,s,3] (standard TFLite) or NCHW [1,3,s,s] (ONNX-style) — detect.
             val inShape = itp.getInputTensor(0).shape()
             val nchw = inShape[1] == 3
             val size = if (nchw) inShape[2] else inShape[1]
-            YoloDetector(itp, size, nchw, itp.getOutputTensor(0).shape(), gpu)
+            android.util.Log.i(
+                "YoloDetector", "input ${size}x$size, ${if (delegate != null) "GPU" else "CPU"}"
+            )
+            YoloDetector(itp, size, nchw, itp.getOutputTensor(0).shape(), delegate != null, delegate)
         } catch (e: Exception) {
             android.util.Log.w("YoloDetector", "model load failed: ${e.message}")
             null
@@ -140,5 +171,6 @@ class YoloDetector private constructor(
         if (closed) return
         closed = true
         interpreter.close()
+        gpuDelegate?.close()
     }
 }
