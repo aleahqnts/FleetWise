@@ -62,6 +62,9 @@ private const val STALL_MS = CounterViewModel.STALL_AFTER_MS - 6_000L
 /** Watchdog poll. Short, because a slow tick eats the headroom above. */
 private const val WATCHDOG_TICK_MS = 2_000L
 
+/** `adb logcat -s CameraWatchdog` - a stall is invisible on screen apart from black. */
+private const val WATCHDOG_TAG = "CameraWatchdog"
+
 /**
  * Backoff between rebind attempts, by consecutive failure count. A camera another app
  * is holding will not come back on the second try, and hammering it every few seconds
@@ -313,10 +316,12 @@ private fun DetectionSurface(
             lastFrameMs = android.os.SystemClock.elapsedRealtime()
             var failures = 0
             var nextAttemptAt = 0L
+            android.util.Log.i(WATCHDOG_TAG, "watching (stall=${STALL_MS}ms)")
             while (true) {
                 kotlinx.coroutines.delay(WATCHDOG_TICK_MS)
                 val now = android.os.SystemClock.elapsedRealtime()
                 if (framesFlowing()) {
+                    if (failures > 0) android.util.Log.i(WATCHDOG_TAG, "frames back after $failures rebind(s)")
                     failures = 0
                     cameraUnreachable = false
                     continue
@@ -331,8 +336,14 @@ private fun DetectionSurface(
                 tracker.resetCrossingState()
                 // Grace: the camera needs time to open before the next tick judges it.
                 lastFrameMs = now
-                nextAttemptAt = now + STALL_MS + rebindBackoffMs(failures)
+                val backoff = rebindBackoffMs(failures)
+                nextAttemptAt = now + STALL_MS + backoff
                 cameraUnreachable = failures > REBINDS_BEFORE_GIVING_UP_QUIETLY
+                android.util.Log.w(
+                    WATCHDOG_TAG,
+                    "no frames for ${STALL_MS}ms -> rebind #$failures " +
+                        "(epoch ${bindEpoch + 1}, next try in ${(STALL_MS + backoff) / 1000}s)"
+                )
                 bindEpoch++
             }
         }
@@ -378,7 +389,10 @@ private fun DetectionSurface(
                         val view = PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
                         val providerFuture = ProcessCameraProvider.getInstance(ctx)
                         providerFuture.addListener({
-                            if (myEpoch != bindEpoch) return@addListener
+                            if (myEpoch != bindEpoch) {
+                                android.util.Log.w(WATCHDOG_TAG, "epoch $myEpoch superseded, not binding")
+                                return@addListener
+                            }
                             val provider = providerFuture.get()
                             val preview = Preview.Builder().build()
                                 .also { it.surfaceProvider = view.surfaceProvider }
@@ -453,7 +467,14 @@ private fun DetectionSurface(
                             // frames instead of opening a second camera session.
                             vm?.liveAnalyzer = analyzer
                             provider.unbindAll()
-                            val cam = provider.bindToLifecycle(lifecycle, selector, preview, analysis)
+                            val cam = runCatching {
+                                provider.bindToLifecycle(lifecycle, selector, preview, analysis)
+                            }.onFailure {
+                                // Camera held elsewhere, or disabled by policy. The watchdog
+                                // sees no frames and retries on its own schedule.
+                                android.util.Log.e(WATCHDOG_TAG, "bind failed (epoch $myEpoch): ${it.message}")
+                            }.getOrNull() ?: return@addListener
+                            android.util.Log.i(WATCHDOG_TAG, "bound epoch $myEpoch, $lensInfo")
                             if (!front) {
                                 // Widest lens available: min zoom < 1.0 = ultrawide (0.6x etc.)
                                 // -> whole doorway + approach path in frame at dashboard distance.
