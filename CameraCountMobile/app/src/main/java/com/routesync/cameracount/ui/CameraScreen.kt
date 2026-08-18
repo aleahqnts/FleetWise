@@ -35,7 +35,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.routesync.cameracount.CounterViewModel
 import com.routesync.cameracount.camera.DetectorAnalyzer
 import com.routesync.cameracount.camera.LineCrossCounter
@@ -47,11 +49,34 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 
 /**
- * Frame silence that counts as a dead camera. Deliberately under the ViewModel's own
- * 12s stall threshold, so the watchdog gets a rebind in before the trip is handed to
- * the driver's manual counter. A normal frame gap is milliseconds, even throttled.
+ * Frame silence that counts as a dead camera. A normal frame gap is milliseconds, even
+ * throttled, so this only trips on a real stall.
+ *
+ * Derived from the ViewModel's handoff threshold rather than hand-tuned, and the 6s of
+ * headroom is spent, not spare: detection costs up to one tick, and opening a camera
+ * costs a second or two on top. Budget is 6 + 2 + ~2 = under the 12s handoff, with the
+ * ordering guaranteed by the subtraction instead of by a comment.
  */
-private const val STALL_MS = 10_000L
+private const val STALL_MS = CounterViewModel.STALL_AFTER_MS - 6_000L
+
+/** Watchdog poll. Short, because a slow tick eats the headroom above. */
+private const val WATCHDOG_TICK_MS = 2_000L
+
+/**
+ * Backoff between rebind attempts, by consecutive failure count. A camera another app
+ * is holding will not come back on the second try, and hammering it every few seconds
+ * for a whole service day costs real battery on a phone that may not be charging. Caps
+ * rather than gives up: whatever is holding the camera can release it at any time.
+ */
+private fun rebindBackoffMs(failures: Int): Long = when (failures) {
+    1 -> 0L
+    2 -> 5_000L
+    3 -> 15_000L
+    else -> 60_000L
+}
+
+/** Consecutive failed rebinds before the HUD stops implying a fix is imminent. */
+private const val REBINDS_BEFORE_GIVING_UP_QUIETLY = 3
 
 /** Immutable per-frame snapshot for the overlay (built on the analyzer thread). */
 private data class OverlayBox(val l: Float, val t: Float, val r: Float, val b: Float, val counted: Boolean)
@@ -207,18 +232,9 @@ private fun DetectionSurface(
     // builds a fresh one. Frames restart -> the stall clears by itself.
     var lastFrameMs by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
     var bindEpoch by remember { mutableIntStateOf(0) }
-    val framesFlowing = { android.os.SystemClock.elapsedRealtime() - lastFrameMs < STALL_MS }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(5_000)
-            if (!framesFlowing()) {
-                // Reset first: the rebind needs its own grace window, or the next tick
-                // fires again while the camera is still opening.
-                lastFrameMs = android.os.SystemClock.elapsedRealtime()
-                bindEpoch++
-            }
-        }
-    }
+    // Set once the rebinds stop looking like they will work, so the HUD can say so.
+    var cameraUnreachable by remember { mutableStateOf(false) }
+    fun framesFlowing() = android.os.SystemClock.elapsedRealtime() - lastFrameMs < STALL_MS
 
     if (counting) LaunchedEffect(Unit) {
         while (true) {
@@ -284,6 +300,44 @@ private fun DetectionSurface(
         tracker.resetCrossingState()
     }
 
+    // Watchdog loop, declared here because a rebind has to reset the tracker (below).
+    //
+    // repeatOnLifecycle(STARTED): CameraX unbinds the session whenever the activity stops,
+    // so frames legitimately stop every time the driver takes a call or a dialog covers
+    // the screen. Without this gate the loop reads that as a dead camera and rebinds every
+    // few seconds against a lifecycle that will not accept the binding anyway. The gate
+    // also restarts the clock on the way back in, so a long time backgrounded does not
+    // count as a stall the moment the app returns.
+    LaunchedEffect(Unit) {
+        lifecycle.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            lastFrameMs = android.os.SystemClock.elapsedRealtime()
+            var failures = 0
+            var nextAttemptAt = 0L
+            while (true) {
+                kotlinx.coroutines.delay(WATCHDOG_TICK_MS)
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (framesFlowing()) {
+                    failures = 0
+                    cameraUnreachable = false
+                    continue
+                }
+                if (now < nextAttemptAt) continue
+
+                failures++
+                // A blackout of several seconds means every track is stale: the boxes
+                // were last seen before the gap, and their side/origin history is against
+                // a world that has moved on. Re-associating them on the first frame back
+                // would post crossings nobody made. Same reasoning as a line change above.
+                tracker.resetCrossingState()
+                // Grace: the camera needs time to open before the next tick judges it.
+                lastFrameMs = now
+                nextAttemptAt = now + STALL_MS + rebindBackoffMs(failures)
+                cameraUnreachable = failures > REBINDS_BEFORE_GIVING_UP_QUIETLY
+                bindEpoch++
+            }
+        }
+    }
+
     val executor = remember { Executors.newSingleThreadExecutor() }
     DisposableEffect(Unit) {
         onDispose {
@@ -303,12 +357,28 @@ private fun DetectionSurface(
         // that died on its own.
         useBack?.let { back ->
             key(back, bindEpoch) {
+                // Which generation this binding belongs to. The provider future resolves
+                // asynchronously, and under camera contention it can take longer than the
+                // watchdog's retry window - so a listener from a superseded epoch may still
+                // be pending when a newer one has already bound successfully. Letting it
+                // run would unbindAll the good session and attach the preview to a view
+                // Compose has thrown away: a permanently black screen, no exception.
+                val myEpoch = bindEpoch
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
+                    onRelease = {
+                        // AndroidView drops the view on an epoch change but frees nothing
+                        // else, so without this the old session stays bound and keeps
+                        // feeding a second analyzer into the shared executor and detector
+                        // until the NEXT factory happens to call unbindAll. Two YOLO
+                        // pipelines on one thread, at the moment recovery is meant to help.
+                        runCatching { ProcessCameraProvider.getInstance(context).get().unbindAll() }
+                    },
                     factory = { ctx ->
                         val view = PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
                         val providerFuture = ProcessCameraProvider.getInstance(ctx)
                         providerFuture.addListener({
+                            if (myEpoch != bindEpoch) return@addListener
                             val provider = providerFuture.get()
                             val preview = Preview.Builder().build()
                                 .also { it.surfaceProvider = view.surfaceProvider }
@@ -343,10 +413,14 @@ private fun DetectionSurface(
                                     onError = { frameError = it },
                                     // Phase 9a: resting (dimmed) throttles harder than thermal;
                                     // whichever wants fewer inferences wins.
-                                    throttle = { maxOf(thermalSkip, if (dimmed) 4 else 1) }
+                                    throttle = { maxOf(thermalSkip, if (dimmed) 4 else 1) },
+                                    // Camera liveness, not counting liveness. Fires on every
+                                    // delivered frame, so a detector fault leaves this ticking
+                                    // and the watchdog stays out of it - a rebind cannot fix
+                                    // an interpreter, and `detector` outlives every epoch.
+                                    onFrame = { lastFrameMs = android.os.SystemClock.elapsedRealtime() }
                                 ) { dets, w, h, ms ->
                                     vm?.noteFrame() // stall guard: silence -> heartbeat stops -> manual fallback
-                                    lastFrameMs = android.os.SystemClock.elapsedRealtime() // watchdog
                                     if (dets.isNotEmpty()) {
                                         lastPersonAt = System.currentTimeMillis()
                                         // Phase 9a instant un-dim: don't wait for the 5s loop —
@@ -473,6 +547,15 @@ private fun DetectionSurface(
             }
             frameError?.let {
                 Text(it, color = Color(0xFFFF6B6B), fontSize = 11.sp)
+            }
+            // Several rebinds in and still no frames: something outside this app is
+            // holding the camera. Say so, instead of leaving a black screen that looks
+            // like the app is about to fix itself.
+            if (cameraUnreachable) {
+                Text(
+                    "camera not responding, still retrying",
+                    color = Color(0xFFFFC94D), fontSize = 11.sp
+                )
             }
         }
 
