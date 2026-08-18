@@ -211,8 +211,33 @@
     const SCH_WEEK_START = '@Model.WeekStart.ToString("yyyy-MM-dd")';
     const SCH_WEEK_END   = '@Model.WeekEnd.ToString("yyyy-MM-dd")';
     const SCH_DAYS = [@Html.Raw(string.Join(",", Model.Days.Select(d => $"'{d:yyyy-MM-dd}'")))];
-    const SCH_VEH_OPTS = `<option value="">Vehicle…</option>@Html.Raw(string.Join("", Model.Vehicles.Select(v => $"<option value=\"{v.VehicleId}\">{v.VehicleId} · {v.PlateNumber}</option>")))`;
-    const SCH_DRV_OPTS = `<option value="">Driver…</option>@Html.Raw(string.Join("", Model.Drivers.Select(d => $"<option value=\"{d.DriverId}\">{d.DriverName}</option>")))`;
+    // Data, not markup. These used to be HTML strings glued together with Html.Raw, which
+    // switches Razor's encoding OFF - so a driver named `"><script>...` (a dispatcher can
+    // create one) escaped the option tag and ran in the next admin's session. JSON keeps
+    // the values as values; the options are built through the DOM below, where a name is
+    // always text and never markup. JsonSerializer escapes < > & by default, so nothing
+    // here can close this script tag either.
+    const SCH_VEHICLES = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        Model.Vehicles.Select(v => new { id = v.VehicleId, label = $"{v.VehicleId} · {v.PlateNumber}" })));
+    const SCH_DRIVERS = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        Model.Drivers.Select(d => new { id = d.DriverId, label = d.DriverName })));
+
+    // One <select>, built from the data above. textContent, never innerHTML.
+    function schBuildSelect(cls, placeholder, items) {
+        const sel = document.createElement('select');
+        sel.className = 'sch-sel ' + cls;
+        const blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = placeholder;
+        sel.appendChild(blank);
+        items.forEach(function (it) {
+            const opt = document.createElement('option');
+            opt.value = it.id;
+            opt.textContent = it.label;
+            sel.appendChild(opt);
+        });
+        return sel;
+    }
 
     // show save toast once after the post-save reload
     if (sessionStorage.getItem('sch_saved')) {
@@ -251,8 +276,8 @@
             cell.dataset.shift = shift;
             cell.dataset.date = date;
             cell.dataset.tripid = '';
-            cell.innerHTML = `<select class="sch-sel sch-veh">${SCH_VEH_OPTS}</select>`
-                           + `<select class="sch-sel sch-drv">${SCH_DRV_OPTS}</select>`;
+            cell.appendChild(schBuildSelect('sch-veh', 'Vehicle…', SCH_VEHICLES));
+            cell.appendChild(schBuildSelect('sch-drv', 'Driver…', SCH_DRIVERS));
             schWireCell(cell);
             td.appendChild(cell);
             tr.appendChild(td);

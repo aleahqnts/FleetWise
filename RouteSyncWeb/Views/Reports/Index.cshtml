@@ -528,7 +528,10 @@
     'Not Yet Started': ['#8A6D1B', '#FBF3DA']
     };
     const [fg, bg] = map[status] || ['#6B7280', '#F1F2F4'];
-    return `<span style="color:${fg};background:${bg};padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;">${status || '—'}</span>`;
+    const el = document.createElement('span');
+    el.style.cssText = `color:${fg};background:${bg};padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;`;
+    el.textContent = status || '—';
+    return el;
     }
 
     function deltaArrow(value) {
@@ -681,19 +684,49 @@
     if (!table.rows || table.rows.length === 0) {
     tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px; color:#9AA5B4;">No trips found.</td></tr>';
     } else {
+    // Built through the DOM, not from an HTML string. driverName, plateNumber and
+    // routeName are typed by admins and land here straight from the database, so with
+    // innerHTML a name like `<img src=x onerror=...>` executed for every reader of this
+    // page. textContent puts the same characters on screen and runs none of them.
+    const cell = (tr, text) => {
+    const td = document.createElement('td');
+    td.textContent = text ?? '';
+    tr.appendChild(td);
+    return td;
+    };
+
     table.rows.forEach(row => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-    <td>${row.tripId}</td>
-    <td>${row.driverName}</td>
-    <td>${row.vehicleId}<br /><span class="rp-plate">${row.plateNumber}</span></td>
-    <td>${row.routeName}</td>
-    <td><span class="rp-shift ${getShiftClass(row.shiftType)}">${row.shiftType || ''}</span></td>
-    <td>${statusBadge(row.status)}</td>
-    <td>${formatNumber(row.passengers)}</td>
-    <td>${formatCurrency(row.revenue)}</td>
-    <td><button class="rp-btn-view" data-trip-id="${row.tripId}">View</button></td>
-    `;
+
+    cell(tr, row.tripId);
+    cell(tr, row.driverName);
+
+    const bus = cell(tr, row.vehicleId);
+    bus.appendChild(document.createElement('br'));
+    const plate = document.createElement('span');
+    plate.className = 'rp-plate';
+    plate.textContent = row.plateNumber ?? '';
+    bus.appendChild(plate);
+
+    cell(tr, row.routeName);
+
+    const shiftTd = cell(tr, '');
+    const shift = document.createElement('span');
+    shift.className = 'rp-shift ' + getShiftClass(row.shiftType);
+    shift.textContent = row.shiftType || '';
+    shiftTd.appendChild(shift);
+
+    cell(tr, '').appendChild(statusBadge(row.status));
+    cell(tr, formatNumber(row.passengers));
+    cell(tr, formatCurrency(row.revenue));
+
+    const btnTd = cell(tr, '');
+    const btn = document.createElement('button');
+    btn.className = 'rp-btn-view';
+    btn.dataset.tripId = row.tripId ?? '';
+    btn.textContent = 'View';
+    btnTd.appendChild(btn);
+
     tbody.appendChild(tr);
     });
     }
