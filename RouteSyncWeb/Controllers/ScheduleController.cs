@@ -88,6 +88,7 @@ namespace FleetWise.Controllers
         [HttpPost]
         public async Task<IActionResult> Save([FromBody] SaveScheduleRequest req)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState.FirstError());
             if (req == null || !DateTime.TryParse(req.WeekStart, out var weekStart)
                             || !DateTime.TryParse(req.WeekEnd, out var weekEnd))
                 return BadRequest("Invalid week range.");
