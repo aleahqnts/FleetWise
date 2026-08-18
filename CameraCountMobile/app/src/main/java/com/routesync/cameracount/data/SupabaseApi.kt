@@ -12,9 +12,11 @@ import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 /**
- * Plain PostgREST client to the shared RouteSync Supabase DB.
- * Same publishable (client-safe) key the driver app embeds.
- * The DB row is the ONLY bridge between this app and RouteSync — no app-to-app link.
+ * PostgREST client for the shared RouteSync database, using the same publishable key the
+ * driver app embeds.
+ *
+ * Database rows are the only connection between this app and the rest of RouteSync.
+ * Nothing talks to another app directly.
  */
 object SupabaseApi {
 
@@ -24,8 +26,9 @@ object SupabaseApi {
     private val JSON = "application/json".toMediaType()
 
     /**
-     * Phase 7: app_camera JWT from the device-token edge fn. Loaded from DataStore at
-     * startup, refreshed at bind. Null -> anon key (works until the 7d cutover).
+     * Device JWT for the `app_camera` role, issued by the device-token edge function.
+     * Loaded from DataStore at startup and refreshed on bind. When null, requests fall
+     * back to the anonymous key, which has no access to the tables below.
      */
     @Volatile var deviceJwt: String? = null
 
@@ -38,7 +41,7 @@ object SupabaseApi {
         .header("apikey", KEY)
         .header("Authorization", "Bearer ${deviceJwt ?: KEY}")
 
-    /** Outcome of a device-token mint: only Denied means the passcode was refused. */
+    /** Outcome of a token request. Only [Denied] means the passcode itself was wrong. */
     sealed interface TokenResult {
         data class Ok(val token: String) : TokenResult
         data object Denied : TokenResult
@@ -46,8 +49,10 @@ object SupabaseApi {
     }
 
     /**
-     * Phase 7 provisioning: trade the bind passcode (the fleet secret) for a 365-day
-     * device JWT. The secret is only ever compared SERVER-side (edge fn env var).
+     * Exchanges the fleet passcode for a device JWT valid for 365 days.
+     *
+     * The passcode is compared server-side, inside the edge function, so the secret
+     * itself never reaches this app.
      */
     suspend fun fetchDeviceToken(deviceId: String, fleetSecret: String): TokenResult =
         withContext(Dispatchers.IO) {
@@ -79,7 +84,7 @@ object SupabaseApi {
 
     data class ActiveTrip(val tripId: String, val totalBoarded: Int)
 
-    /** Poll target (every 3-5s): is there an Active trip for my bound vehicle? */
+    /** Returns the Active trip for the bound vehicle, or null. Polled every few seconds. */
     suspend fun findActiveTrip(vehicleId: String): ActiveTrip? = withContext(Dispatchers.IO) {
         val url = "$BASE/trips?vehicle_id=eq.$vehicleId&trip_status=eq.Active" +
                 "&select=trip_id,total_boarded"
@@ -94,11 +99,13 @@ object SupabaseApi {
     }
 
     /**
-     * Trip claim (double-link safeguard): atomically stamp our device ID onto the trip,
-     * but ONLY if it's unclaimed, already ours, or the current owner's heartbeat went
-     * silent >30s (owner died/overheated -> standby phone takes over). The WHERE filter
-     * makes the claim race-safe: two phones claiming at once -> exactly one row match
-     * wins. Claim also seeds the heartbeat so a freshly claimed trip is never "stale".
+     * Claims a trip for this device, so only one camera phone ever counts it.
+     *
+     * The stamp applies only when the trip is unclaimed, already held by this device, or
+     * its owner's heartbeat has been silent for more than 30 seconds, which lets a
+     * standby phone take over from one that died or overheated. The condition lives in
+     * the request filter, so two phones claiming at once produce exactly one row match.
+     * The claim also seeds the heartbeat, so a freshly claimed trip never looks stale.
      */
     suspend fun claimTrip(tripId: String, deviceId: String): Boolean = withContext(Dispatchers.IO) {
         val staleCut = Instant.now().minusSeconds(30).toString()
@@ -120,10 +127,11 @@ object SupabaseApi {
     }
 
     /**
-     * Count flush (every 5s while counting): one PATCH carries both the count and
-     * the heartbeat — heartbeat freshness is how RouteSync knows the camera is alive.
-     * Owner-guarded: if another device stole the claim, this matches 0 rows and returns
-     * false so the caller demotes itself instead of silently fighting over the row.
+     * Writes the count and the heartbeat in one request, every 5 seconds while counting.
+     * Heartbeat freshness is how RouteSync knows the camera is alive.
+     *
+     * Guarded on ownership: if another device has taken the claim this matches no rows
+     * and returns false, so the caller stands down instead of contending for the row.
      */
     suspend fun patchCount(tripId: String, totalBoarded: Int, deviceId: String): Boolean =
         withContext(Dispatchers.IO) {
@@ -145,9 +153,11 @@ object SupabaseApi {
         }
 
     /**
-     * Bind-level lock (one counter phone per bus, EVER): binding claims the vehicle row
-     * itself. A second phone's bind is refused outright — deployment never has two phones
-     * on one bus, so a second bind is always a mistake. Atomic like the trip claim.
+     * Claims the vehicle row, enforcing one counter phone per bus.
+     *
+     * A second phone's bind is refused rather than allowed to take over, because no
+     * deployment puts two phones on one bus, so a second bind is always an error. Atomic
+     * in the same way as the trip claim.
      */
     suspend fun claimVehicle(vehicleId: String, deviceId: String): Boolean = withContext(Dispatchers.IO) {
         val url = "$BASE/vehicles?vehicle_id=eq.$vehicleId" +
@@ -163,7 +173,7 @@ object SupabaseApi {
         }
     }
 
-    /** Unbind releases the vehicle lock so a replacement phone can bind. */
+    /** Releases the vehicle lock so a replacement phone can bind. */
     suspend fun releaseVehicle(vehicleId: String, deviceId: String): Unit = withContext(Dispatchers.IO) {
         val url = "$BASE/vehicles?vehicle_id=eq.$vehicleId&counter_device_id=eq.$deviceId"
         val body = JSONObject().put("counter_device_id", JSONObject.NULL).toString().toRequestBody(JSON)
@@ -177,12 +187,15 @@ object SupabaseApi {
     }
 
     /**
-     * Post-trip reconcile: the ONE write allowed after a trip ends. Scenario: camera in a
-     * dead zone counts 16, driver's manual fallback wrote 9, trip ends before the camera
-     * reconnects -> DB records 9 and the 16 would die on the phone. This PATCH raises
-     * total_boarded IFF ours is higher (total_boarded=lt.N filter -> atomic, raise-only,
-     * can never clobber finalize) and only while we're still the claimed counter device.
-     * No heartbeat in the body: the trip is over, nothing should look alive.
+     * The only write permitted after a trip has ended.
+     *
+     * A camera in a dead zone can count more passengers than the driver's manual
+     * fallback recorded, and the trip can close before it reconnects. This raises
+     * `total_boarded` only when [finalCount] is higher, expressed as a filter so the
+     * update is atomic and can never lower a finalized total. It applies only while this
+     * device is still the claimed counter.
+     *
+     * The body carries no heartbeat: the trip is over and nothing should appear alive.
      */
     suspend fun reconcileFinalCount(tripId: String, deviceId: String, totalBoarded: Int): Unit =
         withContext(Dispatchers.IO) {
@@ -200,7 +213,7 @@ object SupabaseApi {
 
     data class FleetVehicle(val vehicleId: String, val plate: String)
 
-    /** Setup dropdown: the whole fleet, so installers pick instead of typing. */
+    /** The whole fleet, for the setup dropdown, so an installer picks instead of typing. */
     suspend fun listVehicles(): List<FleetVehicle> = withContext(Dispatchers.IO) {
         val url = "$BASE/vehicles?select=vehicle_id,plate_number&order=vehicle_id"
         val req = Request.Builder().url(url).supabaseHeaders().get().build()
@@ -215,8 +228,9 @@ object SupabaseApi {
     }
 
     /**
-     * Bind-time validation: does this vehicle actually exist? Returns its plate number
-     * (shown to the installer as confirmation they bound the right bus) or null.
+     * Returns the vehicle's plate number, or null when no such vehicle exists.
+     *
+     * The plate is shown to the installer as confirmation that the right bus was bound.
      */
     suspend fun findVehiclePlate(vehicleId: String): String? = withContext(Dispatchers.IO) {
         val url = "$BASE/vehicles?vehicle_id=eq.$vehicleId&select=vehicle_id,plate_number"
@@ -229,19 +243,17 @@ object SupabaseApi {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Phase 8a — remote camera control: device_config (desired, followed)
-    // + device_status (reported, echoed). See REMOTE-CONTROL-plan.md.
-    // ------------------------------------------------------------------
+    // Remote camera control. `device_config` holds the desired state, which this device
+    // follows; `device_status` holds what the device reports back.
 
     data class DeviceConfig(
         val ax: Float, val ay: Float, val bx: Float, val by: Float,
         val inwardSign: Int, val useBackCamera: Boolean, val version: Int,
-        /** Phase 8c: driver asked for a wake+snapshot at this instant (ISO), or null. */
+        /** When a driver last requested a wake and snapshot, or null if never. */
         val wakeRequestedAt: Instant? = null
     )
 
-    /** Follower read (piggybacks the 4s poll): the desired config for THIS device. */
+    /** The desired configuration for this device. Read on the same 4s tick as the trip poll. */
     suspend fun getDeviceConfig(deviceId: String): DeviceConfig? = withContext(Dispatchers.IO) {
         val url = "$BASE/device_config?device_id=eq.$deviceId" +
                 "&select=line_ax,line_ay,line_bx,line_by,inward_sign,use_back_camera,version,wake_requested_at"
@@ -267,17 +279,18 @@ object SupabaseApi {
     }
 
     /**
-     * Local calibration writes UP (and first boot seeds the row): upsert keeps the DB
-     * authoritative even though the edit happened on the phone. updated_by='device'
-     * tells the other writers (driver 8b / admin 8e) who authored this version.
+     * Writes a locally made calibration up to the database, and seeds the row on first
+     * boot. The upsert keeps the database authoritative even though the edit happened on
+     * the phone. `updated_by` records which surface authored the version, since the
+     * driver app and the dashboard write the same row.
      */
     suspend fun upsertDeviceConfig(
         deviceId: String,
         ax: Float, ay: Float, bx: Float, by: Float,
         inwardSign: Int, useBack: Boolean, version: Int
     ): Unit = withContext(Dispatchers.IO) {
-        // Android's org.json.JSONObject has NO put(String, float) overload — pass Double
-        // or it throws NoSuchMethodError at runtime.
+        // org.json.JSONObject has no put(String, Float) overload on Android. Passing a
+        // Float throws NoSuchMethodError at runtime, so these are all Double.
         val body = JSONObject()
             .put("device_id", deviceId)
             .put("line_ax", ax.toDouble()).put("line_ay", ay.toDouble())
@@ -298,14 +311,17 @@ object SupabaseApi {
     }
 
     /**
-     * Reported state: liveness heartbeat + which config version this device runs.
-     * Driver/web show ✓ only when config_version_applied == device_config.version.
-     * [justApplied] stamps applied_at (a fresh apply, not just a heartbeat).
+     * Reports liveness and which configuration version this device is running.
+     *
+     * The driver app and dashboard show a calibration as confirmed only when
+     * `config_version_applied` matches `device_config.version`.
+     *
+     * @param justApplied stamps `applied_at`, marking a fresh apply rather than a heartbeat.
      */
     suspend fun upsertDeviceStatus(
         deviceId: String, configVersionApplied: Int, justApplied: Boolean = false,
-        /** Phase 8c wake lifecycle: idle|capturing|preview|applied. Null = field omitted
-         *  from the upsert body, so the DB keeps its current wake_state. */
+        /** Wake lifecycle: idle, capturing, preview or applied. Null omits the field from
+         *  the request body, leaving the stored value unchanged. */
         wakeState: String? = null,
         snapshotReady: Boolean = false
     ): Unit = withContext(Dispatchers.IO) {
@@ -328,23 +344,22 @@ object SupabaseApi {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Phase 8c — snapshot transport: private Storage bucket, one transient
-    // object per device ({device_id}.jpg), aggressively deleted.
-    // ------------------------------------------------------------------
+    // Snapshot transport. A private storage bucket holds at most one transient object
+    // per device, named {device_id}.jpg, deleted as soon as it has served its purpose.
 
     private const val STORAGE = "https://vrtluruqaxutecydbrsq.supabase.co/storage/v1"
     private val JPEG = "image/jpeg".toMediaType()
 
-    /** Upload (overwrite) this device's snapshot. RLS pins the path to our own JWT. */
+    /** Uploads this device's snapshot, overwriting any previous one. Row-level security
+     *  pins the path to the device's own JWT. */
     suspend fun uploadSnapshot(deviceId: String, jpeg: ByteArray): Unit = withContext(Dispatchers.IO) {
         val req = Request.Builder()
             .url("$STORAGE/object/camera-snapshots/$deviceId.jpg")
             .header("apikey", KEY)
             .header("Authorization", "Bearer ${deviceJwt ?: KEY}")
             .header("x-upsert", "true")
-            // Object is overwritten in place every wake — any CDN caching serves the
-            // driver yesterday's doorway. (Driver side also cache-busts its GET.)
+            // The object is overwritten in place on every wake, so any caching would show
+            // the driver a previous doorway. The driver app also cache-busts its read.
             .header("cache-control", "no-cache")
             .post(jpeg.toRequestBody(JPEG))
             .build()
@@ -353,7 +368,7 @@ object SupabaseApi {
         }
     }
 
-    /** Purge the snapshot (apply / cancel / timeout). Missing object = fine. */
+    /** Deletes the snapshot after an apply, a cancel or a timeout. A missing object is not an error. */
     suspend fun deleteSnapshot(deviceId: String): Unit = withContext(Dispatchers.IO) {
         val req = Request.Builder()
             .url("$STORAGE/object/camera-snapshots/$deviceId.jpg")
@@ -367,7 +382,7 @@ object SupabaseApi {
         }
     }
 
-    /** Phase-0 smoke check: can this device reach the DB at all? */
+    /** Connectivity check: can this device reach the database at all? */
     suspend fun ping(): Boolean = withContext(Dispatchers.IO) {
         val req = Request.Builder()
             .url("$BASE/trips?select=trip_id&limit=1")

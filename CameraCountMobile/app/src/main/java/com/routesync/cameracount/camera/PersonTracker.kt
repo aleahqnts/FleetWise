@@ -3,16 +3,19 @@ package com.routesync.cameracount.camera
 import android.graphics.RectF
 
 /**
- * ByteTrack-lite: two-stage IoU association + constant-velocity prediction.
+ * Multi-object tracker: two-stage IoU association with constant-velocity prediction,
+ * following the ByteTrack approach.
  *
- * Stage 1 matches tracks to HIGH-confidence detections; stage 2 rescues still-unmatched
- * tracks with LOW-confidence detections (the ByteTrack trick — a person half-hidden by
- * the door frame drops to 0.3 conf but keeps their ID instead of respawning as a new one,
- * which would double-count). Only high-conf detections can BIRTH a track, and a track
- * must live MIN_HITS frames before it counts — one-frame ghosts (hands, glare) never
- * become countable.
+ * The first stage matches existing tracks against high-confidence detections. The second
+ * rescues any still-unmatched track using low-confidence detections, which is what keeps
+ * a person half-hidden by the door frame on the same identity instead of respawning them
+ * as a new track and counting them twice.
  *
- * All coords are frame-normalized (0..1), same space DetectorAnalyzer emits.
+ * Only high-confidence detections create a track, and a track must survive [MIN_HITS]
+ * frames before it can be counted, so single-frame artefacts such as hands or glare
+ * never become countable.
+ *
+ * All coordinates are frame-normalized, 0 to 1, the same space DetectorAnalyzer emits.
  */
 class PersonTracker {
 
@@ -21,14 +24,17 @@ class PersonTracker {
         var vy = 0f
         var hits = 1
         var misses = 0
-        /** set once the track crossed the line inward — a person counts exactly once */
+        /** Set once this track has crossed inward, so a person counts exactly once. */
         var counted = false
-        /** which side of the counting line this track was on last frame; 0 = undecided */
+        /** Side of the counting line on the previous frame. 0 means undecided. */
         var prevSide = 0
         /**
-         * side the track was BORN on (first frame it cleared the dead band). Only tracks
-         * born OUTWARD may ever count: someone already past the line who steps back and
-         * returns, a driver near the line, or a track popping up mid-frame can never +1.
+         * Side this track was first seen on, recorded on the first frame it cleared the
+         * dead band.
+         *
+         * Only tracks born on the outward side can ever be counted. That excludes someone
+         * already aboard who steps back over the line and returns, the driver standing
+         * near it, and any track that appears mid-frame.
          */
         var originSide = 0
         val cx get() = box.centerX()
@@ -38,7 +44,7 @@ class PersonTracker {
 
     companion object {
         private const val IOU_GATE = 0.25f
-        private const val MAX_MISSES = 12 // ~1.2s at 10fps before a track dies
+        private const val MAX_MISSES = 12 // roughly 1.2s at 10fps before a track is dropped
         private const val MIN_HITS = 3
     }
 
@@ -46,9 +52,12 @@ class PersonTracker {
     private val tracks = mutableListOf<Track>()
 
     /**
-     * After the counting line MOVES (mid-trip adjust), every track's side/origin history
-     * is meaningless against the new geometry — clear it so sides re-establish on the
-     * next frame. [Track.counted] is kept: a person already counted must not recount.
+     * Clears side and origin history for every track, so both re-establish on the next
+     * frame.
+     *
+     * Called when the counting line moves or after a gap in frames, since the stored
+     * sides describe geometry or a scene that no longer applies. [Track.counted] is
+     * deliberately preserved: a person already counted must not be counted again.
      */
     fun resetCrossingState() {
         for (t in tracks) {
@@ -57,7 +66,8 @@ class PersonTracker {
         }
     }
 
-    /** Feed one frame's detections; returns live confirmed tracks (for counting + overlay). */
+    /** Consumes one frame of detections and returns the live confirmed tracks, used for
+     *  both counting and the overlay. */
     fun update(dets: List<YoloDetector.Det>): List<Track> {
         // Predict every track one frame forward.
         for (t in tracks) t.box.offset(t.vx, t.vy)
@@ -69,18 +79,18 @@ class PersonTracker {
         associate(unmatchedTracks, high)
         associate(unmatchedTracks, low)
 
-        // Whatever's still unmatched ages; too old -> gone.
+        // Anything still unmatched ages, and is dropped once too old.
         val dead = ArrayList<Track>()
         for (t in unmatchedTracks) if (++t.misses > MAX_MISSES) dead.add(t)
         tracks.removeAll(dead)
 
-        // Leftover high-conf detections become new tracks (low-conf never births one).
+        // Leftover high-confidence detections become new tracks. Low-confidence ones never do.
         for (d in high) tracks.add(Track(nextId++, RectF(d.box), d.score))
 
         return tracks.filter { it.confirmed && it.misses == 0 }
     }
 
-    /** Greedy best-IoU matching; simple and plenty at door distances. */
+    /** Greedy best-IoU matching, which is sufficient at doorway distances. */
     private fun associate(
         unmatchedTracks: MutableList<Track>,
         unmatchedDets: MutableList<YoloDetector.Det>
@@ -95,7 +105,7 @@ class PersonTracker {
             }
             val t = bestT ?: return
             val d = bestD ?: return
-            // Smoothed velocity from center delta (box already predicted forward).
+            // Smoothed velocity from the centre delta. The box was already predicted forward.
             val ncx = d.box.centerX()
             val ncy = d.box.centerY()
             t.vx = 0.6f * (ncx - t.cx) + 0.4f * t.vx
@@ -119,20 +129,23 @@ class PersonTracker {
 }
 
 /**
- * Counting line = a segment between two endpoints A and B (frame-normalized 0..1), so it
- * can sit at ANY angle — real doorways are rarely a perfect vertical.
+ * Counts inward crossings of a counting line.
  *
- * A +1 needs ALL of:
- *  - track born on the OUTWARD side (origin rule): anyone first seen inward — already
- *    boarded, the driver, a person popping up mid-frame — can never count, even if they
- *    wander back over the line and return;
- *  - center clears a DEAD BAND (~[BAND] perpendicular distance) past the line before a
- *    side "counts" as entered: a hand hovering on the line jitters inside the band and
- *    never registers a crossing;
- *  - once per track ([Track.counted]).
+ * The line is a segment between endpoints A and B in frame-normalized coordinates, so it
+ * can sit at any angle. Real doorways are rarely perfectly vertical.
  *
- * [inwardSign] (+1 / -1) picks which side of A->B is "boarding". Sides here are stored
- * relative to inward: +1 = inward, -1 = outward.
+ * A crossing is counted only when all three hold:
+ *
+ * - The track was born on the outward side. Anyone first seen inward, whether already
+ *   aboard, the driver, or a track that appeared mid-frame, can never be counted, even
+ *   after wandering across the line and back.
+ * - The track centre clears the dead band of [BAND] perpendicular distance before a side
+ *   is treated as entered. A hand hovering over the line jitters inside the band and
+ *   never registers.
+ * - The track has not been counted before.
+ *
+ * @param inwardSign selects which side of A to B counts as boarding. Sides are stored
+ *   relative to it: 1 is inward, -1 is outward.
  */
 class LineCrossCounter(
     var ax: Float = 0.5f, var ay: Float = 0.05f,
@@ -140,11 +153,11 @@ class LineCrossCounter(
     var inwardSign: Int = 1
 ) {
     companion object {
-        /** dead-band half-width, in frame-normalized units (~2% of the frame). */
+        /** Dead-band half-width in frame-normalized units, about 2% of the frame. */
         private const val BAND = 0.02f
     }
 
-    /** Perpendicular distance from the line, sign flipped so + = inward side. */
+    /** Perpendicular distance from the line, signed so that positive is the inward side. */
     private fun inwardDist(px: Float, py: Float): Float {
         val dx = bx - ax
         val dy = by - ay
@@ -153,7 +166,7 @@ class LineCrossCounter(
         return cross / len * inwardSign
     }
 
-    /** Returns how many NEW inward crossings happened this frame. */
+    /** Returns the number of new inward crossings in this frame. */
     fun process(tracks: List<PersonTracker.Track>): Int {
         var crossings = 0
         for (t in tracks) {

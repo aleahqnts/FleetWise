@@ -13,8 +13,10 @@ import kotlinx.coroutines.flow.map
 private val Context.dataStore by preferencesDataStore(name = "cameracount")
 
 /**
- * Device-local settings. The dashboard phone is a fixed fixture per bus, so it binds
- * to a vehicle_id once; the passcode guards against re-pointing the phone at another bus.
+ * Device-local settings.
+ *
+ * The phone is a fixed fixture on one bus, so it binds to a vehicle once. The passcode
+ * guards against the phone being re-pointed at a different bus.
  */
 class Prefs(private val context: Context) {
 
@@ -33,7 +35,7 @@ class Prefs(private val context: Context) {
         private val DEVICE_JWT = stringPreferencesKey("device_jwt")
         private val USE_BACK_CAMERA = androidx.datastore.preferences.core.booleanPreferencesKey("use_back_camera")
         private val CONFIG_VERSION = intPreferencesKey("config_version")
-        // Default = vertical line down the middle (same as before, just as two endpoints).
+        // Default line runs vertically down the middle of the frame.
         const val DEF_AX = 0.5f; const val DEF_AY = 0.05f
         const val DEF_BX = 0.5f; const val DEF_BY = 0.95f
         const val DEF_INWARD_SIGN = 1
@@ -43,9 +45,11 @@ class Prefs(private val context: Context) {
     val plate: Flow<String?> = context.dataStore.data.map { it[PLATE] }
 
     /**
-     * Stable per-install ID for the trip claim (double-link safeguard): the first camera
-     * phone to claim a trip writes this onto trips.counter_device_id; a second phone
-     * bound to the same bus sees the claim and stands by instead of double counting.
+     * Stable per-installation identifier used to claim a trip.
+     *
+     * The first camera phone to claim a trip writes this to `trips.counter_device_id`. A
+     * second phone bound to the same bus sees the claim and stands by rather than
+     * counting the same passengers again.
      */
     suspend fun deviceId(): String {
         context.dataStore.data.first()[DEVICE_ID]?.let { return it }
@@ -55,9 +59,10 @@ class Prefs(private val context: Context) {
     }
 
     /**
-     * Phase 7: app_camera JWT minted by the device-token edge fn at bind time (365d).
-     * Survives unbind — it carries only device_id; vehicle scope is the DB join, so a
-     * re-bind to another bus reuses the same token.
+     * Device JWT minted at bind time by the device-token edge function, valid for 365 days.
+     *
+     * It survives an unbind because it carries only the device identifier. Vehicle scope
+     * comes from the database join, so re-binding to another bus reuses the same token.
      */
     suspend fun deviceJwt(): String? = context.dataStore.data.first()[DEVICE_JWT]
 
@@ -66,8 +71,11 @@ class Prefs(private val context: Context) {
     }
 
     /**
-     * Which camera faces the doorway. Back camera often has a 0.6x ultrawide -> whole
-     * approach path in frame at dashboard distance. Mount decides; toggle in Calibrate.
+     * Which camera faces the doorway, decided by how the phone is mounted and changed
+     * from the calibrate screen.
+     *
+     * The back camera often has a 0.6x ultrawide lens, which fits the whole approach path
+     * in frame at dashboard distance.
      */
     val useBackCamera: Flow<Boolean> = context.dataStore.data.map { it[USE_BACK_CAMERA] ?: false }
 
@@ -75,7 +83,7 @@ class Prefs(private val context: Context) {
         context.dataStore.edit { it[USE_BACK_CAMERA] = v }
     }
 
-    /** Counting-line calibration (Phase 5): two endpoints (any angle) + boarding side. */
+    /** Counting-line calibration: two endpoints at any angle, plus the boarding side. */
     data class LineCalibration(
         val ax: Float, val ay: Float, val bx: Float, val by: Float, val inwardSign: Int
     )
@@ -96,11 +104,9 @@ class Prefs(private val context: Context) {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Phase 8a: DB `device_config` row is the source of truth; DataStore is
-    // the offline cache. CONFIG_VERSION = the version this device last
-    // applied (or authored, on a local calibrate).
-    // ------------------------------------------------------------------
+    // The `device_config` row is the source of truth and DataStore is the offline cache.
+    // CONFIG_VERSION is the version this device last applied, or authored when the
+    // calibration was made on the phone.
 
     suspend fun configVersion(): Int = context.dataStore.data.first()[CONFIG_VERSION] ?: 0
 
@@ -109,9 +115,10 @@ class Prefs(private val context: Context) {
     }
 
     /**
-     * Apply a newer remote config in ONE atomic edit — line, lens, and version
-     * land together so a mid-apply crash can't leave a half-applied cache that
-     * still claims the new version.
+     * Applies a newer remote configuration in a single edit.
+     *
+     * Line, lens and version land together, so a crash part-way through cannot leave a
+     * cache that claims the new version while still holding the old line.
      */
     suspend fun applyRemoteConfig(
         ax: Float, ay: Float, bx: Float, by: Float,
@@ -127,9 +134,11 @@ class Prefs(private val context: Context) {
     }
 
     /**
-     * Phase 6 durable count: (tripId, count) persisted on every change so a dead zone,
-     * app kill, or reboot mid-trip never loses passengers. On restart, if the SAME trip
-     * is still Active the count resumes at max(saved, db); a different trip discards it.
+     * Trip and count, persisted on every change so a dead zone, a process kill or a
+     * reboot mid-trip does not lose passengers.
+     *
+     * On restart the count resumes at the higher of the saved and stored values when the
+     * same trip is still active. A different trip discards it.
      */
     data class PendingCount(val tripId: String, val count: Int)
 

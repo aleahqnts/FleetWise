@@ -9,28 +9,36 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 
 /**
- * CameraX frame -> rotate -> letterbox to the model's input square -> YOLO -> map boxes
- * back to FRAME-normalized coords (0..1 of the upright camera frame) for the overlay.
+ * Turns a CameraX frame into person detections for the overlay.
  *
- * [mirrored] = front camera: PreviewView mirrors the preview, the analyzer frame is not —
- * flip X here so boxes land on the people the driver actually sees.
+ * Each frame is rotated upright, letterboxed into the model's input square, passed
+ * through the detector, and the resulting boxes are mapped back to frame-normalized
+ * coordinates, 0 to 1 of the upright camera frame.
+ *
+ * @param mirrored true for the front camera. PreviewView mirrors the preview but the
+ *   analyzer frame arrives unmirrored, so the X axis is flipped here to put boxes on the
+ *   people the driver sees.
  */
 class DetectorAnalyzer(
     private val detector: YoloDetector,
     private val mirrored: Boolean,
     private val onError: (String) -> Unit = {},
     /**
-     * Phase 6 thermal guard: process 1 of every N frames (1 = every frame). Dashboard
-     * heat is the #1 real failure; dropping inference fps under SEVERE/CRITICAL thermal
-     * sheds most of the CPU load while the tracker's velocity prediction bridges the gap.
+     * Processes one frame in every N, where 1 means every frame.
+     *
+     * Heat is the main cause of failure on a mounted phone, and inference is the dominant
+     * source of it. Dropping the inference rate under thermal pressure sheds most of the
+     * load while the tracker's velocity prediction covers the skipped frames.
      */
     private val throttle: () -> Int = { 1 },
     /**
-     * Fires for every frame the CAMERA delivers, before throttling and before inference,
-     * so it means "the session is alive" and nothing more. [onResult] cannot answer that
-     * question: it is skipped by the throttle and skipped again whenever inference throws,
-     * so a broken detector on a healthy camera looks identical to a dead camera. The
-     * watchdog needs to tell those apart, because only one of them is fixed by rebinding.
+     * Fires for every frame the camera delivers, before throttling and before inference.
+     * It means the session is alive and nothing more.
+     *
+     * [onResult] cannot answer that question, because the throttle skips it and so does
+     * any inference failure, which makes a broken detector on a healthy camera look
+     * identical to a dead camera. Only one of those is repaired by rebinding, so the
+     * watchdog needs to tell them apart.
      */
     private val onFrame: () -> Unit = {},
     private val onResult: (dets: List<YoloDetector.Det>, frameW: Int, frameH: Int, inferMs: Long) -> Unit
@@ -39,15 +47,17 @@ class DetectorAnalyzer(
     private var frameNo = 0L
 
     /**
-     * Phase 8c: one-shot frame grab while counting (snapshot for remote calibration
-     * without touching the live camera session). Consumed and cleared on the next
-     * analyzed frame. Receives the frame in DISPLAY space (upright, mirrored for the
-     * front lens) — the space the line's normalized coords live in.
+     * One-shot frame grab, used to snapshot the doorway for a remote calibration without
+     * opening a second camera session. Consumed and cleared on the next analyzed frame.
+     *
+     * The frame arrives in display space, upright and mirrored for the front lens, which
+     * is the space the counting line's normalized coordinates use.
      */
     @Volatile var frameTap: ((Bitmap) -> Unit)? = null
 
-    // Reused across frames (analyzer is single-threaded): allocating a fresh model-input
-    // bitmap per frame = constant GC churn + heat on a CPU-inference phone.
+    // Reused across frames, which is safe because the analyzer is single-threaded.
+    // Allocating a model-input bitmap per frame would produce constant garbage collection
+    // and additional heat.
     private var square: Bitmap? = null
     private var squareCanvas: Canvas? = null
 
@@ -57,7 +67,8 @@ class DetectorAnalyzer(
             val n = throttle().coerceAtLeast(1)
             if (frameNo++ % n == 0L) analyzeInner(image)
         } catch (e: Exception) {
-            // A dropped frame must never take the app down (teardown races, OOM spikes).
+            // A dropped frame must never take the app down. Teardown races and memory
+            // spikes both surface here.
             android.util.Log.w("DetectorAnalyzer", "frame skipped", e)
             onError("${e.javaClass.simpleName}: ${e.message}")
         } finally {
@@ -75,7 +86,7 @@ class DetectorAnalyzer(
             Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
         } else bmp
 
-        // Phase 8c snapshot tap: hand out a detached copy in display space, then clear.
+        // Hand the snapshot tap a detached copy in display space, then clear it.
         frameTap?.let { tap ->
             frameTap = null
             val out = if (mirrored) {
@@ -85,8 +96,9 @@ class DetectorAnalyzer(
             tap(out)
         }
 
-        // Letterbox into the model square, preserving aspect. The square buffer is
-        // reused frame-to-frame; borders are cleared so no previous-frame ghosting.
+        // Letterbox into the model square, preserving aspect ratio. The square buffer is
+        // reused between frames, so the borders are cleared to avoid ghosting from the
+        // previous frame.
         val s = detector.inputSize
         val scale = s.toFloat() / maxOf(upright.width, upright.height)
         val dw = upright.width * scale
@@ -101,7 +113,8 @@ class DetectorAnalyzer(
         squareCanvas!!.drawBitmap(upright, null, RectF(dx, dy, dx + dw, dy + dh), null)
 
         val dets = detector.detect(sq).map { d ->
-            // input-square (0..1) -> pixels -> strip letterbox -> frame-normalized.
+            // Input square (0 to 1) to pixels, remove the letterbox, then normalize
+            // against the frame.
             var l = (d.box.left * s - dx) / dw
             var t = (d.box.top * s - dy) / dh
             var r = (d.box.right * s - dx) / dw
