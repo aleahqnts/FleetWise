@@ -2,6 +2,7 @@ package com.routesync.cameracount
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -61,10 +62,51 @@ private fun promptOverlayPermission(context: android.content.Context) {
     }
 }
 
+/** Nearest Activity for a Compose context, which may be wrapped several layers deep. */
+private tailrec fun android.content.Context.activity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.activity()
+    else -> null
+}
+
+/** Second back press within this window exits. Long enough to be deliberate, short
+ *  enough that a back press minutes later is not treated as a confirmation. */
+private const val EXIT_WINDOW_MS = 2_500L
+
 @Composable
 fun Root(vm: CounterViewModel = viewModel()) {
     var showPreview by remember { mutableStateOf(false) }
     val s = vm.state.collectAsState().value
+
+    // Back button. There is no navigation stack here - the whole app is one activity
+    // switching on state - so without this every back press finished the activity, even
+    // mid-trip, which killed the camera and the count with it.
+    //
+    // Calibrate backs out to the waiting screen. At the root, the first press only warns
+    // and the second within a couple of seconds exits: a driver reaching for a mounted
+    // phone one-handed can hit a dialog's wrong button, and a modal over the counting
+    // screen would cover the doorway the camera is watching.
+    val backContext = androidx.compose.ui.platform.LocalContext.current
+    var lastBackAt by remember { mutableLongStateOf(0L) }
+    BackHandler {
+        if (showPreview) {
+            showPreview = false
+            return@BackHandler
+        }
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastBackAt < EXIT_WINDOW_MS) {
+            backContext.activity()?.finish()
+        } else {
+            lastBackAt = now
+            android.widget.Toast.makeText(
+                backContext,
+                if (s is CounterViewModel.UiState.Counting)
+                    "Press back again to exit. Counting stops if you do."
+                else "Press back again to exit",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 
     // Phase 6: the trip foreground-service notification needs this on API 33+.
     // Phase 9b: "Display over other apps" is REQUIRED (the watcher opens this app when

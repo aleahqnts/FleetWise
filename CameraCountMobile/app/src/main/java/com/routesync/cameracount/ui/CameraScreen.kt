@@ -2,6 +2,7 @@ package com.routesync.cameracount.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -211,6 +212,17 @@ private fun DetectionSurface(
     // Mid-trip line adjust: mount slips are fixed on the spot, no passcode — a driver
     // wrestling a passcode dialog while boarding continues would just give up on it.
     var adjusting by remember { mutableStateOf(false) }
+
+    // Mid-trip line adjust is a step, so back should undo it rather than fall through to
+    // the root handler and start the exit countdown. Same as Cancel: drop the drag, keep
+    // the saved line. Composed below Root's handler, so this one wins while it is enabled.
+    BackHandler(enabled = adjusting) {
+        scope.launch {
+            val cal = prefs.lineCalibration.first()
+            ax = cal.ax; ay = cal.ay; bx = cal.bx; by = cal.by; inwardSign = cal.inwardSign
+            adjusting = false
+        }
+    }
     val editingLine = calibrate || adjusting
 
     // Phase 8a: remote config lands in DataStore (ViewModel follower), so COLLECT the
