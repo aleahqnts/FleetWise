@@ -477,11 +477,29 @@
                 : '<option value="">Select shift first…</option>';
             return;
         }
-        sel.innerHTML = '<option value="">Select a vehicle…</option>'
-            + vehicles.map(v =>
-                `<option value="${v.vehicleId}">${v.vehicleId} | ${v.plateNumber}</option>`
-            ).join('');
+        atmFillSelect(sel, 'Select a vehicle…',
+            vehicles.map(v => ({ value: v.vehicleId, label: v.vehicleId + ' | ' + v.plateNumber })));
     }
+
+    // Options are built as elements with textContent, never glued together as HTML.
+    // Plate numbers and driver names are typed by admins and come straight from the
+    // database, so with innerHTML a name like `<img src=x onerror=...>` ran in the
+    // session of whoever opened this modal next.
+    function atmFillSelect(sel, placeholder, items, selectedId) {
+        sel.replaceChildren();
+        const blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = placeholder;
+        sel.appendChild(blank);
+        (items || []).forEach(function (it) {
+            const opt = document.createElement('option');
+            opt.value = it.value;
+            opt.textContent = it.label;
+            if (selectedId != null && it.value == selectedId) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    }
+
 
     // ── Populate drivers: exclude those already booked for this shift ──
     function refreshDrivers() {
@@ -513,10 +531,8 @@
                 : '<option value="">Select shift first…</option>';
             return;
         }
-        sel.innerHTML = '<option value="">Select a driver…</option>'
-            + drivers.map(d =>
-                `<option value="${d.driverId}">${d.driverName}</option>`
-            ).join('');
+        atmFillSelect(sel, 'Select a driver…',
+            drivers.map(d => ({ value: d.driverId, label: d.driverName })));
     }
 
     function hideHint(id) {

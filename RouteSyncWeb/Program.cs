@@ -97,6 +97,42 @@ else
 }
 
 app.UseHttpsRedirection();
+
+// Security headers. The Content-Security-Policy is a backstop, not the fix: the real work
+// is not putting typed values into markup in the first place. What it buys is a cap on the
+// damage of any sink that gets missed later.
+//
+// `connect-src 'self'` is the line that matters most here. Even if an injected script runs,
+// it cannot post the session or the fleet data to somebody else's server, because the
+// browser refuses the request. `frame-ancestors 'none'` stops the dashboard being framed
+// and clickjacked into approving something.
+//
+// script-src keeps 'unsafe-inline' and that is a real weakness, stated plainly: the views
+// carry inline <script> blocks and onclick handlers throughout, so removing it would break
+// every page until they are all refactored. Tightening it is worth doing later; shipping
+// the rest of the policy now is worth more than shipping none of it.
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["Content-Security-Policy"] =
+        "default-src 'self'; " +
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com; " +
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; " +
+        "font-src 'self' data: https://cdn.jsdelivr.net; " +
+        // Leaflet pulls map tiles straight from OpenStreetMap.
+        "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com; " +
+        // Every call the browser makes is to this server. Supabase is talked to server-side
+        // only, so the browser never needs to reach it.
+        "connect-src 'self'; " +
+        "frame-ancestors 'none'; " +
+        "base-uri 'self'; " +
+        "form-action 'self'; " +
+        "object-src 'none'";
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["Referrer-Policy"] = "same-origin";
+    await next();
+});
+
 app.UseRouting();
 
 app.UseAuthentication();

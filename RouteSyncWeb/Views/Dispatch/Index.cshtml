@@ -286,8 +286,15 @@
 <script>
     function dpShowMsg(messages, title) {
         document.getElementById('dp-msg-title').textContent = title || 'Schedule conflict';
-        document.getElementById('dp-msg-list').innerHTML =
-            (Array.isArray(messages) ? messages : [messages]).map(m => `<li>${m}</li>`).join('');
+        // Server-built sentences, but rendered as text: a conflict line is data, and a
+        // <li> is the wrong place to find out otherwise.
+        const ul = document.getElementById('dp-msg-list');
+        ul.replaceChildren();
+        (Array.isArray(messages) ? messages : [messages]).forEach(function (m) {
+            const li = document.createElement('li');
+            li.textContent = m;
+            ul.appendChild(li);
+        });
         document.getElementById('dp-msg-modal').style.display = 'flex';
     }
     function dpCloseMsg() { document.getElementById('dp-msg-modal').style.display = 'none'; }
