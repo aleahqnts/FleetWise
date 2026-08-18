@@ -303,7 +303,12 @@
     function schShowConflicts(messages, allowOverride) {
         schLastConflicts = messages;
         const ul = document.getElementById('sch-conflict-list');
-        ul.innerHTML = messages.map(m => `<li>${m}</li>`).join('');
+        ul.replaceChildren();
+        (messages || []).forEach(function (m) {
+            const li = document.createElement('li');
+            li.textContent = m;   // a conflict line is data, not markup
+            ul.appendChild(li);
+        });
         document.getElementById('sch-override-btn').style.display = allowOverride ? '' : 'none';
         document.getElementById('sch-conflict-modal').style.display = 'flex';
     }
@@ -314,7 +319,12 @@
     function schConfirmOverride() {
         document.getElementById('sch-conflict-modal').style.display = 'none';
         const ul = document.getElementById('sch-override-list');
-        ul.innerHTML = schLastConflicts.map(m => `<li>${m}</li>`).join('');
+        ul.replaceChildren();
+        (schLastConflicts || []).forEach(function (m) {
+            const li = document.createElement('li');
+            li.textContent = m;   // a conflict line is data, not markup
+            ul.appendChild(li);
+        });
         document.getElementById('sch-override-modal').style.display = 'flex';
     }
     function schCancelOverride() {
