@@ -348,7 +348,7 @@ else
             {
                 statusMsg = ex is System.Net.Http.HttpRequestException or System.Threading.Tasks.TaskCanceledException
                     ? "Couldn't load. Check your connection."
-                    : $"Couldn't load: {ex.GetType().Name} — {ex.Message}";
+                    : $"Couldn't load. {ex.GetType().Name}: {ex.Message}";
             }
             System.Diagnostics.Debug.WriteLine($"[Home.Load] {ex}");
         }

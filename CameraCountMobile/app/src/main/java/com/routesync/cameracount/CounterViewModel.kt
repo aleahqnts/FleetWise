@@ -69,11 +69,10 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
      * driver's manual counter reappear. A fake-alive heartbeat would hide a dead camera.
      */
     @Volatile private var lastFrameAt = 0L
-    private val stallAfterMs = 12_000L
 
     fun noteFrame() { lastFrameAt = android.os.SystemClock.elapsedRealtime() }
     private fun cameraStalled() =
-        android.os.SystemClock.elapsedRealtime() - lastFrameAt > stallAfterMs
+        android.os.SystemClock.elapsedRealtime() - lastFrameAt > STALL_AFTER_MS
 
     init {
         viewModelScope.launch {
@@ -92,6 +91,14 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
         /** Fleet convention: V + 3 digits (V001..V012 today, room to grow). */
         val VEHICLE_ID_RE = Regex("^V\\d{3}$")
         const val MIN_PASSCODE = 4
+
+        /**
+         * Frame silence that hands the trip to the driver's manual counter. Public because
+         * the camera watchdog in CameraScreen derives its own, shorter window from this one:
+         * a rebind has to land before the handoff, and two hand-tuned numbers in two files
+         * would only stay in that order by luck.
+         */
+        const val STALL_AFTER_MS = 12_000L
     }
 
     /**
@@ -194,7 +201,10 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
         val t = tripId ?: return
         count++
         persistPending(t)
-        publishCounting(lastFlushOk = true)
+        // Carry the sync state forward. A boarding says nothing about whether the last
+        // flush reached the server, and claiming `true` here flipped the HUD to "synced"
+        // on every passenger while the bus sat in a dead zone.
+        publishCounting(lastFlushOk = (state.value as? UiState.Counting)?.lastFlushOk ?: true)
     }
 
     /** Durable write-behind: tiny DataStore commit per change, cheap at boarding rates. */
@@ -241,14 +251,8 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                         active != null && tripId == active.tripId -> {
                             // Manual may have counted while we were dead -> absorb, never lower.
                             count = maxOf(count, active.totalBoarded)
-                            // Carry the stall flag too. This poll runs alongside the flush
-                            // loop, so dropping it here let the two loops fight: flush set
-                            // "camera stalled", this republished without it, and the status
-                            // line flickered between stalled and "sync retrying" while the
-                            // camera stayed dead the whole time.
                             publishCounting(
-                                lastFlushOk = (state.value as? UiState.Counting)?.lastFlushOk ?: true,
-                                cameraStalled = cameraStalled()
+                                lastFlushOk = (state.value as? UiState.Counting)?.lastFlushOk ?: true
                             )
                         }
                         active == null && tripId != null -> {
@@ -474,7 +478,12 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun publishCounting(lastFlushOk: Boolean, cameraStalled: Boolean = false) {
+    // cameraStalled defaults to the live answer, not to false. Several loops publish this
+    // state independently, and a `false` default meant whichever one published last wiped
+    // a stall the others had detected - the status line flickered between "camera stalled"
+    // and "sync retrying" while the camera stayed dead throughout. Only the flush loop
+    // passes it explicitly, because it has already asked.
+    private fun publishCounting(lastFlushOk: Boolean, cameraStalled: Boolean = cameraStalled()) {
         val t = tripId ?: return
         _state.value = UiState.Counting(vehicleId, t, count, lastFlushOk, cameraStalled)
     }

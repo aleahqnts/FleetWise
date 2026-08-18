@@ -144,7 +144,7 @@
         catch
         {
             stage = Stage.Error;
-            errMsg = "Can't reach the server — check the connection and try again.";
+            errMsg = "Can't reach the server. Check your connection.";
             return;
         }
 
@@ -248,9 +248,9 @@
                 ["wake_requested_at"] = DateTime.UtcNow
             });
             if (!await WaitForSnapshotAsync())
-                note = "Camera switched, but no new photo arrived — tap Refresh.";
+                note = "Camera switched. Tap Refresh for a new photo.";
         }
-        catch { note = "Couldn't flip the camera — check the connection."; }
+        catch { note = "Couldn't flip the camera. Check your connection."; }
         busy = false; refreshing = false;
     }
 
@@ -267,9 +267,9 @@
                 ["wake_requested_at"] = DateTime.UtcNow
             });
             if (!await WaitForSnapshotAsync())
-                note = "Couldn't get a new photo — the camera didn't respond.";
+                note = "No new photo. The camera didn't respond.";
         }
-        catch { note = "Couldn't get a new photo — check the connection."; }
+        catch { note = "No new photo. Check your connection."; }
         busy = false; refreshing = false;
     }
 
@@ -307,7 +307,7 @@
         }
         catch
         {
-            note = "Couldn't save — check the connection and try again.";
+            note = "Couldn't save. Check your connection.";
             busy = false;
             return;
         }
@@ -329,7 +329,7 @@
             }
             catch { /* poll again */ }
         }
-        note = "Saved — the camera will apply it as soon as it reconnects.";
+        note = "Saved. The camera applies it when it reconnects.";
         busy = false;
     }
 
