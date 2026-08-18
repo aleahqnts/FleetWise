@@ -50,27 +50,29 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 
 /**
- * Frame silence that counts as a dead camera. A normal frame gap is milliseconds, even
- * throttled, so this only trips on a real stall.
+ * Frame silence that counts as a dead camera. A normal frame gap is milliseconds even
+ * under throttling, so this only trips on a real stall.
  *
- * Derived from the ViewModel's handoff threshold rather than hand-tuned, and the 6s of
- * headroom is spent, not spare: detection costs up to one tick, and opening a camera
- * costs a second or two on top. Budget is 6 + 2 + ~2 = under the 12s handoff, with the
- * ordering guaranteed by the subtraction instead of by a comment.
+ * Derived from [CounterViewModel.STALL_AFTER_MS] so a rebind always starts before the
+ * trip is handed to the driver's manual counter. The 6s of headroom is fully spent:
+ * detection costs up to one watchdog tick, and opening a camera costs another second
+ * or two.
  */
 private const val STALL_MS = CounterViewModel.STALL_AFTER_MS - 6_000L
 
-/** Watchdog poll. Short, because a slow tick eats the headroom above. */
+/** Watchdog poll interval. A slower tick would eat the headroom in [STALL_MS]. */
 private const val WATCHDOG_TICK_MS = 2_000L
 
-/** `adb logcat -s CameraWatchdog` - a stall is invisible on screen apart from black. */
+/** Log tag for the watchdog. On screen a stall looks like nothing but a black preview. */
 private const val WATCHDOG_TAG = "CameraWatchdog"
 
 /**
- * Backoff between rebind attempts, by consecutive failure count. A camera another app
- * is holding will not come back on the second try, and hammering it every few seconds
- * for a whole service day costs real battery on a phone that may not be charging. Caps
- * rather than gives up: whatever is holding the camera can release it at any time.
+ * Delay before the next rebind attempt, by consecutive failure count.
+ *
+ * A camera another app is holding does not come back on the second try, and retrying
+ * every few seconds for a whole service day costs battery on a phone that may not be
+ * charging. The delay caps rather than stopping, because whatever holds the camera can
+ * release it at any time.
  */
 private fun rebindBackoffMs(failures: Int): Long = when (failures) {
     1 -> 0L
@@ -79,30 +81,30 @@ private fun rebindBackoffMs(failures: Int): Long = when (failures) {
     else -> 60_000L
 }
 
-/** Consecutive failed rebinds before the HUD stops implying a fix is imminent. */
+/** Consecutive failed rebinds before the HUD reports the camera as unreachable. */
 private const val REBINDS_BEFORE_GIVING_UP_QUIETLY = 3
 
 /**
- * How long frames must keep arriving after a rebind before the camera counts as fixed.
+ * How long frames must keep arriving after a rebind before the camera counts as healthy.
  *
- * Measured, not guessed. A camera another app is holding does not block cleanly: it
- * yields for a moment, our rebind succeeds, about two seconds of frames arrive, and then
- * it is taken again. Treating the first frame as recovery reset the failure count on
- * every one of those blips, so the backoff never advanced past its first step and the
- * watchdog rebound every six seconds for as long as the other app was open - the exact
- * retry storm the backoff exists to prevent. Recovery has to mean sustained, not seen.
+ * A camera another app is holding does not block cleanly. It yields for a moment, the
+ * rebind succeeds, roughly two seconds of frames arrive, and it is taken again. Counting
+ * the first frame as recovery would reset the failure count on every one of those blips,
+ * so the backoff would never advance past its first step. Recovery means sustained.
  */
 private const val HEALTHY_AFTER_REBIND_MS = 20_000L
 
-/** Immutable per-frame snapshot for the overlay (built on the analyzer thread). */
+/** Immutable per-frame box for the overlay, built on the analyzer thread. */
 private data class OverlayBox(val l: Float, val t: Float, val r: Float, val b: Float, val counted: Boolean)
 
 /**
- * Next config version for an on-phone calibrate write. Re-reads the DB so we beat
- * whatever is there NOW (a driver's remote save, another writer) instead of a stale
- * local counter — two writers picking the same number would silently desync (the
- * follower's version `>` compare skips an equal write). Offline -> DB read fails ->
- * max(0, local)+1, and the follower's push-up self-heals on reconnect.
+ * Allocates the next `device_config` version for a calibration written on this phone.
+ *
+ * Re-reads the database rather than trusting the local counter, so the new version beats
+ * whatever is stored at this moment, including a driver's remote save. Two writers
+ * choosing the same number would desync silently, because the follower skips a write
+ * whose version is merely equal. When the read fails the value falls back to
+ * `max(0, local) + 1`, and the follower reconciles on reconnect.
  */
 private suspend fun nextConfigVersion(prefs: Prefs): Int {
     val dev = prefs.deviceId()
@@ -115,13 +117,15 @@ private suspend fun nextConfigVersion(prefs: Prefs): Int {
 }
 
 /**
- * Phase 3/4/5 camera surface.
- * - [vm] != null: COUNTING mode — ByteTrack + line-cross feed vm.increment(); uses the
- *   per-device SAVED line. Trip end (vm state leaves Counting) tears this down from Root.
- * - [calibrate] = true: CALIBRATION — live preview + boxes, DRAG the line onto the real
- *   doorway pathway, flip boarding direction, Save -> persisted (DataStore), survives
- *   restarts. Recalibrate any time the mount shifts; no rebuild needed.
- * - neither: plain detection preview.
+ * Camera surface, in one of three modes.
+ *
+ * - [vm] not null: counting. Tracking and line crossings feed `vm.increment()` against
+ *   the saved per-device line. When the trip ends the caller stops passing a view model
+ *   and this surface is torn down.
+ * - [calibrate] true: calibration. Live preview with boxes, both line endpoints
+ *   draggable onto the real doorway, boarding direction flippable, and Save persists to
+ *   DataStore so the line survives restarts.
+ * - Neither: plain detection preview.
  */
 @Composable
 fun CameraScreen(
@@ -180,15 +184,16 @@ private fun DetectionSurface(
     val scope = rememberCoroutineScope()
     val prefs = remember { Prefs(context) }
 
-    // Calibrated line = two endpoints (any angle) + boarding side. Loaded once; the two
-    // drag handles edit A/B live in calibrate mode.
+    // The calibrated line is two endpoints at any angle plus the boarding side. Loaded
+    // once here; the drag handles edit the endpoints while calibrating.
     var ax by remember { mutableFloatStateOf(Prefs.DEF_AX) }
     var ay by remember { mutableFloatStateOf(Prefs.DEF_AY) }
     var bx by remember { mutableFloatStateOf(Prefs.DEF_BX) }
     var by by remember { mutableFloatStateOf(Prefs.DEF_BY) }
     var inwardSign by remember { mutableIntStateOf(Prefs.DEF_INWARD_SIGN) }
     var lineLoaded by remember { mutableStateOf(false) }
-    // null = pref not loaded yet; camera binds only after, so the right lens comes up first.
+    // Null until the preference loads. The camera binds only afterwards, so the stored
+    // lens is the one that comes up.
     var useBack by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(Unit) {
         val cal = prefs.lineCalibration.first()
@@ -209,13 +214,12 @@ private fun DetectionSurface(
 
     val counting = vm != null
 
-    // Mid-trip line adjust: mount slips are fixed on the spot, no passcode — a driver
-    // wrestling a passcode dialog while boarding continues would just give up on it.
+    // Mid-trip line adjust, deliberately without a passcode: a driver correcting a
+    // slipped mount while passengers board will abandon the fix if it asks for one.
     var adjusting by remember { mutableStateOf(false) }
 
-    // Mid-trip line adjust is a step, so back should undo it rather than fall through to
-    // the root handler and start the exit countdown. Same as Cancel: drop the drag, keep
-    // the saved line. Composed below Root's handler, so this one wins while it is enabled.
+    // Back cancels the adjustment instead of reaching the root handler's exit prompt.
+    // Composed below that handler, so this one takes the press while it is enabled.
     BackHandler(enabled = adjusting) {
         scope.launch {
             val cal = prefs.lineCalibration.first()
@@ -225,9 +229,10 @@ private fun DetectionSurface(
     }
     val editingLine = calibrate || adjusting
 
-    // Phase 8a: remote config lands in DataStore (ViewModel follower), so COLLECT the
-    // flows — the line moves / lens flips live mid-trip. Paused while the user is
-    // editing so a remote write can't yank the handles out from under a drag.
+    // Remote configuration arrives in DataStore through the view model, so these flows
+    // are collected rather than read once: the line and lens can change mid-trip. Both
+    // ignore updates while the line is being edited, so a remote write cannot move the
+    // handles out from under a drag.
     LaunchedEffect(Unit) {
         prefs.lineCalibration.collect { cal ->
             if (!(calibrate || adjusting)) {
@@ -240,26 +245,26 @@ private fun DetectionSurface(
         prefs.useBackCamera.collect { back -> if (!(calibrate || adjusting)) useBack = back }
     }
 
-    // Dim mode: nobody in frame for 60s -> near-black overlay (burn-in relief) AND
-    // Phase 9a resting throttle: while dimmed, inference drops to 1-of-4 frames (the
-    // real heat cut — YOLO is the dominant heat source, not the screen). Un-dim is
-    // INSTANT (analyzer callback below), so full rate resumes the moment someone shows.
+    // Dim mode: 60s with nobody in frame draws a near-black overlay and drops inference
+    // to one frame in four. The throttle is the real saving, since inference produces
+    // more heat than the screen. Waking is immediate, driven by the analyzer callback
+    // below, so the full rate resumes on the first frame containing a person.
     var lastPersonAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var dimmed by remember { mutableStateOf(false) }
 
-    // Camera watchdog. A CameraX session can die on its own (HAL wedge, another app
-    // grabbing the camera, a thermal kill of the pipeline) and it dies QUIETLY: the
-    // preview goes black, the analyzer simply stops being called, and nothing throws.
-    // The ViewModel notices and reports "camera stalled", but reporting was all that
-    // ever happened - the binding is built once in the AndroidView factory, so the only
-    // way back was a lens toggle or an app restart. On a bus with the phone mounted on
-    // the dashboard, "go touch it" is not a recovery plan.
+    // Camera watchdog state.
     //
-    // Bumping bindEpoch re-keys the AndroidView below, which tears the session down and
-    // builds a fresh one. Frames restart -> the stall clears by itself.
+    // A CameraX session can die on its own, through a HAL wedge, another app taking the
+    // camera, or a thermal kill of the pipeline. It dies silently: the preview goes
+    // black, the analyzer stops being called, and nothing throws. The view model reports
+    // the stall but cannot repair it, because the binding is built once in the
+    // AndroidView factory below.
+    //
+    // Incrementing [bindEpoch] re-keys that AndroidView, which tears the session down
+    // and builds a new one without any interaction from the driver.
     var lastFrameMs by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
     var bindEpoch by remember { mutableIntStateOf(0) }
-    // Set once the rebinds stop looking like they will work, so the HUD can say so.
+    // True once repeated rebinds have failed, so the HUD can report it.
     var cameraUnreachable by remember { mutableStateOf(false) }
     fun framesFlowing() = android.os.SystemClock.elapsedRealtime() - lastFrameMs < STALL_MS
 
@@ -267,15 +272,14 @@ private fun DetectionSurface(
         while (true) {
             kotlinx.coroutines.delay(5_000)
             // Never dim over a dead camera. No frames means no detections, which the
-            // idle test reads as an empty bus - so a stalled camera would black out the
-            // screen on top of an already black preview, hiding the fault completely and
-            // leaving a tap as the only way to see anything.
+            // idle test cannot distinguish from an empty bus, so dimming would hide the
+            // fault behind a second black layer.
             dimmed = System.currentTimeMillis() - lastPersonAt > 60_000 &&
                 !editingLine && framesFlowing()
         }
     }
 
-    // Charging watch: a dashboard phone that isn't charging is a counter on a timer.
+    // A dashboard phone that is not charging will stop counting when the battery runs out.
     var charging by remember { mutableStateOf(true) }
     DisposableEffect(Unit) {
         val receiver = object : android.content.BroadcastReceiver() {
@@ -290,16 +294,17 @@ private fun DetectionSurface(
         onDispose { context.unregisterReceiver(receiver) }
     }
 
-    // Phase 6: dashboard phone must never sleep mid-trip (or mid-calibration).
+    // A dashboard phone must not sleep during a trip or a calibration.
     val view = androidx.compose.ui.platform.LocalView.current
     DisposableEffect(Unit) {
         view.keepScreenOn = true
         onDispose { view.keepScreenOn = false }
     }
 
-    // Phase 6 thermal guard: closed bus + sun = throttle before the OS kills us.
-    // SEVERE -> infer every 2nd frame, CRITICAL+ -> every 3rd. Listener-driven (no
-    // per-frame binder calls); API 29+, older devices just run unthrottled.
+    // Thermal guard: a closed bus in the sun heats the phone until the system kills the
+    // app, so inference is throttled first. SEVERE infers every 2nd frame, CRITICAL and
+    // above every 3rd. Listener-driven to avoid a binder call per frame. API 29 and up;
+    // older devices run unthrottled.
     var thermalSkip by remember { mutableIntStateOf(1) }
     DisposableEffect(Unit) {
         if (android.os.Build.VERSION.SDK_INT >= 29) {
@@ -322,19 +327,18 @@ private fun DetectionSurface(
         lineCounter.ax = ax; lineCounter.ay = ay
         lineCounter.bx = bx; lineCounter.by = by
         lineCounter.inwardSign = inwardSign
-        // Any line change (drag OR remote apply) invalidates side/origin history —
-        // stale geometry would count (or miss) people against the OLD line.
+        // Any line change, dragged or applied remotely, invalidates side and origin
+        // history. Stale geometry counts or misses people against the previous line.
         tracker.resetCrossingState()
     }
 
-    // Watchdog loop, declared here because a rebind has to reset the tracker (below).
+    // Watchdog loop. Declared after the tracker because a rebind has to reset it.
     //
-    // repeatOnLifecycle(STARTED): CameraX unbinds the session whenever the activity stops,
-    // so frames legitimately stop every time the driver takes a call or a dialog covers
-    // the screen. Without this gate the loop reads that as a dead camera and rebinds every
-    // few seconds against a lifecycle that will not accept the binding anyway. The gate
-    // also restarts the clock on the way back in, so a long time backgrounded does not
-    // count as a stall the moment the app returns.
+    // The STARTED gate matters: CameraX unbinds the session whenever the activity stops,
+    // so frames stop legitimately every time a call arrives or a dialog covers the
+    // screen. Ungated, the loop would read that as a dead camera and rebind against a
+    // lifecycle that will not accept the binding. The gate also restarts the clock on
+    // the way back in, so time spent in the background is not counted as a stall.
     LaunchedEffect(Unit) {
         lifecycle.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             lastFrameMs = android.os.SystemClock.elapsedRealtime()
@@ -346,8 +350,8 @@ private fun DetectionSurface(
                 kotlinx.coroutines.delay(WATCHDOG_TICK_MS)
                 val now = android.os.SystemClock.elapsedRealtime()
                 if (framesFlowing()) {
-                    // Only a sustained run counts as fixed. Clearing on the first frame
-                    // back let a flapping camera hold the failure count at zero forever.
+                    // Only a sustained run counts as recovery. Clearing on the first
+                    // frame back would hold a flapping camera at zero failures forever.
                     if (failures > 0 && now - lastRebindAt >= HEALTHY_AFTER_REBIND_MS) {
                         android.util.Log.i(WATCHDOG_TAG, "steady again after $failures rebind(s)")
                         failures = 0
@@ -358,12 +362,12 @@ private fun DetectionSurface(
                 if (now < nextAttemptAt) continue
 
                 failures++
-                // A blackout of several seconds means every track is stale: the boxes
-                // were last seen before the gap, and their side/origin history is against
-                // a world that has moved on. Re-associating them on the first frame back
-                // would post crossings nobody made. Same reasoning as a line change above.
+                // Several seconds of blackout leaves every track stale: the boxes were
+                // last seen before the gap and their side history describes a scene that
+                // has moved on. Re-associating them on the first frame back would post
+                // crossings that nobody made.
                 tracker.resetCrossingState()
-                // Grace: the camera needs time to open before the next tick judges it.
+                // Grace period: the camera needs time to open before the next tick judges it.
                 lastFrameMs = now
                 lastRebindAt = now
                 val backoff = rebindBackoffMs(failures)
@@ -383,8 +387,8 @@ private fun DetectionSurface(
     DisposableEffect(Unit) {
         onDispose {
             vm?.liveAnalyzer = null // snapshot taps fall back to headless capture
-            // Order matters: stop frames FIRST, then stop the worker, then free the
-            // interpreter — closing native memory under a live frame = SIGSEGV.
+            // Order is required: stop frames, then the worker, then the interpreter.
+            // Freeing native memory under a live frame crashes the process.
             runCatching { ProcessCameraProvider.getInstance(context).get().unbindAll() }
             executor.shutdown()
             detector.close() // synchronized with detect(): waits out any in-flight frame
@@ -392,27 +396,26 @@ private fun DetectionSurface(
     }
 
     Box(Modifier.fillMaxSize()) {
-        // key(useBack): toggling the lens tears the whole binding down and rebuilds it
-        // with the other camera. Gated until the pref loads so the right lens comes up.
-        // key(bindEpoch): same teardown, used by the watchdog above to revive a session
-        // that died on its own.
+        // Both keys tear the binding down and rebuild it: `back` when the lens is
+        // switched, `bindEpoch` when the watchdog revives a dead session. Gated on
+        // useBack being loaded so the stored lens comes up first rather than flipping.
         useBack?.let { back ->
             key(back, bindEpoch) {
-                // Which generation this binding belongs to. The provider future resolves
-                // asynchronously, and under camera contention it can take longer than the
-                // watchdog's retry window - so a listener from a superseded epoch may still
-                // be pending when a newer one has already bound successfully. Letting it
-                // run would unbindAll the good session and attach the preview to a view
-                // Compose has thrown away: a permanently black screen, no exception.
+                // Generation this binding belongs to. The provider future resolves
+                // asynchronously and under camera contention can take longer than the
+                // watchdog's retry window, so a listener from a superseded epoch may
+                // still be pending after a newer one has bound. Running it would unbind
+                // the working session and attach the preview to a discarded view,
+                // leaving a permanently black screen with no exception raised.
                 val myEpoch = bindEpoch
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     onRelease = {
                         // AndroidView drops the view on an epoch change but frees nothing
-                        // else, so without this the old session stays bound and keeps
-                        // feeding a second analyzer into the shared executor and detector
-                        // until the NEXT factory happens to call unbindAll. Two YOLO
-                        // pipelines on one thread, at the moment recovery is meant to help.
+                        // else. Without this the old session stays bound and feeds a
+                        // second analyzer into the shared executor and detector until the
+                        // next factory calls unbindAll, putting two inference pipelines
+                        // on one thread during recovery.
                         runCatching { ProcessCameraProvider.getInstance(context).get().unbindAll() }
                     },
                     factory = { ctx ->
@@ -428,8 +431,9 @@ private fun DetectionSurface(
                                 .also { it.surfaceProvider = view.surfaceProvider }
                             val analysis = ImageAnalysis.Builder()
                                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                // RGBA out: toBitmap() on YUV frames is unsupported on some devices
-                                // (every frame throws -> 0 fps). RGBA conversion is built-in.
+                                // RGBA output: toBitmap() on YUV frames is unsupported on
+                                // some devices, where every frame throws and the rate drops
+                                // to zero. RGBA conversion is built in.
                                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                                 .build()
 
@@ -437,8 +441,9 @@ private fun DetectionSurface(
                             val haveFront = provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
                             val haveBack = provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)
                             val front = if (wantFront) haveFront else !haveBack // fall back to whatever exists
-                            // Back cam: pick the widest physical lens the OEM exposes (ultrawide
-                            // if it's a separate CameraInfo); front cam: just the default.
+                            // For the back camera, pick the widest physical lens the vendor
+                            // exposes, which is a separate CameraInfo on devices with an
+                            // ultrawide. The front camera uses the default.
                             val backPick = if (!front)
                                 com.routesync.cameracount.camera.LensPicker.widestBack(provider.availableCameraInfos)
                             else null
@@ -455,26 +460,26 @@ private fun DetectionSurface(
                                 DetectorAnalyzer(
                                     detector, mirrored = front,
                                     onError = { frameError = it },
-                                    // Phase 9a: resting (dimmed) throttles harder than thermal;
-                                    // whichever wants fewer inferences wins.
+                                    // Resting throttles harder than thermal does. Whichever
+                                    // asks for fewer inferences wins.
                                     throttle = { maxOf(thermalSkip, if (dimmed) 4 else 1) },
-                                    // Camera liveness, not counting liveness. Fires on every
+                                    // Camera liveness, not counting liveness. Fires for every
                                     // delivered frame, so a detector fault leaves this ticking
-                                    // and the watchdog stays out of it - a rebind cannot fix
+                                    // and the watchdog stays out of it. Rebinding cannot repair
                                     // an interpreter, and `detector` outlives every epoch.
                                     onFrame = { lastFrameMs = android.os.SystemClock.elapsedRealtime() }
                                 ) { dets, w, h, ms ->
                                     vm?.noteFrame() // stall guard: silence -> heartbeat stops -> manual fallback
                                     if (dets.isNotEmpty()) {
                                         lastPersonAt = System.currentTimeMillis()
-                                        // Phase 9a instant un-dim: don't wait for the 5s loop —
-                                        // full inference rate resumes on the very next frame.
+                                        // Wake immediately rather than waiting for the 5s loop,
+                                        // so the full inference rate resumes on the next frame.
                                         if (dimmed) dimmed = false
                                     }
                                     boxes = if (counting) {
-                                        // Real counting path: tracker IDs -> line-cross -> count.
-                                        // (crossings ignored until the saved line is loaded, and
-                                        // while the line itself is being dragged mid-trip)
+                                        // Counting path: track identities, then line crossings,
+                                        // then the count. Crossings are ignored until the saved
+                                        // line has loaded and while it is being dragged.
                                         val tracks = tracker.update(dets)
                                         val crossings = lineCounter.process(tracks)
                                         if (lineLoaded && !adjusting) repeat(crossings) { vm!!.increment() }
@@ -493,21 +498,22 @@ private fun DetectionSurface(
                                     }
                                 }
                             analysis.setAnalyzer(executor, analyzer)
-                            // Phase 8c: while counting, remote snapshots tap THIS analyzer's
-                            // frames instead of opening a second camera session.
+                            // While counting, remote snapshots tap this analyzer's frames
+                            // rather than opening a second camera session.
                             vm?.liveAnalyzer = analyzer
                             provider.unbindAll()
                             val cam = runCatching {
                                 provider.bindToLifecycle(lifecycle, selector, preview, analysis)
                             }.onFailure {
-                                // Camera held elsewhere, or disabled by policy. The watchdog
+                                // Camera held elsewhere or disabled by policy. The watchdog
                                 // sees no frames and retries on its own schedule.
                                 android.util.Log.e(WATCHDOG_TAG, "bind failed (epoch $myEpoch): ${it.message}")
                             }.getOrNull() ?: return@addListener
                             android.util.Log.i(WATCHDOG_TAG, "bound epoch $myEpoch, $lensInfo")
                             if (!front) {
-                                // Widest lens available: min zoom < 1.0 = ultrawide (0.6x etc.)
-                                // -> whole doorway + approach path in frame at dashboard distance.
+                                // A minimum zoom below 1.0 means an ultrawide lens, which at
+                                // dashboard distance fits the whole doorway and the approach
+                                // to it in frame.
                                 val minZoom = cam.cameraInfo.zoomState.value?.minZoomRatio ?: 1f
                                 if (minZoom < 1f) cam.cameraControl.setZoomRatio(minZoom)
                             }
@@ -518,8 +524,9 @@ private fun DetectionSurface(
             }
         }
 
-        // Boxes + counting line: frame-normalized coords mapped into the FIT_CENTER rect.
-        // In calibrate mode, drag grabs whichever endpoint handle (A/B) is nearer the touch.
+        // Boxes and counting line, in frame-normalized coordinates mapped into the
+        // FIT_CENTER rectangle. While editing, a drag grabs whichever endpoint is nearer
+        // the touch.
         var activeHandle by remember { mutableIntStateOf(-1) } // 0=A, 1=B
         val canvasModifier = if (editingLine) {
             Modifier.fillMaxSize().pointerInput(frameW, frameH) {
@@ -568,7 +575,8 @@ private fun DetectionSurface(
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(28f, 18f))
                 )
                 // Inward arrow: perpendicular to the line at its midpoint, pointing to the
-                // boarding side (inwardSign). dx,dy = line dir; normal = (-dy, dx).
+                // boarding side given by inwardSign. For a line direction (dx, dy) the
+                // normal is (-dy, dx).
                 val mx = (pa.x + pb.x) / 2f; val my = (pa.y + pb.y) / 2f
                 var ndx = -(pb.y - pa.y); var ndy = (pb.x - pa.x)
                 val len = kotlin.math.hypot(ndx, ndy).coerceAtLeast(1f)
@@ -577,7 +585,6 @@ private fun DetectionSurface(
                 drawLine(Color(0xFFFFC94D), Offset(mx, my), tip, strokeWidth = 6f)
                 drawCircle(Color(0xFFFFC94D), 10f, tip)
                 if (editingLine) {
-                    // Grab handles.
                     drawCircle(Color.White, 26f, pa); drawCircle(Color(0xFFFFC94D), 18f, pa)
                     drawCircle(Color.White, 26f, pb); drawCircle(Color(0xFFFFC94D), 18f, pb)
                 }
@@ -599,9 +606,9 @@ private fun DetectionSurface(
             frameError?.let {
                 Text(it, color = Color(0xFFFF6B6B), fontSize = 11.sp)
             }
-            // Several rebinds in and still no frames: something outside this app is
-            // holding the camera. Say so, instead of leaving a black screen that looks
-            // like the app is about to fix itself.
+            // Repeated rebinds with no frames means something outside this app holds
+            // the camera. Report it rather than leaving a black screen that suggests a
+            // fix is imminent.
             if (cameraUnreachable) {
                 Text(
                     "camera not responding, still retrying",
@@ -610,8 +617,8 @@ private fun DetectionSurface(
             }
         }
 
-        // Calibration controls: drag hint, boarding-direction flip, save. Shown both for
-        // the standalone calibrate screen and the mid-trip adjust overlay.
+        // Calibration controls, shown for both the standalone calibrate screen and the
+        // mid-trip adjustment.
         if (editingLine) {
             Column(
                 Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 28.dp),
@@ -631,12 +638,13 @@ private fun DetectionSurface(
                     Button(onClick = {
                         scope.launch {
                             prefs.saveLine(ax, ay, bx, by, inwardSign)
-                            // Old side/origin history is against the OLD line — clear it
-                            // so nobody gets counted (or missed) off stale geometry.
+                            // Side and origin history describes the previous line, so
+                            // clear it before anyone is counted against stale geometry.
                             tracker.resetCrossingState()
-                            // Phase 8a: local calibrate authors a new version and writes
-                            // it UP — the DB row stays the truth. Offline OK: the
-                            // follower self-heals (DB behind local -> push next poll).
+                            // A calibration made on the phone authors a new version and
+                            // pushes it up, keeping the database row authoritative.
+                            // Offline the push fails and the follower reconciles on a
+                            // later poll.
                             val v = nextConfigVersion(prefs)
                             runCatching {
                                 com.routesync.cameracount.data.SupabaseApi.upsertDeviceConfig(
@@ -651,7 +659,7 @@ private fun DetectionSurface(
                 if (adjusting) {
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = {
-                        // Cancel: reload the saved line, drop the drag.
+                        // Reload the saved line and drop the drag.
                         scope.launch {
                             val cal = prefs.lineCalibration.first()
                             ax = cal.ax; ay = cal.ay; bx = cal.bx; by = cal.by; inwardSign = cal.inwardSign
@@ -662,18 +670,18 @@ private fun DetectionSurface(
             }
         }
 
-        // Lens switch. Icon only, and up top: it belongs with the camera itself, not with
-        // the line-editing controls at the bottom. TopCenter on purpose - the HUD owns
-        // TopStart and the calibrate screen's Close button owns TopEnd.
+        // Lens switch. Placed at the top with the camera controls rather than with the
+        // line editing controls below. TopCenter is the only free corner: the HUD holds
+        // TopStart and the calibrate screen's Close button holds TopEnd.
         if (editingLine) {
             IconButton(
                 onClick = {
                     val next = !(useBack ?: false)
                     scope.launch {
                         prefs.saveUseBackCamera(next)
-                        // Phase 8a: lens choice is part of device_config - push it up with
-                        // the SAVED line (a drag in progress isn't saved yet). Offline is
-                        // fine: the follower self-heals (DB behind local -> push).
+                        // Lens choice is part of `device_config`, so it is pushed with the
+                        // saved line rather than a drag still in progress. Offline the
+                        // push fails and the follower reconciles later.
                         val v = nextConfigVersion(prefs)
                         runCatching {
                             val cal = prefs.lineCalibration.first()
@@ -696,7 +704,8 @@ private fun DetectionSurface(
             }
         }
 
-        // Mid-trip line adjust entry point (counting continues; crossings pause while dragging).
+        // Entry point for a mid-trip adjustment. Counting continues, but crossings are
+        // ignored while the line is being dragged.
         if (counting && !editingLine) {
             OutlinedButton(
                 onClick = { adjusting = true; lastPersonAt = System.currentTimeMillis() },
@@ -704,7 +713,7 @@ private fun DetectionSurface(
             ) { Text("Adjust line", color = Color.White, fontSize = 12.sp) }
         }
 
-        // Not-charging warning: the counter dies with the battery. Sits just above the HUD.
+        // Not-charging warning. The counter stops when the battery does.
         if (counting && !charging) {
             Text(
                 "⚡ Not charging",
@@ -715,11 +724,12 @@ private fun DetectionSurface(
             )
         }
 
-        // Counting HUD: live count + trip + sync state, fed by the ViewModel.
+        // Counting HUD: live count, trip, and sync state from the view model.
         if (vm != null && !adjusting) {
             val s = vm.state.collectAsState().value
             if (s is CounterViewModel.UiState.Counting) {
-                // Each +1 flashes the number white and pops it slightly — glanceable trust.
+                // Each increment flashes the number white and scales it briefly, so a
+                // driver glancing at the screen can see that a count registered.
                 val flash = remember { androidx.compose.animation.core.Animatable(0f) }
                 LaunchedEffect(s.count) {
                     if (s.count > 0) {
@@ -758,8 +768,9 @@ private fun DetectionSurface(
             }
         }
 
-        // Dim overlay (topmost): idle bus stop / long empty stretch -> near-black screen
-        // saves heat + battery + OLED. Detection still runs; a person or a tap wakes it.
+        // Dim overlay, drawn last so it covers everything. An idle stop or a long empty
+        // stretch draws a near-black screen to save heat, battery and OLED wear.
+        // Detection keeps running; a person entering frame or a tap wakes it.
         if (counting && dimmed) {
             val dimCount = (vm?.state?.collectAsState()?.value as? CounterViewModel.UiState.Counting)?.count
             Column(

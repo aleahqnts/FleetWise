@@ -8,22 +8,24 @@ import android.content.Context
 import android.content.Intent
 
 /**
- * Phase 9b: the counter phone is a fixed dashboard fixture. A power blip mid-route
- * reboots it; without this, the app stays closed and every trip after that goes
- * uncounted until someone climbs to the phone.
+ * Reopens the app after a reboot.
  *
- * Android 10+ blocks starting an Activity straight from a boot broadcast, so:
- *  1. try the direct launch anyway (still allowed on some OEM builds), and
- *  2. post a HIGH-importance notification with a full-screen intent — on a locked,
- *     just-booted fixture that launches the app; at worst it's a one-tap banner.
+ * The counter phone is a fixed fixture on the dashboard. A power interruption mid-route
+ * restarts it, and without this the app stays closed and every trip afterwards goes
+ * uncounted until someone reaches the phone.
+ *
+ * Android 10 and above blocks starting an activity directly from a boot broadcast, so two
+ * things are attempted: the direct launch, which some vendor builds still allow, and a
+ * high-importance notification carrying a full-screen intent, which launches the app on a
+ * locked device that has just booted and is a single-tap banner otherwise.
  */
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
 
-        // The watcher is the real recovery: it polls for trips and reopens the UI
-        // itself, so even if the launches below are blocked the phone still counts.
+        // The watcher is the dependable recovery path: it polls for trips and reopens the
+        // UI itself, so the phone keeps counting even when both launches below are blocked.
         WatcherService.start(context)
 
         val launch = Intent(context, MainActivity::class.java)

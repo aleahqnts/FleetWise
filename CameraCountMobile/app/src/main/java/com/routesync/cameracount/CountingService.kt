@@ -13,13 +13,14 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 
 /**
- * Phase 6: foreground service held for the duration of an Active trip.
+ * Foreground service held for the duration of an active trip.
  *
- * The activity does the actual work (camera + tracker + flush loops live in the
- * ViewModel); this service exists so Android treats the process as foreground —
- * a screen-dim, notification-shade pull, or brief app switch on the dashboard phone
- * must not kill the counter mid-trip. Started when the trip locks on, stopped when
- * the trip ends.
+ * The activity does the work: the camera, the tracker and the flush loop all live in the
+ * view model. This service exists only so the system treats the process as foreground, so
+ * that dimming the screen, pulling down the notification shade, or briefly switching away
+ * cannot kill the counter mid-trip.
+ *
+ * Started when a trip is locked on to, stopped when it ends.
  */
 class CountingService : Service() {
 
@@ -46,8 +47,9 @@ class CountingService : Service() {
         } else {
             startForeground(NOTIF_ID, notif)
         }
-        // Trip lifecycle is owned by the ViewModel's poll loop, not the OS — if the
-        // system kills us anyway, don't auto-restart into a stale trip.
+        // The trip lifecycle belongs to the view model's poll loop rather than the
+        // system, so a service killed by the system must not restart itself into a trip
+        // that may already have ended.
         return START_NOT_STICKY
     }
 

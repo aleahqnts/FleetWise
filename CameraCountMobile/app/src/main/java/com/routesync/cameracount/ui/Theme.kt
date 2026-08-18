@@ -13,7 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** RouteSync suite palette (mirrors the mobile login + web dashboard theme). */
+/** RouteSync palette, shared with the driver app and the web dashboard. */
 object RsColor {
     val Navy = Color(0xFF1B2A56)
     val Teal = Color(0xFF2E9E8F)
@@ -42,7 +42,7 @@ private val RsScheme = lightColorScheme(
 fun RsTheme(content: @Composable () -> Unit) =
     MaterialTheme(colorScheme = RsScheme, content = content)
 
-/** Full-bleed mint gradient background (matches the mobile login-bg). */
+/** Full-bleed mint gradient background, matching the driver app's sign-in screen. */
 @Composable
 fun RsBackground(content: @Composable BoxScope.() -> Unit) {
     Box(
@@ -55,7 +55,7 @@ fun RsBackground(content: @Composable BoxScope.() -> Unit) {
     )
 }
 
-/** Two-tone "RouteSync" wordmark + tagline, same mark as the driver app. */
+/** Two-tone RouteSync wordmark and tagline, the same mark the driver app uses. */
 @Composable
 fun RsWordmark(tagline: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -67,7 +67,7 @@ fun RsWordmark(tagline: String) {
     }
 }
 
-/** White rounded card, same shadow/radius language as the mobile login card. */
+/** White rounded card, using the same shadow and corner radius as the driver app's cards. */
 @Composable
 fun RsCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(

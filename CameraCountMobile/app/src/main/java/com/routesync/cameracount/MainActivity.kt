@@ -23,16 +23,18 @@ import kotlinx.coroutines.flow.first
 import com.routesync.cameracount.ui.*
 
 /**
- * CameraCount Mobile — RouteSync's camera-based passenger counter.
- * Phase 1: vehicle bind + trip poll + fake +1 counter proving the DB bridge.
- * UI mirrors the RouteSync driver-app / dashboard theme (see ui/Theme.kt).
+ * Entry point for the RouteSync camera-based passenger counter.
+ *
+ * The phone is bound to one vehicle, polls for that vehicle's active trip, and counts
+ * boarding passengers from the camera while a trip runs. Styling follows the shared
+ * RouteSync theme in `ui/Theme.kt`.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Phase 9b: the watcher outlives the UI — it reopens this activity when a trip
-        // starts while the app is closed/backgrounded. Started here so it's always
-        // alive once the app has been opened once after install.
+        // The watcher outlives this activity and reopens it when a trip starts while the
+        // app is closed or in the background. Started here so it is running from the
+        // first launch after installation onwards.
         WatcherService.start(this)
         setContent { RsTheme { Root() } }
     }
@@ -46,7 +48,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** One overlay-settings hop per app start (re-asked on next start if still denied). */
+/** Sends the user to the overlay settings page at most once per app start. Asked again
+ *  on the next start if the permission is still not granted. */
 private var overlayPrompted = false
 
 private fun promptOverlayPermission(context: android.content.Context) {
@@ -78,14 +81,14 @@ fun Root(vm: CounterViewModel = viewModel()) {
     var showPreview by remember { mutableStateOf(false) }
     val s = vm.state.collectAsState().value
 
-    // Back button. There is no navigation stack here - the whole app is one activity
-    // switching on state - so without this every back press finished the activity, even
-    // mid-trip, which killed the camera and the count with it.
+    // Back button handling. There is no navigation stack: the app is one activity
+    // switching on state, so an unhandled back press finishes the activity outright,
+    // including during a trip, which stops the camera and the count with it.
     //
-    // Calibrate backs out to the waiting screen. At the root, the first press only warns
-    // and the second within a couple of seconds exits: a driver reaching for a mounted
-    // phone one-handed can hit a dialog's wrong button, and a modal over the counting
-    // screen would cover the doorway the camera is watching.
+    // Calibrate backs out to the waiting screen. At the root the first press warns and a
+    // second within the exit window closes the app. A confirmation dialog is avoided
+    // deliberately: the phone is mounted and reached for one-handed, and a modal over the
+    // counting screen would cover the doorway the camera is watching.
     val backContext = androidx.compose.ui.platform.LocalContext.current
     var lastBackAt by remember { mutableLongStateOf(0L) }
     BackHandler {
@@ -108,11 +111,11 @@ fun Root(vm: CounterViewModel = viewModel()) {
         }
     }
 
-    // Phase 6: the trip foreground-service notification needs this on API 33+.
-    // Phase 9b: "Display over other apps" is REQUIRED (the watcher opens this app when
-    // a trip starts). Android has no dialog for it, only its Settings page — so open
-    // that page automatically, chained AFTER the notification dialog so the two system
-    // prompts never stack. Once per app start until granted.
+    // Two permissions, requested in order. API 33 and up needs notification permission
+    // for the trip foreground service. The overlay permission is required for the watcher
+    // to open this app when a trip starts, and Android offers no dialog for it, only a
+    // settings page, so that page is opened directly. The overlay request is chained
+    // after the notification dialog so the two prompts never appear at once.
     val context = androidx.compose.ui.platform.LocalContext.current
     val askNotif = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -126,8 +129,8 @@ fun Root(vm: CounterViewModel = viewModel()) {
         else promptOverlayPermission(context)
     }
 
-    // Trip active -> this device IS the counter. Camera + tracker run for the whole
-    // trip and stop when the trip ends (state leaves Counting -> screen disposed).
+    // While a trip is active this device is the counter. The camera and tracker run for
+    // the whole trip and stop when the state leaves Counting and this screen is disposed.
     if (s is CounterViewModel.UiState.Counting) {
         CameraScreen(vm = vm)
         return
@@ -162,8 +165,8 @@ private fun SetupCard(vm: CounterViewModel, onBind: (String, String, (String?) -
     var binding by remember { mutableStateOf(false) }
     var bindError by remember { mutableStateOf<String?>(null) }
 
-    // Post-7d: the fleet list is behind auth, so the passcode comes FIRST. A verified
-    // passcode mints the device token, then the bus dropdown loads with it.
+    // The fleet list is behind authentication, so the passcode is entered first. A
+    // verified passcode mints the device token, which then loads the bus dropdown.
     var fleet by remember { mutableStateOf<List<com.routesync.cameracount.data.SupabaseApi.FleetVehicle>?>(null) }
     var fleetError by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
@@ -212,7 +215,8 @@ private fun SetupCard(vm: CounterViewModel, onBind: (String, String, (String?) -
                 Text("Checking passcode…", color = RsColor.Muted)
             }
             fleet != null -> {
-                // Picker: no typos possible; shows the plate so the installer matches the bus.
+                // A picker rules out typos, and showing the plate lets the installer
+                // confirm the bus in front of them.
                 var open by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
                     OutlinedTextField(
@@ -234,12 +238,13 @@ private fun SetupCard(vm: CounterViewModel, onBind: (String, String, (String?) -
                 }
             }
             serverDown -> {
-                // Offline: manual entry with format validation. The bind itself will
-                // retry the network anyway.
+                // Offline fallback: manual entry with format validation. The bind retries
+                // the network regardless.
                 OutlinedTextField(
                     vehicle,
                     {
-                        // Fleet IDs are V + digits: uppercase, strip anything else, cap at 4 chars.
+                        // Fleet identifiers are V followed by digits, so input is uppercased,
+                        // stripped of anything else and capped at four characters.
                         vehicle = it.uppercase().filter { c -> c == 'V' || c.isDigit() }.take(4)
                         touchedVehicle = true; bindError = null
                     },
@@ -281,8 +286,9 @@ private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waitin
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { com.routesync.cameracount.data.Prefs(context) }
 
-    // Deploy trap: a bound phone whose line was never calibrated counts garbage against
-    // the default mid-screen line. Nag until the installer calibrates once.
+    // A bound phone whose line was never calibrated counts against the default
+    // mid-screen line, which produces meaningless totals. The prompt repeats until the
+    // installer has calibrated once.
     var lineIsDefault by remember { mutableStateOf(false) }
     var deviceId by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
@@ -317,7 +323,7 @@ private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waitin
             StatusDot(active = false)
             Spacer(Modifier.height(12.dp))
             Text("Waiting for trip", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = RsColor.Navy)
-            // Bound-bus confirmation: ID + plate, so a wrong bind is obvious at a glance.
+            // Identifier and plate together, so a wrong bind is obvious at a glance.
             s.plate?.takeIf { it.isNotBlank() }?.let {
                 Spacer(Modifier.height(4.dp))
                 Text("${s.vehicleId} · $it", color = RsColor.Teal, fontWeight = FontWeight.Bold)
@@ -327,7 +333,7 @@ private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waitin
                 "Counting starts automatically when the driver starts a trip for ${s.vehicleId}.",
                 color = RsColor.Muted, textAlign = TextAlign.Center
             )
-            // Last run's result sticks around until the next trip starts.
+            // The previous trip's result stays on screen until the next trip starts.
             s.tripSummary?.let {
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -346,8 +352,8 @@ private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waitin
             }
         }
     }
-    // Ops footer: device id matches trips/vehicles.counter_device_id in the DB — needed
-    // when an admin has to identify or clear this phone's lock.
+    // The device identifier shown here matches counter_device_id on the trips and
+    // vehicles rows, which an admin needs in order to identify or clear this phone's lock.
     if (deviceId.isNotBlank()) {
         Spacer(Modifier.height(14.dp))
         Text("RouteSync Counter · $deviceId", color = RsColor.Muted, fontSize = 11.sp)
@@ -355,11 +361,15 @@ private fun WaitingCard(vm: CounterViewModel, s: CounterViewModel.UiState.Waitin
 }
 
 /**
- * FAULT state — deployment is strictly one counter phone per bus, and the bind-level
- * vehicle lock should make this unreachable. Seeing it means two devices ended up bound
- * to the same bus anyway (offline bind race, manually cleared lock): the trip claim
- * stopped the double count, and this screen tells the operator to fix the root cause.
- * (If the counting device dies >30s, this one recovers the trip so counts keep flowing.)
+ * Fault screen, shown when another device already counts this bus.
+ *
+ * Deployment allows one counter phone per bus and the vehicle lock should make this
+ * unreachable, so reaching it means two devices were bound to the same bus anyway,
+ * through an offline bind race or a manually cleared lock. The trip claim has already
+ * prevented the double count; this screen exists to get the cause fixed.
+ *
+ * If the counting device goes silent for more than 30 seconds, this device takes the
+ * trip over so counting continues.
  */
 @Composable
 private fun StandbyCard(vm: CounterViewModel, s: CounterViewModel.UiState.Standby) {
@@ -392,8 +402,8 @@ private fun Header(vm: CounterViewModel, vehicleId: String, onCamera: () -> Unit
     ) {
         RsWordmark("Passenger Counter")
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Phase 9b kiosk: screen-pin the app so it can't be swiped away or
-            // backgrounded on the mounted phone. Unpin = system gesture (Back+Recents).
+            // Screen pinning keeps the app from being swiped away or backgrounded on a
+            // mounted phone. Unpinning is a system gesture, Back and Recents together.
             TextButton(onClick = {
                 runCatching { (context as? android.app.Activity)?.startLockTask() }
             }) { Text("Pin", color = RsColor.Muted, fontWeight = FontWeight.Bold) }

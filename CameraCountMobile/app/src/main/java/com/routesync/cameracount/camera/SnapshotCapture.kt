@@ -18,19 +18,22 @@ import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 
 /**
- * Phase 8c maintenance-wake: one still frame WITHOUT counting, for remote calibration.
- * Used while the app is Waiting (no trip): binds the camera to a throwaway lifecycle,
- * grabs one frame after a short AE warm-up, tears everything down.
+ * Captures one still frame for a remote calibration, without counting.
  *
- * The bitmap is produced in DISPLAY space — upright, and mirrored for the front lens —
- * because that is the space the counting line's normalized coords live in (the preview
- * is mirrored for front, and DetectorAnalyzer flips its boxes to match). A remote
- * editor dragging a line on this image maps 1:1 onto the camera's line. Back lens also
- * locks the same ultrawide min-zoom counting uses, so the snapshot FOV == counting FOV.
+ * Used while no trip is running. The camera is bound to a throwaway lifecycle, one frame
+ * is taken after a short exposure warm-up, and everything is torn down again.
+ *
+ * The bitmap is produced in display space, upright and mirrored for the front lens,
+ * because that is the space the counting line's normalized coordinates use: the preview
+ * is mirrored for the front camera and DetectorAnalyzer flips its boxes to match. A line
+ * dragged onto this image therefore maps directly onto the camera's line. The back lens
+ * also locks the same minimum zoom that counting uses, so the snapshot and counting
+ * fields of view match.
  */
 object SnapshotCapture {
 
-    /** Null on any failure (camera busy, permission gone, timeout) — caller reports idle. */
+    /** Returns null on any failure, including a busy camera, a revoked permission or a
+     *  timeout. The caller reports the device as idle. */
     suspend fun captureOnce(context: Context, useBack: Boolean): Bitmap? = withContext(Dispatchers.Main) {
         val provider = awaitProvider(context) ?: return@withContext null
         val owner = OneShotLifecycle()
@@ -40,7 +43,8 @@ object SnapshotCapture {
             .build()
         val executor = Executors.newSingleThreadExecutor()
         try {
-            // Same lens choice as counting (CameraScreen): front default, or widest back.
+            // The same lens choice counting makes: the default front camera, or the
+            // widest back one.
             val wantFront = !useBack
             val haveFront = provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
             val haveBack = provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)
@@ -54,7 +58,8 @@ object SnapshotCapture {
                     analysis.setAnalyzer(executor) { image ->
                         try {
                             frames++
-                            // Skip warm-up frames: the first few are dark while AE settles.
+                            // Skip warm-up frames. The first few are dark while automatic
+                            // exposure settles.
                             if (frames >= 5 && cont.isActive) {
                                 val rotation = image.imageInfo.rotationDegrees
                                 val raw = image.toBitmap()
@@ -99,7 +104,7 @@ object SnapshotCapture {
             }
         }.getOrNull()
 
-    /** Minimal LifecycleOwner so CameraX can bind without any UI on screen. */
+    /** Minimal lifecycle owner, so CameraX can bind with no UI on screen. */
     private class OneShotLifecycle : LifecycleOwner {
         private val reg = LifecycleRegistry(this)
         override val lifecycle: Lifecycle get() = reg

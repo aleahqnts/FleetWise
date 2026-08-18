@@ -8,25 +8,30 @@ import kotlin.math.atan2
 import kotlin.math.hypot
 
 /**
- * Some phones don't expose the 0.6x ultrawide as a zoom range on the logical back camera
- * (minZoomRatio stays 1.0) — the ultrawide is a separate physical sensor. When the OEM
- * DOES surface it as its own CameraInfo, this finds it: compute each back camera's
- * diagonal field-of-view from sensor size + focal length and pick the WIDEST.
+ * Finds the widest back-facing lens a device exposes.
  *
- * If nothing wider than the default is exposed (OEM locks physical IDs to system apps),
- * returns the plain back selector + its FOV so the UI can say "wide lens unavailable".
+ * On some phones the ultrawide is a separate physical sensor rather than part of the
+ * logical back camera's zoom range, so the minimum zoom ratio stays at 1.0 and the wider
+ * lens is only reachable as its own CameraInfo. Where the vendor surfaces it, this picks
+ * it by computing each back camera's diagonal field of view from sensor size and focal
+ * length.
+ *
+ * Where nothing wider is exposed, because the vendor restricts physical camera ids to
+ * system apps, the plain back selector is returned with its field of view so the UI can
+ * report that no wide lens is available.
  */
 object LensPicker {
 
     data class Pick(val selector: CameraSelector, val fovDegrees: Int, val isWide: Boolean)
 
-    /** Widest FOV (deg, rounded) among cameras of the given facing; 0 if unreadable. */
+    /** Widest field of view in whole degrees among cameras with the given facing, or 0
+     *  if the characteristics cannot be read. */
     fun fovDegrees(cameraInfos: List<CameraInfo>, facing: Int): Int =
         cameraInfos.filter { it.lensFacing == facing }
             .mapNotNull { fovOf(it) }
             .maxOrNull()?.toInt() ?: 0
 
-    /** Diagonal FOV in degrees, or null if the characteristics aren't readable. */
+    /** Diagonal field of view in degrees, or null if the characteristics cannot be read. */
     private fun fovOf(info: CameraInfo): Float? = try {
         val c = Camera2CameraInfo.from(info)
         val size = c.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
@@ -34,14 +39,14 @@ object LensPicker {
         if (size == null || focals == null || focals.isEmpty()) null
         else {
             val diag = hypot(size.width, size.height)
-            val f = focals.min() // shortest focal length = widest view
+            val f = focals.min() // the shortest focal length gives the widest view
             Math.toDegrees(2.0 * atan2((diag / 2.0), f.toDouble())).toFloat()
         }
     } catch (_: Exception) { null }
 
     /**
-     * @param cameraInfos provider.availableCameraInfos
-     * @return widest back-facing lens as a bindable CameraSelector + its FOV.
+     * @param cameraInfos the camera infos reported by the camera provider.
+     * @return the widest back-facing lens as a bindable selector, with its field of view.
      */
     fun widestBack(cameraInfos: List<CameraInfo>): Pick {
         val backs = cameraInfos.filter {
@@ -55,7 +60,7 @@ object LensPicker {
             backs.firstOrNull() ?: backs[0]
         ) ?: 0f
 
-        // Build a selector that pins CameraX to exactly this CameraInfo.
+        // A selector that pins CameraX to exactly this CameraInfo.
         val id = Camera2CameraInfo.from(widest.first).cameraId
         val selector = CameraSelector.Builder()
             .requireLensFacing(CameraSelector.LENS_FACING_BACK)
@@ -64,7 +69,7 @@ object LensPicker {
             }
             .build()
 
-        // "wide" = meaningfully wider than the default back cam (ultrawide territory).
+        // Counted as wide only when meaningfully wider than the default back camera.
         val isWide = widest.second >= defaultFov + 15f && widest.second > 85f
         return Pick(selector, widest.second.toInt(), isWide)
     }
