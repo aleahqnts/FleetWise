@@ -465,6 +465,7 @@ namespace FleetWise.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateTrip([FromBody] CreateTripRequest req)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState.FirstError());
             if (req == null
              || string.IsNullOrEmpty(req.ShiftType)
              || string.IsNullOrEmpty(req.VehicleId)
@@ -609,6 +610,7 @@ namespace FleetWise.Controllers
         [HttpPost]
         public async Task<IActionResult> ReassignTrip([FromBody] ReassignTripRequest req)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState.FirstError());
             if (req == null || string.IsNullOrEmpty(req.TripId))
                 return BadRequest("Trip ID is required.");
 
@@ -668,6 +670,7 @@ namespace FleetWise.Controllers
         [HttpPost]
         public async Task<IActionResult> RemoveTrip([FromBody] RemoveTripRequest req)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState.FirstError());
             if (req == null || string.IsNullOrEmpty(req.TripId))
                 return BadRequest("Trip ID is required.");
 
@@ -724,6 +727,7 @@ namespace FleetWise.Controllers
         [HttpPost]
         public async Task<IActionResult> BroadcastMessage([FromBody] BroadcastMessageRequest req)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState.FirstError());
             if (req == null || string.IsNullOrWhiteSpace(req.Body))
                 return BadRequest("Message body is required.");
 
@@ -754,6 +758,7 @@ namespace FleetWise.Controllers
         [HttpPost]
         public async Task<IActionResult> SendRouteMessage([FromBody] RouteMessageRequest req)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState.FirstError());
             if (req == null || string.IsNullOrWhiteSpace(req.Body) || req.RouteId == 0)
                 return BadRequest("Route ID and message body are required.");
 
@@ -782,6 +787,7 @@ namespace FleetWise.Controllers
         [HttpPost]
         public async Task<IActionResult> SendTripMessage([FromBody] TripMessageRequest req)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState.FirstError());
             if (req == null || string.IsNullOrWhiteSpace(req.Body) || string.IsNullOrEmpty(req.TripId))
                 return BadRequest("Trip ID and message body are required.");
 
