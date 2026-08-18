@@ -1,5 +1,6 @@
 @page "/checklist/{TripId}"
 @layout LoginLayout
+@implements IDisposable
 @inject SessionService Session
 @inject DriverDataService Data
 @inject NavigationManager Nav
@@ -124,6 +125,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        BackNavigation.PageHandler = HandleHardwareBack;
         if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
 
         trip = await Data.GetTripAsync(TripId);
@@ -145,6 +147,20 @@ else
     {
         if (currentSection > 0) currentSection--;
         else Nav.NavigateTo("/home");
+    }
+
+    // Hardware back has to walk the sections too, or it would jump straight out of a
+    // part-filled checklist from section 4.
+    public void Dispose()
+    {
+        if (BackNavigation.PageHandler == HandleHardwareBack) BackNavigation.PageHandler = null;
+    }
+
+    private bool HandleHardwareBack()
+    {
+        if (currentSection <= 0) return false; // let the route map take it to /home
+        InvokeAsync(() => { currentSection--; StateHasChanged(); });
+        return true;
     }
 
     private async Task Next()

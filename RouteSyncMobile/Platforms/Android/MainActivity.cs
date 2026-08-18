@@ -3,6 +3,7 @@ using Android.Content.PM;
 using Android.OS;
 using AndroidX.Core.App;
 using AndroidX.Core.Content;
+using FleetWiseMobile.Services;
 
 namespace FleetWiseMobile;
 
@@ -28,13 +29,16 @@ public class MainActivity : MauiAppCompatActivity
     protected override void OnResume()
     {
         base.OnResume();
-        // Register on first resume (after BlazorWebView wired its own back handler)
-        // so OURS has top priority -> hardware/gesture back = exit confirm app-wide,
-        // never a stale WebView history page.
+        // Register on first resume (after BlazorWebView wired its own back handler) so
+        // OURS has top priority. We route the press through Blazor by explicit up-target
+        // rather than letting the WebView walk its own history, which can hold the login
+        // page and redirect bounces.
         if (_backCallback is null)
         {
             _backCallback = new ConfirmExitCallback(this);
             OnBackPressedDispatcher.AddCallback(this, _backCallback);
+            // Blazor cannot background an Android task, so it asks us to.
+            BackNavigation.ExitApp = () => MoveTaskToBack(true);
         }
     }
 
@@ -45,6 +49,13 @@ public class MainActivity : MauiAppCompatActivity
 
         public override void HandleOnBackPressed()
         {
+            // Somewhere to go up to -> go there. The prompt is only for the top of the app.
+            if (BackNavigation.TryGoBack()) return;
+
+            // The app draws its own confirmation, in the app's own colours. The system
+            // dialog below is the fallback for the moment before the WebView is ready.
+            if (BackNavigation.ExitPrompt?.Invoke() == true) return;
+
             new AndroidX.AppCompat.App.AlertDialog.Builder(_activity)
                 .SetTitle("Exit RouteSync?")!
                 .SetMessage("Do you want to close the app?")!
