@@ -61,8 +61,8 @@ else
             }
         </div>
 
-        <!-- Phase 8: remote camera calibration — everything happens on the photo editor;
-             this card is just the door in (plus an is-it-alive chip). -->
+        @* Camera card. Calibration itself happens on the photo editor, so this is the way
+           in to it plus a liveness indicator. *@
         @if (!string.IsNullOrEmpty(CamDeviceId))
         {
             <div class="cam-card">
@@ -161,15 +161,17 @@ else
     private int tick;
     private DateTime now = PhTime.Now;
 
-    // Phase 2 (CameraCount): fresh heartbeat -> camera owns the count, manual hides.
+    // A fresh heartbeat means the camera owns the count, so the manual controls hide.
     private bool cameraAlive;
     private int hbPollFails;
     private static readonly TimeSpan HeartbeatStale = TimeSpan.FromSeconds(12);
 
-    // Camera-first: manual is the LAST resort, not the default. At trip start the camera
-    // needs ~10s to its first heartbeat (4s trip poll + 5s flush), so hold a grace window
-    // instead of flashing the +/- buttons. Once a heartbeat has EVER been seen this trip,
-    // grace no longer applies — a stale heartbeat means the camera died, reveal manual now.
+    // Manual counting is the fallback, not the default. The camera takes about 10 seconds
+    // to send its first heartbeat, from a 4s trip poll and a 5s flush, so a grace window
+    // covers the start of a trip rather than showing the buttons and taking them away.
+    //
+    // The grace applies only until the first heartbeat of the trip arrives. After that a
+    // stale heartbeat means the camera has died, so the manual controls appear at once.
     private bool cameraSeen;
     private DateTime graceEndUtc = DateTime.MaxValue;
     private static readonly TimeSpan CameraGrace = TimeSpan.FromSeconds(30);
@@ -184,9 +186,9 @@ else
         ? PhTime.Raw(trip.ActualStartTime.Value).ToString("h:mm tt")
         : (trip is null ? "" : DateTime.Today.Add(trip.ShiftStartTime).ToString("h:mm tt"));
 
-    // Shift window anchored to the trip's own date. Overnight shifts (end <= start,
-    // e.g. 10pm -> 6am) roll the end to the next day so the bar fill and the
-    // remaining countdown span the same real window.
+    // The shift window is anchored to the trip's own date. An end at or before the start
+    // means an overnight shift, for example 10pm to 6am, whose end rolls to the next day
+    // so the progress bar and the countdown cover the same real period.
     private DateTime ShiftStart => trip is null ? DateTime.MinValue : trip.Date.Date + trip.ShiftStartTime;
     private DateTime ShiftEnd => trip is null ? DateTime.MinValue
         : trip.Date.Date + trip.ShiftEndTime + (trip.ShiftEndTime <= trip.ShiftStartTime ? TimeSpan.FromDays(1) : TimeSpan.Zero);
@@ -218,8 +220,8 @@ else
     {
         if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
 
-        // Try the network first; fall back to the locally cached trip when offline
-        // so the counter keeps working through dead zones / app restarts.
+        // Network first, falling back to the cached trip when offline, so counting
+        // survives dead zones and app restarts.
         try
         {
             trip = await Data.GetTripAsync(TripId);
@@ -237,36 +239,38 @@ else
 
         if (trip is not null)
         {
-            // Crash-safety: prefer the locally-saved running count if present.
+            // Prefer the locally saved running count, which survives a crash.
             var saved = await SecureStorage.Default.GetAsync(CountKey);
             total = int.TryParse(saved, out var s) ? s : trip.TotalBoarded;
-            // Seed the mirror so the tracker has a count to log from the first fix.
+            // Seed the mirror so the tracker has a count to log from its first fix.
             await SecureStorage.Default.SetAsync(CountKey, total.ToString());
 
-            // Camera may already be counting this trip (e.g. app restart mid-trip) —
-            // evaluate its heartbeat before the first 5s poll so manual doesn't flash.
+            // The camera may already be counting this trip, after an app restart
+            // mid-trip. Its heartbeat is evaluated before the first poll so the manual
+            // controls do not appear and immediately disappear.
             graceEndUtc = DateTime.UtcNow + CameraGrace;
             ApplyCameraState(trip);
 
-            // Keep this as the resume target + (re)start background tracking.
+            // Record this trip as the resume target and start background tracking.
             await SecureStorage.Default.SetAsync(ActiveKey, TripId);
-            // Always confirm location access here — this page is the one screen both
-            // "Start Trip" and "Resume Trip" land on, so the prompt fires even when the
-            // user resumes (which skips TripDetails) or revoked the grant earlier.
+            // Location access is confirmed here because this is the one screen both Start
+            // Trip and Resume Trip land on. Resuming skips the trip details page, and the
+            // grant may have been revoked since the last trip.
             await EnsureLocationPermissionAsync();
             Tracker.Start(TripId);
 
-            // Back online? Drain any queued telemetry / trip finalizes.
+            // Back online, so drain any queued telemetry and trip finalizations.
             _ = Queue.FlushAsync();
         }
         loading = false;
 
-        // 1s tick for progress; flush to DB every 15s.
+        // One tick a second for the progress bar, with a database flush every 15.
         timer = new System.Threading.Timer(_ => OnTick(), null, 1000, 1000);
     }
 
-    // Foreground location first, then background. Asks every time the grant isn't
-    // already held so the driver is prompted in-app instead of digging into Settings.
+    // Foreground location is requested before background. The request repeats whenever
+    // the grant is missing, so the driver is prompted in the app rather than having to
+    // find the setting.
     private static async Task EnsureLocationPermissionAsync()
     {
         try
@@ -318,24 +322,26 @@ else
     {
         now = PhTime.Now;
         tick++;
-        // Camera alive -> it owns trips.total_boarded; suppress the manual flush so the
-        // two writers never fight. Manual flush resumes automatically when stale.
+        // While the camera is alive it owns trips.total_boarded, so the manual flush is
+        // suppressed and the two never write over each other. It resumes on its own once
+        // the heartbeat goes stale.
         if (tick % 15 == 0 && !cameraAlive) _ = Flush();
         if (tick % 5 == 0) _ = RefreshCameraStateAsync();
-        // Liveness chip on the camera card.
+        // Liveness indicator on the camera card.
         if (tick % 5 == 0) _ = RefreshCameraPanelAsync();
         InvokeAsync(StateHasChanged);
     }
 
-    // CameraCount stamps count_heartbeat in TRUE UTC every 5s. PhTime.Raw recovers the
-    // stored instant, so freshness is judged against DateTime.UtcNow (no +8 skew).
+    // The counter app stamps count_heartbeat in real UTC every 5 seconds, unlike the
+    // local-time convention used elsewhere. PhTime.Raw recovers the stored instant so
+    // freshness is compared against UtcNow without an eight-hour skew.
     private void ApplyCameraState(Trip t)
     {
         var hb = t.CountHeartbeat;
         if (hb is not null) cameraSeen = true;
         var fresh = hb is not null && DateTime.UtcNow - PhTime.Raw(hb.Value) < HeartbeatStale;
-        // Camera's number only ever raises ours (monotonic) — a lagging DB read must
-        // never wipe taps the driver just made.
+        // The camera's total can only raise the local one. A lagging read must never
+        // discard taps the driver has just made.
         if (fresh && t.TotalBoarded > total) total = t.TotalBoarded;
         cameraAlive = fresh;
     }
@@ -350,22 +356,23 @@ else
             ApplyCameraState(t);
             if (cameraAlive)
             {
-                // Keep the tap-mirror current: the background tracker logs this value
-                // into telemetry, and End Trip audits against it.
+                // Keep the mirror current. The background tracker logs this value into
+                // telemetry and ending the trip audits against it.
                 await SecureStorage.Default.SetAsync(CountKey, total.ToString());
             }
         }
         catch
         {
-            // Offline: after ~15s of failed reads, fail OPEN (reveal manual) so the
-            // driver can keep counting; camera's monotonic max() reconciles later.
+            // After roughly 15 seconds of failed reads, fail open and reveal the manual
+            // controls so the driver can keep counting. The camera's monotonic merge
+            // reconciles the two totals later.
             if (++hbPollFails >= 3) cameraAlive = false;
         }
     }
 
-    // ---------------- Phase 8: camera liveness chip ----------------
-    // All calibration moved to the photo editor (/camera-calibrate); this page only
-    // shows whether the counter phone is alive (device_status heartbeat, ~12s).
+    // Camera liveness. Calibration lives on the photo editor at /camera-calibrate, so
+    // this page only reports whether the counter phone is alive, from a device_status
+    // heartbeat roughly every 12 seconds.
 
     private DeviceStatusDto? camStatus;
     private static readonly TimeSpan CamStale = TimeSpan.FromSeconds(30);
@@ -410,13 +417,13 @@ else
         msg = null;
         try
         {
-            // Audit accuracy: use the freshest count (memory vs the per-tap mirror),
-            // never a stale in-memory value.
+            // Use whichever of the in-memory count and the per-tap mirror is fresher, so
+            // the audit never records a stale value.
             var saved = await SecureStorage.Default.GetAsync(CountKey);
             var finalTotal = Math.Max(total, int.TryParse(saved, out var s) ? s : 0);
             var finalRevenue = finalTotal * fare;
 
-            // Durable finalize: enqueue first (survives offline). The PATCH is the
+            // Enqueue first so the finalization survives being offline. The PATCH is the
             // single authoritative write of trips.total_boarded.
             await Queue.EnqueueFinalizeAsync(new FleetWiseMobile.Models.PendingTripFinalize
             {
@@ -427,7 +434,7 @@ else
                 VehicleId = vehicle?.VehicleId ?? trip?.VehicleId ?? ""
             });
 
-            // Stop tracking BEFORE clearing the count key so no stray tick logs a 0.
+            // Tracking stops before the count key is cleared, so no late tick logs a zero.
             Tracker.Stop();
             timer?.Dispose();
             SecureStorage.Default.Remove(CountKey);

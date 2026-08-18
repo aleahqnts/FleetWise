@@ -16,13 +16,14 @@ public static class MauiProgram
 
 		builder.Services.AddMauiBlazorWebView();
 
-		// Supabase client — single shared instance (mirrors the web app's setup).
+		// A single shared Supabase client, matching the dashboard's setup.
 		var supabase = new Supabase.Client(SupabaseConfig.Url, SupabaseConfig.Key);
 		supabase.InitializeAsync().Wait();
 
-		// Phase 7: every postgrest read/write carries the driver JWT once login minted
-		// one (SupabaseConfig.Bearer falls back to the anon key until then). Dynamic
-		// closure -> login/logout flips auth for ALL From<T>() calls with no re-init.
+		// Every read and write carries the driver JWT once sign-in has issued one, with
+		// SupabaseConfig.Bearer falling back to the publishable key before that. The
+		// closure is evaluated per request, so signing in or out changes the credentials
+		// for every query without rebuilding the client.
 		if (supabase.Postgrest is Postgrest.Client pg)
 			pg.GetHeaders = () => new Dictionary<string, string>
 			{
@@ -38,7 +39,7 @@ public static class MauiProgram
 		builder.Services.AddSingleton<Services.AuthService>();
 		builder.Services.AddSingleton<Services.DriverDataService>();
 
-		// GPS telemetry: on-device buffer + background tracker.
+		// GPS telemetry: the on-device buffer and the background tracker.
 		builder.Services.AddSingleton<Services.TelemetryQueue>();
 #if ANDROID
 		builder.Services.AddSingleton<Services.ITripTracker, Platforms.Android.AndroidTripTracker>();
@@ -48,7 +49,7 @@ public static class MauiProgram
 		builder.Services.AddSingleton<Services.ILocalNotifier, Services.NoopLocalNotifier>();
 #endif
 
-		// New-message poller: badge + popup + OS notification.
+		// Message poller, which drives the badge, the popup and the system notification.
 		builder.Services.AddSingleton<Services.MessageWatch>();
 
 #if DEBUG

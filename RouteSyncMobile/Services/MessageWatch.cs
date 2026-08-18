@@ -3,14 +3,19 @@ using Microsoft.Maui.Storage;
 
 namespace FleetWiseMobile.Services;
 
-// Background poller for driver messages. Runs for the whole logged-in session
-// (own timer, independent of which page is shown). Drives three things:
-//   1. unread tab badge  -> Changed event + Unread property
-//   2. in-app popup       -> NewMessage event (TripActive / MainLayout subscribe)
-//   3. OS notification    -> ILocalNotifier on each newly-arrived message
-//
-// "Unread" = driver-targeted msgs not yet read (DB is_read) PLUS broadcast/route
-// msgs created after the last time the Notifications tab was opened.
+/// <summary>
+/// Background poller for driver messages, running on its own timer for the whole
+/// signed-in session regardless of which page is shown.
+/// </summary>
+/// <remarks>
+/// Drives three things: the unread badge through <see cref="Changed"/> and
+/// <see cref="Unread"/>, the in-app popup through <see cref="NewMessage"/>, and an
+/// operating system notification for each newly arrived message.
+///
+/// A message counts as unread when it is addressed to this driver and not yet marked
+/// read, or when it is a broadcast or route message created after the last time the
+/// notifications tab was opened.
+/// </remarks>
 public class MessageWatch
 {
     private readonly DriverDataService _data;
@@ -65,7 +70,8 @@ public class MessageWatch
         Unread = 0;
     }
 
-    // Poll once on demand (e.g. pull-to-refresh) so badge updates immediately.
+    /// <summary>Polls once on demand, such as a pull to refresh, so the badge updates
+    /// without waiting for the timer.</summary>
     public Task RefreshNow() => Poll();
 
     private async Task Poll()
@@ -82,7 +88,7 @@ public class MessageWatch
                 if (_known.Contains(m.MessageId)) continue;
                 _known.Add(m.MessageId);
 
-                // First poll just seeds what already exists — don't alert per-row for history.
+                // The first poll seeds what already exists, so no alert is raised for history.
                 if (_seeded)
                 {
                     NewMessage?.Invoke(m);
@@ -92,8 +98,8 @@ public class MessageWatch
             }
             _seeded = true;
 
-            // On app launch (first poll), surface the newest UNREAD direct message that
-            // arrived while the app was closed — one popup, not a per-message storm.
+            // On the first poll after launch, show only the newest unread direct message
+            // that arrived while the app was closed, rather than one popup per message.
             if (firstPass)
             {
                 var latestUnread = msgs.FirstOrDefault(m =>
@@ -106,8 +112,10 @@ public class MessageWatch
         catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Watch.Poll] {ex}"); }
     }
 
-    // Called when the Notifications tab opens: broadcast/route msgs become "seen".
-    // Cutoff = max(now, newest message) so even a future-dated row is cleared.
+    /// <summary>Marks broadcast and route messages as seen, called when the notifications
+    /// tab opens.</summary>
+    /// <remarks>The cutoff is the later of now and the newest message, so a row dated in
+    /// the future is still cleared.</remarks>
     public void MarkSeenNow()
     {
         var cutoff = PhTime.Now;
@@ -127,7 +135,7 @@ public class MessageWatch
         catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Watch.Persist] {ex}"); }
     }
 
-    // Called after a driver msg is marked read so the badge drops right away.
+    /// <summary>Refreshes the badge immediately after a message is marked read.</summary>
     public void Recompute()
     {
         int n = 0;

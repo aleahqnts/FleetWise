@@ -3,8 +3,9 @@
 @inject DriverDataService Data
 @using FleetWiseMobile.Models
 
-@* Non-blocking frosted-glass toast. Normal msgs auto-hide in 8s; HIGH priority sticks
-   until "Got it". Tapping expands the full body in place — the trip screen stays put.
+@* Non-blocking toast. Normal messages hide themselves after 8 seconds; high priority
+   ones stay until acknowledged. Tapping expands the body in place, so the trip screen
+   underneath is not replaced.
    position:fixed inlined so a stale scoped-css cache can never bury it off-screen. *@
 @* Minimalist non-blocking toast. Critical positioning inlined (a stale scoped-css cache
    or a stuck transform-animation can never bury it again). Soft gray card, no blur.
@@ -73,8 +74,8 @@
 
         _auto?.Dispose();
         _auto = null;
-        // Normal msgs auto-hide after 8s (they stay unread -> tab badge catches them).
-        // High priority never auto-hides: the driver must acknowledge it.
+        // Normal messages hide themselves after 8 seconds and stay unread, so the tab
+        // badge still shows them. High priority messages stay until acknowledged.
         if (!IsHigh(current))
         {
             _auto = new System.Timers.Timer(8000) { AutoReset = false };
@@ -84,7 +85,7 @@
         StateHasChanged();
     }
 
-    // Expanding = reading: cancel the auto-hide so it doesn't vanish mid-sentence.
+    // Expanding means the driver is reading, so the auto-hide is cancelled.
     private void ToggleExpand()
     {
         expanded = !expanded;
@@ -95,7 +96,7 @@
         }
     }
 
-    // Timer expiry hides WITHOUT marking read — an unseen toast must keep its badge.
+    // Hiding on the timer does not mark the message read, so an unseen toast keeps its badge.
     private void AutoHide()
     {
         current = null;
@@ -106,7 +107,7 @@
         ShowNext();
     }
 
-    // Explicit dismiss = acknowledged -> mark direct messages read.
+    // An explicit dismissal is an acknowledgement, so direct messages are marked read.
     private async Task Dismiss()
     {
         var m = current;

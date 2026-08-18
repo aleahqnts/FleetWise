@@ -1,7 +1,10 @@
 namespace FleetWiseMobile.Services;
 
-// Fires an OS notification while the app is running (foreground or background).
-// Android shows it in the system tray; non-Android targets get the no-op impl.
+/// <summary>
+/// Raises an operating system notification while the app is running, in the foreground or
+/// the background. Android shows it in the system tray; other targets use a no-op
+/// implementation.
+/// </summary>
 public interface ILocalNotifier
 {
     void Show(int id, string title, string body);

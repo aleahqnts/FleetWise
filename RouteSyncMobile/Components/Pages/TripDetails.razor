@@ -101,8 +101,8 @@ else
             await Data.StartTripAsync(TripId);
             await EnsureLocationPermissionAsync();
             Tracker.Start(TripId);
-            // Replace history so hardware-back from the counter can't return to this
-            // stale "Confirm Start Trip?" page.
+            // History is replaced so the back button from the counter cannot return to
+            // this confirmation page, which no longer applies once the trip has started.
             Nav.NavigateTo($"/trip-active/{TripId}", new NavigationOptions { ReplaceHistoryEntry = true });
         }
         catch (Exception ex)
@@ -113,7 +113,8 @@ else
         }
     }
 
-    // Foreground location first; then background (Android sends user to settings).
+    // Foreground location is requested first, then background, which Android grants only
+    // through its settings page.
     private static async Task EnsureLocationPermissionAsync()
     {
         try

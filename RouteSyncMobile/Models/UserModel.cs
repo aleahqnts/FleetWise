@@ -3,10 +3,12 @@ using Postgrest.Models;
 
 namespace FleetWiseMobile.Models;
 
-// Phase 7: retargeted from `users` to the `users_app` view — same columns MINUS
-// password_hash, so the hash never crosses the wire again. The view is scoped to
-// the JWT's own row. (7d: base `users` is edge-fn/service-only; no client model
-// touches it anymore.)
+// Backed by the users_app view rather than the users table: the same columns without
+// password_hash, so the hash never reaches a client. The view also restricts a caller to
+// their own row.
+//
+// The underlying table is reachable only by the edge functions and the dashboard's
+// service key. No client model touches it.
 [Table("users_app")]
 public class UserModel : BaseModel
 {

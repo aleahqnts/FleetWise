@@ -60,14 +60,16 @@
         if (await Session.RestoreAsync())
         {
             Watch.Start(Session.CurrentUser!.UserId);
-            // Still on the temp password (e.g. app killed mid-change)? Force the change first.
+            // A driver still on the temporary password, after the app was killed part-way
+            // through changing it, is sent to change it before anything else.
             if (await SecureStorage.Default.GetAsync("fw_must_change") == "1")
             {
                 Nav.NavigateTo("/set-password");
                 return;
             }
-            // Mid-trip? Go straight back to the counter, not Home (survives
-            // WebView reboots on suspend / network change).
+            // Mid-trip, sign-in returns to the counter rather than the home screen, which
+            // is what makes the app survive the WebView restarting on suspend or a network
+            // change.
             var active = await SecureStorage.Default.GetAsync("fw_active_trip");
             if (!string.IsNullOrEmpty(active)) Nav.NavigateTo($"/trip-active/{active}");
             else Nav.NavigateTo("/home");
@@ -91,7 +93,7 @@
             Watch.Start(user.UserId);
             try { await Data.StampLoginAsync(user.UserId); } catch { /* non-blocking */ }
 
-            // Brand-new driver still on the shared temp password -> force them to set their own.
+            // A new driver on the shared temporary password is sent to set their own.
             if (password == AuthService.TemporaryPassword)
             {
                 await SecureStorage.Default.SetAsync("fw_must_change", "1");

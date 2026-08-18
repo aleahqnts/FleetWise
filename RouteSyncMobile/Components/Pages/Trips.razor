@@ -121,7 +121,7 @@ else
         _ = PollLoop(); // background: finished trips appear without pull-to-refresh
     }
 
-    // Route names are stable — fetch each unique route once, then cache for the session.
+    // Route names do not change during a session, so each one is fetched once and cached.
     private async Task FillRouteNames()
     {
         foreach (var id in trips.Select(t => t.RouteId).Distinct().Where(id => !routeNames.ContainsKey(id)))
@@ -135,7 +135,7 @@ else
         }
     }
 
-    // Silent re-fetch every 15s while the tab is open — list stays live, no flicker.
+    // Re-fetches every 15 seconds while the tab is open, keeping the list current.
     private readonly CancellationTokenSource pollCts = new();
 
     private async Task PollLoop()
