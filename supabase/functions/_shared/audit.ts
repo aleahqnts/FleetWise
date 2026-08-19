@@ -25,7 +25,7 @@ export type AuditEntry = {
 };
 
 /** Caller IP, best-effort (proxied: first hop in x-forwarded-for). */
-function clientIp(req: Request): string | null {
+export function clientIp(req: Request): string | null {
   const fwd = req.headers.get("x-forwarded-for");
   if (fwd) return fwd.split(",")[0].trim();
   return req.headers.get("cf-connecting-ip");

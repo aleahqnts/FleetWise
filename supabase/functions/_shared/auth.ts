@@ -34,6 +34,29 @@ export function fixedTimeEquals(a: Uint8Array, b: Uint8Array): boolean {
   return diff === 0;
 }
 
+// ---------- keyed digest ----------
+
+/**
+ * HMAC-SHA256 of `message` under `secret`, hex encoded.
+ *
+ * Used to store one-time codes without storing the codes: a six-digit code is
+ * trivially brute-forced from a plain digest, so the server secret acts as a
+ * pepper that a copy of the table alone does not carry. Callers prefix the
+ * message with a purpose string to keep separate uses from colliding.
+ */
+export async function hmacHex(secret: string, message: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 // ---------- ASP.NET Core Identity password hashes ----------
 //
 // v3 layout (marker 0x01):
