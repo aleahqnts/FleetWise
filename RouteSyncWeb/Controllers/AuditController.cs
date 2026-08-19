@@ -61,7 +61,13 @@ namespace FleetWise.Controllers
             if (term.Length > 0)
             {
                 var t = Uri.EscapeDataString(term);
-                filters.Add($"or=(summary.ilike.*{t}*,actor_id.eq.{t},target_id.ilike.*{t}*,ip.ilike.*{t}*)");
+                // Each value is double-quoted. Inside an or-list a bare space ends the
+                // value, so an unquoted "Admin User" is a parse error and the whole request
+                // fails rather than returning nothing. Sanitize already removes the quote
+                // character itself, so the quoting cannot be escaped from.
+                filters.Add(
+                    $"or=(summary.ilike.\"*{t}*\",actor_id.eq.\"{t}\"," +
+                    $"target_id.ilike.\"*{t}*\",ip.ilike.\"*{t}*\")");
             }
 
             var (rows, total) = await _audit.QueryAsync(string.Join("&", filters));

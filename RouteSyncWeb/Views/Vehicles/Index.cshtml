@@ -18,7 +18,12 @@
 
 @* SUMMARY CARDS *@
 <div class="vh-cards">
-    <div class="vh-card">
+    <a href="@Url.Action("Index")"
+       class="vh-card vh-card--click @(string.IsNullOrEmpty(Model.SelectedStatus)
+                                        && string.IsNullOrEmpty(Model.SelectedCondition)
+                                        && string.IsNullOrEmpty(Model.SelectedRoute)
+                                        && string.IsNullOrEmpty(Model.SearchTerm) ? "vh-card--active" : "")"
+       title="Show every vehicle">
         <div class="vh-card-icon vh-card-icon--green">
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -31,9 +36,10 @@
             <span class="vh-card-label">Total Vehicles</span>
             <span class="vh-card-value">@Model.TotalVehicles</span>
         </div>
-    </div>
+    </a>
 
     <a href="@Url.Action("Index", new { status = "Flagged", route = Model.SelectedRoute, search = Model.SearchTerm })"
+       @* condition is deliberately omitted: a card sets one filter, not two. *@
        class="vh-card vh-card--click @(Model.SelectedStatus == "Flagged" ? "vh-card--active" : "")"
        title="Show only flagged vehicles">
         <div class="vh-card-icon vh-card-icon--red">
@@ -48,7 +54,9 @@
         </div>
     </a>
 
-    <div class="vh-card">
+    <a href="@Url.Action("Index", new { condition = "Under Repair", route = Model.SelectedRoute, search = Model.SearchTerm })"
+       class="vh-card vh-card--click @(Model.SelectedCondition == "Under Repair" ? "vh-card--active" : "")"
+       title="Show only vehicles under repair">
         <div class="vh-card-icon vh-card-icon--amber">
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -59,7 +67,7 @@
             <span class="vh-card-label">Scheduled Maintenance</span>
             <span class="vh-card-value">@Model.ScheduledMaintenance</span>
         </div>
-    </div>
+    </a>
 </div>
 
 @* TOOLBAR *@
