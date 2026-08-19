@@ -15,16 +15,23 @@ namespace FleetWise.Controllers
         private readonly Supabase.Client _supabase;
         private readonly FareCalculator _fareCalculator;
 
-        // The live map only needs each active trip's newest reading. A position older
-        // than this is treated as stale (bus offline / dead zone) and the bus drops to
-        // parked, so the telemetry read can be bounded to this recent window instead of
-        // scanning the whole table. Generous enough to ride out the phone's 60s heartbeat
-        // and brief gaps without flicker.
+        /// <summary>
+        /// How recent a telemetry reading must be to count as live.
+        /// </summary>
+        /// <remarks>
+        /// An older position means the bus is offline or in a dead zone, and it is shown
+        /// parked. Bounding the read to this window avoids scanning the whole table on
+        /// every poll. The value is generous enough to absorb the phone's own heartbeat
+        /// interval and brief gaps without the map flickering.
+        /// </remarks>
         private const int RecentTelemetryMinutes = 30;
 
-        // Per-route terminals where non-running buses are shown parked (the JS spreads
-        // each terminal's buses into a neat grid so the pills don't overlap). Routes
-        // without an entry fall back to the first terminal.
+        /// <summary>
+        /// Terminal positions per route, where buses that are not running are shown parked.
+        /// A route without an entry uses the first terminal.
+        /// </summary>
+        /// <remarks>The map spreads each terminal's buses into a grid so their markers do
+        /// not overlap.</remarks>
         private static readonly Dictionary<int, (double Lat, double Lng, string Name)> Terminals = new()
         {
             [1] = (14.5466, 121.0285, "EDSA–Ayala Terminal"),
@@ -40,9 +47,9 @@ namespace FleetWise.Controllers
             _fareCalculator = fareCalculator;
         }
 
-        // Only the full map PAGE is gated by "routes". The read-only data endpoints below
-        // (Positions/Routes/Stops) stay open to any authed user so the Dashboard's Fleet Map
-        // preview card works for dashboard-permitted roles that lack "routes".
+        // Only the full map page requires the routes permission. The read-only endpoints
+        // below stay available to any signed-in user, so the dashboard's map preview works
+        // for roles that can see the dashboard but not the routes page.
         [RequirePermission("routes")]
         public async Task<IActionResult> Index()
         {
@@ -136,9 +143,12 @@ namespace FleetWise.Controllers
             return Json(routeData);
         }
 
-        // Live bus positions: latest telemetry row per Active trip, joined in C# to
-        // vehicle/route/driver, with occupancy % and revenue computed server-side so
-        // every consumer (markers, tooltip, side panel) shows identical numbers.
+        /// <summary>
+        /// Live bus positions: the newest telemetry reading for each active trip, joined to
+        /// its vehicle, route and driver.
+        /// </summary>
+        /// <remarks>Occupancy and revenue are calculated here rather than in the browser,
+        /// so the markers, tooltips and side panel all show the same numbers.</remarks>
         public async Task<IActionResult> Positions(int? routeId, string? status)
         {
             var tripsResponse = await _supabase
@@ -150,14 +160,15 @@ namespace FleetWise.Controllers
             if (routeId.HasValue)
                 activeTrips = activeTrips.Where(t => t.RouteId == routeId.Value).ToList();
 
-            // Scope to the current operational cycle (06:00→06:00). Trips dated today already
-            // span the whole cycle (a night shift is dated its start day); also keep a
-            // yesterday-dated trip ONLY if it was genuinely started (a real overnight run that
-            // hasn't been ended yet). A null-start Active trip dated in the past is a ghost —
-            // junk an outdated build instance left on the shared DB — and must never render
-            // here (this map has no date filter, which is how those ghosts leaked in before).
-            // The TripReaperService deletes them outright; this is the belt-and-suspenders so
-            // they're invisible even in the gap before the next sweep.
+            // Scoped to the current operational cycle. Trips dated today already cover it,
+            // since a night shift carries its start day's date. A trip dated yesterday is
+            // kept only when it genuinely started, meaning a real overnight run that has
+            // not been ended.
+            //
+            // An active trip dated in the past with no start time is stale data left by an
+            // older build against this shared database. The map has no date filter, so
+            // without this check such rows would render. A background service deletes them,
+            // and this keeps them invisible in the meantime.
             var opDay = PhClock.OperationalDay.Date;
             activeTrips = activeTrips.Where(t =>
                 t.Date.Date == opDay
@@ -170,23 +181,24 @@ namespace FleetWise.Controllers
             var usersResponse = await _supabase.From<UserModel>().Get();
             var maintenanceResponse = await _supabase.From<MaintenanceLog>().Get();
 
-            // Flagged = open incident — same definition as Dashboard/Dispatch/Vehicles.
+            // Flagged means an open incident, the same definition the dashboard, dispatch
+            // board and vehicle registry use.
             var flaggedVehicleIds = maintenanceResponse.Models
                 .Where(l => l.ResolvedAt == null && l.VehicleId != null)
                 .Select(l => l.VehicleId)
                 .ToHashSet();
 
-            // Bounded telemetry read: only rows belonging to the currently-active trips,
-            // and only from the recent window — instead of fetching the entire table every
-            // poll and filtering in memory. Newest-first so the latest-per-trip grouping
-            // below sees the most recent reading first. Skipped entirely when nothing's
-            // active (no IN () with an empty set).
+            // The telemetry read is bounded to rows belonging to currently active trips
+            // within the recent window, rather than fetching the table and filtering in
+            // memory on every poll. Ordered newest first, so the grouping below takes the
+            // most recent reading per trip. Skipped when nothing is active, which would
+            // otherwise build a filter against an empty set.
             var latestByTrip = new Dictionary<string, TelemetryData>();
             if (activeTripIds.Count > 0)
             {
-                // Cutoff MUST be UTC: stored timestamps are true UTC instants and PostgREST
-                // reads a naive filter string as UTC. PhClock.Now (PH wall-clock digits)
-                // would land 8h ahead and exclude every row.
+                // The cutoff has to be UTC. These timestamps are real UTC instants and the
+                // filter string is read as UTC, so a Philippine wall-clock value would sit
+                // eight hours ahead and exclude every row.
                 var recentCutoff = DateTime.UtcNow.AddMinutes(-RecentTelemetryMinutes);
                 var telemetryResponse = await _supabase
                     .From<TelemetryData>()
@@ -208,15 +220,15 @@ namespace FleetWise.Controllers
             var usersById = usersResponse.Models
                 .ToDictionary(u => u.UserId, u => u);
 
-            // One fare lookup per poll (fare_config), shared across every bus below.
+            // One fare lookup per poll, shared across every bus below.
             var fareRate = await _fareCalculator.GetRateAsync();
 
             var positions = new List<BusPositionDto>();
             var movingVehicleIds = new HashSet<string>();
 
-            // 1) Moving buses — one marker per vehicle, placed by its newest telemetry.
-            // A vehicle may (in messy data) be on several Active trips at once; we keep
-            // only the latest reading so its pill doesn't jump between trip positions.
+            // Moving buses: one marker per vehicle, positioned by its newest reading. A
+            // vehicle can appear on more than one active trip in inconsistent data, so only
+            // the latest reading is used and the marker does not jump between positions.
             var movingByVehicle = new Dictionary<string, BusPositionDto>();
             foreach (var trip in activeTrips)
             {
@@ -240,9 +252,9 @@ namespace FleetWise.Controllers
                     ? (int)Math.Round(passengers * 100.0 / capacity)
                     : 0;
 
-                // Revenue accrues from everyone who boarded (and paid), so it tracks the
-                // trip's cumulative total_boarded — never the live occupancy, which falls
-                // when passengers alight.
+                // Revenue comes from everyone who boarded and paid, so it follows the
+                // trip's cumulative total rather than current occupancy, which falls as
+                // passengers leave.
                 var boardedForRevenue = Math.Max(trip.TotalBoarded, passengers);
 
                 movingByVehicle[trip.VehicleId] = new BusPositionDto
@@ -271,8 +283,7 @@ namespace FleetWise.Controllers
             foreach (var id in movingByVehicle.Keys)
                 movingVehicleIds.Add(id);
 
-            // 2) Parked buses — every non-"On Trip" vehicle (Ready to Deploy / Pending /
-            // Flagged / Idle / Offline …), shown stationary at the terminal.
+            // Parked buses: every vehicle not on a trip, shown stationary at its terminal.
             foreach (var vehicle in vehiclesResponse.Models)
             {
                 if (movingVehicleIds.Contains(vehicle.VehicleId))
@@ -280,7 +291,8 @@ namespace FleetWise.Controllers
                 if (routeId.HasValue && vehicle.RouteId != routeId.Value)
                     continue;
 
-                // Grounded wins over flag, else the operational status — registry's rules.
+                // Grounded takes precedence over a flag, otherwise the operational status
+                // applies. These are the vehicle registry's rules.
                 var vehicleStatus = vehicle.OutOfService ? "Out of Service"
                     : flaggedVehicleIds.Contains(vehicle.VehicleId) ? "Flagged"
                     : NormalizeParked(vehicle.VehicleStatus);
@@ -318,7 +330,7 @@ namespace FleetWise.Controllers
             return Json(positions);
         }
 
-        // "6AM – 12PM" from the trip's shift start/end times.
+        /// <summary>The trip's shift window as a short label.</summary>
         private static string FormatShift(Trip trip)
         {
             static string Fmt(TimeSpan t) =>
@@ -336,8 +348,10 @@ namespace FleetWise.Controllers
             return string.IsNullOrEmpty(name) ? "Unassigned" : name;
         }
 
-        // Parked bus's operational status in the registry's vocabulary. A parked bus has no
-        // live trip, so any stale "moving"/"Flagged" label reads as Ready to Deploy.
+        /// <summary>
+        /// A parked bus's status in the registry's vocabulary. Such a bus has no live trip,
+        /// so a stored moving or flagged value is stale and reads as ready to deploy.
+        /// </summary>
         private static string NormalizeParked(string? vehicleStatus)
         {
             var s = (vehicleStatus ?? "").Trim();
