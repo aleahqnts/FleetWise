@@ -1,5 +1,6 @@
 @page "/checklist-log/{TripId}"
 @layout LoginLayout
+@implements IDisposable
 @inject SessionService Session
 @inject DriverDataService Data
 @inject NavigationManager Nav
@@ -98,8 +99,22 @@ else
     // reachable from both the home screen and the trip report.
     private async Task GoBack() => await JS.InvokeVoidAsync("history.back");
 
+    // Hardware back steps through history like the on-screen arrow, because this page is
+    // reachable from more than one parent and a fixed target would strand the others.
+    private bool HandleHardwareBack()
+    {
+        _ = GoBack();
+        return true;
+    }
+
+    public void Dispose()
+    {
+        if (BackNavigation.PageHandler == HandleHardwareBack) BackNavigation.PageHandler = null;
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        BackNavigation.PageHandler = HandleHardwareBack;
         if (!Session.IsLoggedIn) { Nav.NavigateTo("/"); return; }
 
         checklist = await Data.GetChecklistAsync(TripId);
