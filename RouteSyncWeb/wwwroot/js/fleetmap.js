@@ -51,8 +51,20 @@
     var routeSelect = document.getElementById('fmRouteFilter');
     var statusSelect = document.getElementById('fmStatusFilter');
     var searchInput = document.getElementById('fmSearch');
+    var clearBtn = document.getElementById('fmClearFilters');
+    var countEl = document.getElementById('fmCount');
+    var fitBtn = document.getElementById('fmFitBtn');
     var connBadge = document.getElementById('fmConnBadge');
     var legendEl = document.getElementById('fmLegend');
+    var legendToggle = document.getElementById('fmLegendToggle');
+
+    if (legendToggle && legendEl) {
+        legendToggle.addEventListener('click', function () {
+            var open = legendToggle.getAttribute('aria-expanded') === 'true';
+            legendToggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+            legendEl.hidden = open;
+        });
+    }
 
     // Side panel — tracks which bus is open so each poll refreshes it live.
     var panel = document.getElementById('fmPanel');
@@ -172,12 +184,37 @@
             if (show && !busLayer.hasLayer(marker)) busLayer.addLayer(marker);
             else if (!show && busLayer.hasLayer(marker)) busLayer.removeLayer(marker);
         });
+        updateTally();
+    }
+
+    // Counts what is actually on the map, so the tally and the empty state always agree
+    // with what the operator can see, whichever filter hid the rest.
+    function updateTally() {
+        var shown = 0, moving = 0;
+        Object.keys(busMarkers).forEach(function (id) {
+            var marker = busMarkers[id];
+            if (!busLayer.hasLayer(marker)) return;
+            shown++;
+            var st = marker._bus && marker._bus.status;
+            if (st === 'On Trip' || st === 'Active') moving++;
+        });
+
+        if (countEl) {
+            countEl.innerHTML = shown === 0
+                ? ''
+                : shown + (shown === 1 ? ' bus' : ' buses') + ', <em>' + moving + ' on trip</em>';
+        }
+        if (fitBtn) fitBtn.disabled = shown === 0;
     }
 
     // Poll the live Positions endpoint, honouring the current Route/Status filters.
     function fetchPositions() {
-        var routeId = parseInt(routeSelect.value) || null;
-        var status = statusSelect.value || null;
+        // A search is a request for one specific bus, so it looks across the whole fleet.
+        // Leaving the dropdowns applied meant a plate could not be found while a route was
+        // selected, which reads as the search being broken rather than filtered.
+        var searching = !!searchTerm;
+        var routeId = searching ? null : (parseInt(routeSelect.value) || null);
+        var status = searching ? null : (statusSelect.value || null);
 
         var params = [];
         if (routeId) params.push('routeId=' + routeId);
@@ -333,15 +370,38 @@
         if (pts.length === 1) map.setView(pts[0], 16);
         else map.fitBounds(L.latLngBounds(pts), { padding: [80, 80], maxZoom: 16 });
     }
-    var fitBtn = document.getElementById('fmFitBtn');
     if (fitBtn) fitBtn.addEventListener('click', fitToBuses);
 
-    routeSelect.addEventListener('change', refetch);
-    statusSelect.addEventListener('change', refetch);
+    // The clear control only appears once something is actually filtered, so it does not
+    // occupy the toolbar when there is nothing to undo.
+    function syncClearBtn() {
+        if (!clearBtn) return;
+        var active = !!(routeSelect.value || statusSelect.value || (searchInput && searchInput.value));
+        clearBtn.hidden = !active;
+    }
+
+    routeSelect.addEventListener('change', function () { syncClearBtn(); refetch(); });
+    statusSelect.addEventListener('change', function () { syncClearBtn(); refetch(); });
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+            routeSelect.value = '';
+            statusSelect.value = '';
+            if (searchInput) searchInput.value = '';
+            searchTerm = '';
+            syncClearBtn();
+            refetch();
+        });
+    }
     if (searchInput) {
         searchInput.addEventListener('input', function () {
+            var had = !!searchTerm;
             searchTerm = searchInput.value.trim().toLowerCase();
+            syncClearBtn();
             applySearch();
+            // Only the transitions in and out of searching change which buses the server
+            // returns, so the extra request is not made on every keystroke.
+            if (had !== !!searchTerm) refetch();
         });
     }
 

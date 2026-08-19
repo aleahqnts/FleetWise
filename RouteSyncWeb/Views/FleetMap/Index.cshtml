@@ -52,6 +52,17 @@
                     </span>
                 </div>
             </div>
+
+            <span id="fmCount" class="fm-count" aria-live="polite"></span>
+
+            <button id="fmClearFilters" class="fm-clear-btn" type="button"
+                    title="Clear the search and both filters" hidden>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none"
+                     stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+                Clear
+            </button>
         </div>
     </div>
 }
@@ -130,14 +141,18 @@
         </div>
     </aside>
 
-    <div class="fm-legend" id="fmLegend"></div>
-
-    @* Demo simulator switch, deliberately unobtrusive because it is for operators only.
-       Turning it off deletes the data the simulator created and leaves real trips and
-       telemetry untouched. *@
-    <button id="fmSimToggle" class="fm-sim-toggle" type="button"
-            title="Demo telemetry simulator (creates fake moving buses)">SIM ·</button>
-    @Html.AntiForgeryToken()
+    <div class="fm-legend" id="fmLegendBox">
+        <button id="fmLegendToggle" class="fm-legend-head" type="button"
+                aria-expanded="true" aria-controls="fmLegend">
+            <span>Routes</span>
+            <svg class="fm-legend-caret" xmlns="http://www.w3.org/2000/svg" width="11" height="11"
+                 fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+                 stroke-linejoin="round" viewBox="0 0 24 24">
+                <polyline points="6 9 12 15 18 9" />
+            </svg>
+        </button>
+        <div class="fm-legend-list" id="fmLegend"></div>
+    </div>
 </div>
 
 <style>
@@ -199,6 +214,44 @@
         display: flex;
         align-items: center;
         gap: 10px;
+    }
+
+    .fm-count {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #6B7A8C;
+        font-family: 'Segoe UI', sans-serif;
+        white-space: nowrap;
+    }
+
+    .fm-count em {
+        font-style: normal;
+        color: var(--fm-teal);
+    }
+
+    .fm-clear-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: none;
+        border: none;
+        padding: 4px 6px;
+        color: #9AA5B4;
+        font-size: 0.78rem;
+        font-weight: 700;
+        font-family: 'Segoe UI', sans-serif;
+        cursor: pointer;
+        border-radius: 6px;
+        transition: color .15s, background .15s;
+    }
+
+    .fm-clear-btn:hover {
+        color: #E74C3C;
+        background: #FDECEC;
+    }
+
+    .fm-clear-btn[hidden] {
+        display: none;
     }
 
     .fm-filter-label {
@@ -264,10 +317,49 @@
         background: var(--fm-white);
         border-radius: var(--fm-radius);
         box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
-        padding: 14px 18px;
+        padding: 10px 14px 12px;
+        max-width: 240px;
+    }
+
+    .fm-legend-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        width: 100%;
+        background: none;
+        border: none;
+        padding: 2px 0;
+        cursor: pointer;
+        font: 700 0.74rem 'Segoe UI', sans-serif;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: #9AA5B4;
+    }
+
+    .fm-legend-head:hover {
+        color: var(--fm-teal);
+    }
+
+    .fm-legend-caret {
+        transition: transform .15s;
+    }
+
+    /* Collapsed: the caret points right and the list is removed from layout, so the box
+       shrinks to its header instead of leaving an empty panel over the map. */
+    .fm-legend-head[aria-expanded="false"] .fm-legend-caret {
+        transform: rotate(-90deg);
+    }
+
+    .fm-legend-list {
         display: flex;
         flex-direction: column;
         gap: 10px;
+        margin-top: 10px;
+    }
+
+    .fm-legend-list[hidden] {
+        display: none;
     }
 
     .fm-legend-item {
@@ -282,7 +374,7 @@
         font-family: 'Segoe UI', sans-serif;
     }
 
-    .fm-legend:empty {
+    .fm-legend-list:empty {
         display: none;
     }
 
@@ -652,11 +744,12 @@
         display: none;
     }
 
-    /* Fit-to-buses control (top-left). */
+    /* Fit-to-buses control. Sits to the right of Leaflet's zoom buttons, which occupy
+       the top-left corner at a fixed 34px wide plus a 10px margin. */
     .fm-fit-btn {
         position: absolute;
-        left: 14px;
-        top: 14px;
+        left: 58px;
+        top: 11px;
         z-index: 1000;
         display: inline-flex;
         align-items: center;
@@ -674,43 +767,18 @@
         transition: background .15s, color .15s;
     }
 
-    .fm-fit-btn:hover {
+    .fm-fit-btn:hover:not(:disabled) {
         background: var(--fm-teal);
         color: #fff;
         border-color: var(--fm-teal);
     }
 
-    /* Hidden demo-simulator toggle (bottom-right, faint until hover). */
-    .fm-sim-toggle {
-        position: absolute;
-        right: 14px;
-        bottom: 14px;
-        z-index: 1000;
-        background: var(--fm-white);
-        color: #9AA5B4;
-        border: 1px solid var(--fm-border);
-        border-radius: 8px;
-        padding: 5px 10px;
-        font-size: 0.72rem;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        font-family: 'Segoe UI', sans-serif;
-        cursor: pointer;
-        opacity: 0.25;
-        transition: opacity .15s, color .15s, background .15s;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+    /* Nothing on the map to fit to. */
+    .fm-fit-btn:disabled {
+        opacity: .45;
+        cursor: default;
     }
 
-    .fm-sim-toggle:hover {
-        opacity: 1;
-    }
-
-    .fm-sim-toggle.fm-sim-toggle--on {
-        opacity: 1;
-        background: #34C759;
-        color: #fff;
-        border-color: #34C759;
-    }
 </style>
 
 @section Scripts {
@@ -721,48 +789,4 @@
             : "null");
     </script>
     <script src="~/js/fleetmap.js" asp-append-version="true"></script>
-    <script>
-        // Hidden demo-simulator toggle.
-        (function () {
-            var btn = document.getElementById('fmSimToggle');
-            if (!btn) return;
-            var tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
-            var token = tokenEl ? tokenEl.value : '';
-            var busy = false;
-
-            function render(on) {
-                btn.classList.toggle('fm-sim-toggle--on', !!on);
-                btn.textContent = on ? 'SIM ● ON' : 'SIM ·';
-                btn.dataset.on = on ? '1' : '0';
-            }
-
-            function post(url) {
-                return fetch(url, {
-                    method: 'POST',
-                    headers: { 'RequestVerificationToken': token }
-                }).then(function (r) { return r.json(); });
-            }
-
-            // Initial state.
-            fetch('/Simulator/Status').then(function (r) { return r.json(); })
-                .then(function (d) { render(d.enabled); })
-                .catch(function () { render(false); });
-
-            btn.addEventListener('click', function () {
-                if (busy) return;
-                var on = btn.dataset.on === '1';
-                if (on && !confirm('Stop the demo simulator and DELETE all simulated trips + their telemetry? Real trips are kept.'))
-                    return;
-                busy = true;
-                btn.style.pointerEvents = 'none';
-                post(on ? '/Simulator/Stop' : '/Simulator/Start')
-                    .then(function (d) {
-                        render(d.enabled);
-                        if (d.removed != null) console.info('Simulator removed ' + d.removed + ' simulated trips.');
-                    })
-                    .catch(function () { alert('Simulator toggle failed.'); })
-                    .finally(function () { busy = false; btn.style.pointerEvents = ''; });
-            });
-        })();
-    </script>
 }

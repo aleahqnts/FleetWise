@@ -42,17 +42,17 @@ public class Trip : BaseModel
     [Column("total_boarded")]
     public int TotalBoarded { get; set; }
 
-    // Set by the driver app when a real trip starts. The telemetry simulator uses
-    // null vs not-null to tell its own demo trips apart from trips a real phone is
-    // driving, so it never overwrites live data.
+    // Set by the driver app when a trip starts. A null value on an active trip is what
+    // marks it as one no phone ever drove.
     [Column("actual_start_time")]
     public DateTime? ActualStartTime { get; set; }
 
     [Column("actual_end_time")]
     public DateTime? ActualEndTime { get; set; }
 
-    // True for trips the TelemetrySimulator created. Lets the simulator animate only its
-    // own demo trips, so turning it off deletes exactly what it made and never real data.
+    // Marks trips created by the retired telemetry simulator. The column stays because
+    // TripReaperService still excludes such rows, so any left in the database are not
+    // mistaken for the ghost trips it removes.
     [Column("is_simulated")]
     public bool IsSimulated { get; set; }
 }
