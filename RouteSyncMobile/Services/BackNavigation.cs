@@ -62,7 +62,11 @@ public static class BackNavigation
         if (path.StartsWith("/trip-details/", StringComparison.Ordinal)) return "/home";
         if (path.StartsWith("/trip-report/", StringComparison.Ordinal)) return "/trips";
         if (path.StartsWith("/trip-active/", StringComparison.Ordinal)) return "/home";
-        if (path.StartsWith("/checklist-log/", StringComparison.Ordinal)) return $"/trip-active/{id}";
+        // The checklist log is reached from the home screen and from a trip report, so it
+        // has no single parent. The page registers its own handler to step back through
+        // history; this is only the fallback if that is not in place, and it deliberately
+        // never points at the counting screen.
+        if (path.StartsWith("/checklist-log/", StringComparison.Ordinal)) return "/home";
         if (path.StartsWith("/camera-calibrate/", StringComparison.Ordinal)) return $"/trip-active/{id}";
         if (path.StartsWith("/checklist/", StringComparison.Ordinal)) return "/home";
 
