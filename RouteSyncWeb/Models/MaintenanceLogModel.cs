@@ -24,7 +24,7 @@ public class MaintenanceLog : BaseModel
     public string TripId { get; set; }
 
     // issue_details is a JSON object column in Postgres (not text), so it maps to a
-    // dictionary — same pattern as Role.WebPermissions. A plain string here makes
+    // dictionary, the same way role permissions are handled. Declaring it as a string makes
     // Postgrest's deserializer throw on the leading '{'.
     [Column("issue_details")]
     public MaintenanceIssueDetails IssueDetails { get; set; }

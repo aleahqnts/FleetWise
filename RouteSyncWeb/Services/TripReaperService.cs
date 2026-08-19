@@ -4,8 +4,8 @@ using static Postgrest.Constants;
 namespace FleetWise.Services;
 
 /// <summary>
-/// Self-heals the shared DB against "ghost" trips — Active rows that no real driver and no
-/// instance of THIS build produced. Their signature is airtight:
+/// Removes ghost trips from the shared database: active rows that neither a real driver
+/// nor this build produced. Their signature is unambiguous:
 ///
 ///   trip_status = "Active"  AND  actual_start_time IS NULL  AND  is_simulated = false
 ///
@@ -13,15 +13,19 @@ namespace FleetWise.Services;
 ///   (mobile <c>StartTripAsync</c> writes both in one PATCH), so a null start on an Active
 ///   trip can never be a legitimate trip.
 /// • Our own demo trips are tagged <c>is_simulated = true</c> and are managed by the
-///   simulator's rollover / OFF-switch cleanup — excluding them here means the reaper never
-///   fights the simulator over a live demo bus.
+///   simulator's own rollover and cleanup. Excluding them here keeps this service from
+///   competing with the simulator over a live demo bus.
 ///
-/// What's left is exactly the junk an OUTDATED build instance leaves on the shared DB
-/// (untagged Active trips it created before the is_simulated tag / op-day rollover existed).
-/// Those linger Active across days, leak into the fleet map (Active-only, no date filter)
-/// and the dashboard (folds in yesterday's still-Active trips), and our code can't stop the
-/// foreign process that writes them — but it CAN delete what they leave behind, every sweep,
-/// so the ghosts never reach a screen for long. Telemetry is removed first, then the trip.
+/// What remains matches exactly what an outdated build leaves on the shared database:
+/// untagged active trips it created before the simulated tag and the operational-day
+/// rollover existed.
+///
+/// Those rows stay active across days and reach both the fleet map, which filters on active
+/// trips with no date bound, and the dashboard, which folds in trips still active from
+/// yesterday. This service cannot stop the process writing them, but it can remove what
+/// they leave behind on every sweep, so they are never on screen for long.
+///
+/// Telemetry is deleted first, then the trip.
 /// </summary>
 public class TripReaperService : BackgroundService
 {
@@ -55,7 +59,7 @@ public class TripReaperService : BackgroundService
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                // A transient Supabase hiccup must not kill the loop — log and retry next sweep.
+                // A transient failure must not end the loop, so it is logged and retried.
                 _logger.LogWarning(ex, "Trip reaper sweep failed; will retry next interval.");
             }
         }
@@ -77,7 +81,8 @@ public class TripReaperService : BackgroundService
 
         foreach (var trip in ghosts)
         {
-            // Telemetry before the trip — no orphan rows regardless of FK setup.
+            // Telemetry is deleted before the trip, so no rows are orphaned regardless of
+            // how the foreign keys are configured.
             await _supabase.From<TelemetryData>().Filter("trip_id", Operator.Equals, trip.TripId).Delete();
             await _supabase.From<Trip>().Filter("trip_id", Operator.Equals, trip.TripId).Delete();
 

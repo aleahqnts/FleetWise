@@ -132,8 +132,9 @@
 
     <div class="fm-legend" id="fmLegend"></div>
 
-    <!-- Hidden demo-simulator switch. Subtle by design — operators only. OFF deletes
-         the data the simulator created (real trips/telemetry are untouched). -->
+    @* Demo simulator switch, deliberately unobtrusive because it is for operators only.
+       Turning it off deletes the data the simulator created and leaves real trips and
+       telemetry untouched. *@
     <button id="fmSimToggle" class="fm-sim-toggle" type="button"
             title="Demo telemetry simulator (creates fake moving buses)">SIM ·</button>
     @Html.AntiForgeryToken()
@@ -150,7 +151,7 @@
         --fm-radius: 14px;
     }
 
-    /* ── Topbar ─────────────────────────────────────────────── */
+    /* Topbar. */
     .fm-topbar {
         display: flex;
         align-items: center;
@@ -240,7 +241,7 @@
         display: flex;
     }
 
-    /* ── Map page (fixed to viewport, below the 80px topbar / right of the sidebar) ── */
+    /* Map page (fixed to viewport, below the 80px topbar / right of the sidebar). */
     .fm-page {
         position: fixed;
         top: 80px;
@@ -254,7 +255,7 @@
         height: 100%;
     }
 
-    /* ── Legend ─────────────────────────────────────────────── */
+    /* Legend. */
     .fm-legend {
         position: absolute;
         left: 20px;
@@ -292,7 +293,7 @@
         flex-shrink: 0;
     }
 
-    /* ── Connection-lost badge (hidden until a poll fails) ── */
+    /* Connection-lost badge (hidden until a poll fails). */
     .fm-conn-badge {
         position: absolute;
         top: 16px;
@@ -323,7 +324,7 @@
         background: #DC2626;
     }
 
-    /* ── Terminal label (above the parked-bus grid) ── */
+    /* Terminal label (above the parked-bus grid). */
     .fm-terminal-label {
         background: transparent !important;
         border: none !important;
@@ -343,7 +344,7 @@
         font-family: 'Segoe UI', sans-serif;
     }
 
-    /* ── Bus markers ── */
+    /* Bus markers. */
     .fm-bus-marker {
         background: transparent !important;
         border: none !important;
@@ -365,7 +366,7 @@
         white-space: nowrap;
     }
 
-    /* ── Hover tooltip ── */
+    /* Hover tooltip. */
     .fm-tooltip-wrap.leaflet-tooltip {
         background: transparent;
         border: none;
@@ -441,7 +442,7 @@
         color: var(--fm-text);
     }
 
-    /* ── Click side panel ── */
+    /* Click side panel. */
     .fm-panel {
         position: absolute;
         top: 16px;
@@ -617,7 +618,7 @@
         color: var(--fm-muted);
     }
 
-    /* ── Stop markers — distinct from bus markers ── */
+    /* Stop markers, styled to be distinct from bus markers. */
     .fm-stop-marker {
         background: transparent !important;
         border: none !important;
@@ -635,7 +636,7 @@
         box-shadow: 0 3px 8px rgba(0, 0, 0, .3);
     }
 
-    /* ── Stop tooltip ── */
+    /* Stop tooltip. */
     .fm-stop-tooltip.leaflet-tooltip {
         background: var(--fm-white);
         border-radius: 8px;
@@ -651,7 +652,7 @@
         display: none;
     }
 
-    /* ── Fit-to-buses control (top-left) ── */
+    /* Fit-to-buses control (top-left). */
     .fm-fit-btn {
         position: absolute;
         left: 14px;
@@ -679,7 +680,7 @@
         border-color: var(--fm-teal);
     }
 
-    /* ── Hidden demo-simulator toggle (bottom-right, faint until hover) ── */
+    /* Hidden demo-simulator toggle (bottom-right, faint until hover). */
     .fm-sim-toggle {
         position: absolute;
         right: 14px;
@@ -721,7 +722,7 @@
     </script>
     <script src="~/js/fleetmap.js" asp-append-version="true"></script>
     <script>
-        // ── Hidden demo-simulator toggle ──────────────────────────
+        // Hidden demo-simulator toggle.
         (function () {
             var btn = document.getElementById('fmSimToggle');
             if (!btn) return;

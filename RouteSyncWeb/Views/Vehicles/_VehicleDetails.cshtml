@@ -1,6 +1,6 @@
 @model VehicleDetailsViewModel
 @*
-    View Vehicle Details — fetched into #viewVehicleContent per vehicle.
+    Vehicle details, fetched per vehicle into the details modal.
     Renders the modal header + body; the shell lives in _ViewVehicleModal.cshtml.
 *@
 @functions {
@@ -28,14 +28,14 @@
 </div>
 <div class="modal-body vh-modal-body">
 
-    <!-- Vehicle Profile -->
+    @* Vehicle Profile *@
     <div class="vh-section-header">Vehicle Profile</div>
     <div class="vh-section-body">
         <div class="vh-detail-row"><strong>Plate Number:</strong> @Model.PlateNumber</div>
         <div class="vh-detail-row"><strong>Route:</strong> @Model.RouteName</div>
     </div>
 
-    <!-- Passenger Counter Camera (Phase 8e: remote calibration, any bus, no trip needed) -->
+    @* Passenger counter camera, with remote calibration for any bus and no trip required. *@
     <div class="vh-section-header">Passenger Counter</div>
     <div class="vh-section-body">
         @if (!string.IsNullOrEmpty(Model.CounterDeviceId))
@@ -51,7 +51,7 @@
         }
     </div>
 
-    <!-- Inspection Log -->
+    @* Inspection Log *@
     <div class="vh-section-header">
         <span>Inspection Log</span>
         @if (Model.HasInspection)
@@ -90,7 +90,7 @@
         }
     </div>
 
-    <!-- Maintenance Log -->
+    @* Maintenance Log *@
     <div class="vh-section-header">
         <span>Maintenance Log</span>
         <span class="vh-maint-head-right">
@@ -121,7 +121,7 @@
         }
     </div>
 
-    <!-- Flag Review / Actions -->
+    @* Flag Review / Actions *@
     @if (Model.OpenLogId.HasValue || Model.OutOfService || Model.IncidentThreads.Count > 0)
     {
         <div class="vh-section-header">

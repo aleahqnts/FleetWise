@@ -1,6 +1,6 @@
 namespace FleetWise.Models
 {
-    // One row of the audit trail, as shown on the Audit Log page (Phase 10c).
+    /// <summary>One entry of the audit trail, as shown on the audit log page.</summary>
     public class AuditEntryViewModel
     {
         public long Id { get; set; }

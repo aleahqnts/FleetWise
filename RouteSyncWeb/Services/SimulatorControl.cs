@@ -4,9 +4,9 @@ using static Postgrest.Constants;
 namespace FleetWise.Services;
 
 /// <summary>
-/// Runtime on/off switch for <see cref="TelemetrySimulator"/> plus cleanup of the demo
-/// data it produces. Default is OFF, so a freshly started process never auto-generates
-/// simulated trips — the simulator only runs when an operator turns it on from the UI.
+/// Runtime switch for <see cref="TelemetrySimulator"/>, and cleanup of the demo data it
+/// produces. Off by default, so a freshly started process never generates simulated trips
+/// until an operator turns it on.
 /// </summary>
 public class SimulatorControl
 {
@@ -19,19 +19,20 @@ public class SimulatorControl
         _logger = logger;
     }
 
-    // Read every tick by the simulator. volatile so the toggle is seen across threads.
+    // Read on every simulator tick, and marked volatile so the change is seen across threads.
     public volatile bool Enabled;
 
-    // Serializes a simulator tick against a stop/cleanup. Without it, a tick already past
-    // its Enabled check can re-create a demo trip AFTER cleanup deleted it -> an orphan
-    // sim trip survives while the switch is OFF. The simulator must take this around its
-    // whole tick body and re-check Enabled once held.
+    // Serializes a simulator tick against a stop and its cleanup. Without it, a tick that
+    // has already passed its enabled check can recreate a demo trip after cleanup deleted
+    // one, leaving a simulated trip running while the switch is off.
+    //
+    // The simulator holds this for its whole tick and re-checks the switch once it has it.
     public readonly SemaphoreSlim TickGate = new(1, 1);
 
     public void Start() => Enabled = true;
 
-    // Turn the producer off, then wipe everything it made so only real data remains. The
-    // cleanup runs under TickGate so it can't race a tick mid-create; once it releases,
+    // Turns the producer off, then removes everything it made so only real data remains.
+    // The cleanup holds the gate so it cannot race a tick mid-create. Once released,
     // any waiting tick sees Enabled=false and bails before creating anything.
     public async Task<int> StopAndCleanupAsync()
     {
@@ -49,7 +50,7 @@ public class SimulatorControl
 
     /// <summary>
     /// Delete simulated trips and their telemetry. "Simulated" = tagged is_simulated, OR a
-    /// legacy rogue trip (Active with no real start — the simulator's pre-tag signature).
+    /// untagged simulated trip, which is active with no real start time.
     /// Telemetry is removed first so no orphan rows are left behind. Real phone trips
     /// (actual_start_time set) and their telemetry are never touched.
     /// </summary>
@@ -68,7 +69,8 @@ public class SimulatorControl
 
         foreach (var id in simTripIds)
         {
-            // Telemetry before the trip — keeps referential order regardless of FK setup.
+            // Telemetry is deleted before the trip, so the order holds regardless of how
+            // the foreign keys are configured.
             await _supabase.From<TelemetryData>().Filter("trip_id", Operator.Equals, id).Delete();
             await _supabase.From<Trip>().Filter("trip_id", Operator.Equals, id).Delete();
         }

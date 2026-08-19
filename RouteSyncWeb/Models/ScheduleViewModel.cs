@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace FleetWise.ViewModels
 {
-    // Rendered by GET /Schedule — the weekly bulk planner grid.
+    /// <summary>The weekly planner grid.</summary>
     public class ScheduleViewModel
     {
         public DateTime WeekStart { get; set; }
@@ -14,7 +14,7 @@ namespace FleetWise.ViewModels
         public List<VehicleOption> Vehicles { get; set; } = new();
         public List<DriverOption> Drivers { get; set; } = new();
 
-        // key = "routeId|shift|yyyy-MM-dd" -> one OR MORE trips (multiple buses
+        // Keyed by route, shift and date, holding one or more trips, since several buses
         // can run the same route/shift/day).
         public Dictionary<string, List<ScheduleCell>> Cells { get; set; } = new();
 

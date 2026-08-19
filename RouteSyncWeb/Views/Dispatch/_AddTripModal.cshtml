@@ -3,16 +3,16 @@
 <div id="addTripModal" class="atm-overlay" role="dialog" aria-modal="true" style="display:none;">
     <div class="atm-dialog">
 
-        <!-- Header -->
+        @* Header *@
         <div class="atm-header">
             <h2 class="atm-title">Add New Trip</h2>
             <button class="atm-close" onclick="closeAddTripModal()">&times;</button>
         </div>
 
-        <!-- Body -->
+        @* Body *@
         <div class="atm-body">
 
-            <!-- Trip Information -->
+            @* Trip Information *@
             <div class="atm-section-label">Trip Information</div>
             <div class="atm-section">
                 <div class="atm-field">
@@ -44,7 +44,7 @@
                 </div>
             </div>
 
-            <!-- Vehicle Details -->
+            @* Vehicle Details *@
             <div class="atm-section-label">Vehicle Details</div>
             <div class="atm-section">
                 <div class="atm-field">
@@ -58,7 +58,7 @@
                 </div>
             </div>
 
-            <!-- Driver Details -->
+            @* Driver Details *@
             <div class="atm-section-label">Driver Details</div>
             <div class="atm-section atm-section--last">
                 <div class="atm-field">
@@ -74,7 +74,7 @@
 
         </div>
 
-        <!-- Footer -->
+        @* Footer *@
         <div class="atm-footer">
             <button class="atm-btn-cancel" onclick="closeAddTripModal()">Cancel</button>
             <button class="atm-btn-create" id="atm-create-btn" onclick="submitAddTrip()">
@@ -92,7 +92,7 @@
     </div>
 </div>
 
-<!-- Override confirmation (step 2): shown when CreateTrip reports an overridable conflict -->
+@* Override confirmation (step 2): shown when CreateTrip reports an overridable conflict *@
 <div id="atm-override-modal" class="atm-overlay" style="display:none; z-index:1100;">
     <div class="atm-dialog" style="max-width:430px;">
         <div class="atm-header">
@@ -352,18 +352,18 @@
 </style>
 
 <script>
-    // ── Shift time map ────────────────────────────────────────────────
+    // Shift time map.
     const SHIFT_TIMES = {
         'Morning':   { label: '6:00 AM – 2:00 PM',   start: '06:00', end: '14:00' },
         'Afternoon': { label: '2:00 PM – 10:00 PM',  start: '14:00', end: '22:00' },
         'Evening':   { label: '10:00 PM – 6:00 AM',  start: '22:00', end: '06:00' },
     };
 
-    // ── State ─────────────────────────────────────────────────────────
+    // State.
     let _atmOptions = null;   // full options fetched once
     let _atmShift   = null;   // currently selected shift type
 
-    // ── Open / Close ──────────────────────────────────────────────────
+    // Open / Close.
     async function openAddTripModal() {
         document.getElementById('addTripModal').style.display = 'flex';
         document.body.style.overflow = 'hidden';
@@ -385,7 +385,7 @@
             closeAddTripModal();
     });
 
-    // ── Reset ─────────────────────────────────────────────────────────
+    // Reset.
     function resetAddTripModal() {
         document.getElementById('atm-shift-type').value = '';
         setShiftTimeOptions([]);
@@ -398,7 +398,7 @@
         _atmShift = null;
     }
 
-    // ── Fetch options once ────────────────────────────────────────────
+    // Fetch options once.
     async function fetchAddTripOptions() {
         try {
             const res = await fetch('/Dispatch/GetAddTripOptions');
@@ -418,7 +418,7 @@
         }
     }
 
-    // ── Shift type change ─────────────────────────────────────────────
+    // Shift type change.
     function onShiftChange() {
         _atmShift = document.getElementById('atm-shift-type').value;
         const timeSel = document.getElementById('atm-shift-time');
@@ -447,7 +447,7 @@
 
    
 
-    // ── Populate vehicles: exclude those already booked for this shift ─
+    // Populate vehicles: exclude those already booked for this shift.
     function refreshVehicles() {
         if (!_atmOptions || !_atmShift) {
             setVehicleOptions([]);
@@ -501,7 +501,7 @@
     }
 
 
-    // ── Populate drivers: exclude those already booked for this shift ──
+    // Populate drivers: exclude those already booked for this shift.
     function refreshDrivers() {
         if (!_atmOptions || !_atmShift) {
             setDriverOptions([]);
@@ -540,7 +540,7 @@
         if (el) el.classList.remove('atm-hint--visible');
     }
 
-    // ── Submit ────────────────────────────────────────────────────────
+    // Submit.
     // Holds the payload of an attempt blocked by an overridable conflict, so the
     // override confirmation can re-send it with override:true.
     let _atmPending = null;
@@ -597,7 +597,7 @@
         }
     }
 
-    // ── Override confirmation (step 2) ────────────────────────────────
+    // Override confirmation (step 2).
     function showAtmOverride(message) {
         document.getElementById('atm-override-msg').textContent = message;
         document.getElementById('atm-override-modal').style.display = 'flex';
