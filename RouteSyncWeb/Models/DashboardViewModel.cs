@@ -4,24 +4,24 @@ namespace FleetWise.Models
 {
     public class DashboardViewModel
     {
-        // ── Stat cards ───────────────────────────────────────────
+        // Stat cards.
         public int ActiveTrips { get; set; }
         public int FlaggedVehicles { get; set; }
         public int TotalPassengers { get; set; }
 
-        /// <summary>Change vs yesterday (positive = up, negative = down, 0 = hide delta).</summary>
+        /// <summary>Change against yesterday. Zero hides the indicator.</summary>
         public int PassengerDelta { get; set; }
 
         public decimal TotalRevenue { get; set; }
 
-        /// <summary>Change vs yesterday in pesos (positive = up, negative = down, 0 = hide delta).</summary>
+        /// <summary>Change against yesterday in pesos. Zero hides the indicator.</summary>
         public decimal RevenueDelta { get; set; }
 
-        // ── Passenger demand chart ────────────────────────────────
-        /// <summary>X-axis hour labels, e.g. ["8:00 AM", "9:00 AM", ...]</summary>
+        // Passenger demand chart.
+        /// <summary>Hour labels along the horizontal axis.</summary>
         public List<string> ChartLabels { get; set; } = new();
 
-        /// <summary>Passenger counts matching each label. null = future hour (no data yet).</summary>
+        /// <summary>Passenger counts against each label. A null entry is an hour still to come.</summary>
         public List<int?> ChartData { get; set; } = new();
 
         /// <summary>Y-axis maximum (defaults to 400).</summary>
@@ -30,27 +30,27 @@ namespace FleetWise.Models
         /// <summary>Y-axis step size (defaults to 100).</summary>
         public int ChartYStep { get; set; } = 100;
 
-        /// <summary>Today's date (PH), for the header badge.</summary>
+        /// <summary>Today's date in Philippine time, for the header.</summary>
         public DateTime Today { get; set; }
 
-        /// <summary>Per-active-trip passenger breakdown (drives the expandable card panel).</summary>
+        /// <summary>Passenger figures per active trip, shown in the expandable panel.</summary>
         public List<ActiveTripRow> ActiveTripBreakdown { get; set; } = new();
 
-        // ── Route dropdown ────────────────────────────────────────
-        /// <summary>Populated from the Routes table; each item is Value=RouteId, Text=RouteName.</summary>
+        // Route dropdown.
+        /// <summary>The available routes, as identifier and name pairs.</summary>
         public List<SelectListItem> Routes { get; set; } = new();
 
-        // ── Active filter state ───────────────────────────────────
-        /// <summary>Currently selected RouteId (null = All Routes).</summary>
+        // Active filter state.
+        /// <summary>The selected route, or null for all routes.</summary>
         public int? SelectedRouteId { get; set; }
 
-        /// <summary>Display name of the active route filter ("All Routes" when none selected).</summary>
+        /// <summary>The active route filter's display name.</summary>
         public string SelectedRouteName => SelectedRouteId.HasValue
             ? Routes.FirstOrDefault(r => r.Value == SelectedRouteId.ToString())?.Text ?? "All Routes"
             : "All Routes";
     }
 
-    /// <summary>One active trip's live passenger line in the Total Passengers breakdown panel.</summary>
+    /// <summary>One active trip's passenger figures in the breakdown panel.</summary>
     public class ActiveTripRow
     {
         public string TripId { get; set; } = "";

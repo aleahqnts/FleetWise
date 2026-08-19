@@ -6,20 +6,21 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Phase 7: Supabase service (secret) key lives in an untracked local override so it
-// never commits. Overrides Supabase:Key from appsettings.json when present. Added last,
-// so it also beats the environment - a deployed host that has no file sets the env var
-// Supabase__Key instead and this line quietly does nothing.
+// The Supabase service key lives in an untracked local file so it never commits, and
+// overrides the placeholder in appsettings.json when present. Added last, so it also takes
+// precedence over the environment: a deployed host with no such file sets Supabase__Key
+// instead and this line does nothing.
 builder.Configuration.AddJsonFile("appsettings.Secret.json", optional: true, reloadOnChange: true);
 
 // Refuse to start on the wrong key.
 //
-// appsettings.json ships the PUBLISHABLE key, which is fine to commit and useless to this
-// server: Phase 7 took the users table away from anon, and Phase 10a took audit_log away
-// too. A fresh clone with no secret file therefore booted happily and then failed in a way
-// that pointed everywhere except the cause - every sign-in answered "Invalid email or
-// password" on a correct password, and not one attempt reached the audit log. Cost a
-// colleague an afternoon. Better to not start at all and say which file is missing.
+// appsettings.json ships the publishable key, which is safe to commit and useless to this
+// server: anonymous callers have no access to the users table or the audit trail. Started
+// on that key the app runs, then fails in a way that points away from the cause. Every
+// sign-in answers "Invalid email or password" against a correct password, and no attempt
+// reaches the audit log.
+//
+// Failing at startup, naming the file, is the only honest outcome.
 var supabaseKey = builder.Configuration["Supabase:Key"];
 if (supabaseKey is null || !supabaseKey.StartsWith("sb_secret_", StringComparison.Ordinal))
 {
@@ -49,8 +50,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<FareCalculator>();
 
-// Phase 10b: audit writer. Needs the request context to read who is signed in (the DB
-// only ever sees the shared service key) and the caller's IP.
+// The audit writer needs the request context, both to read who is signed in, which the
+// database cannot tell from the shared service key, and to record the caller's address.
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<AuditLog>();
 
@@ -68,17 +69,17 @@ builder.Services.AddSingleton(provider => {
     return client;
 });
 
-// Prunes old telemetry_data rows on a schedule so the table can't grow without bound —
-// useful in every environment (real device data accrues in production too).
+// Prunes old telemetry on a schedule so the table cannot grow without bound. Registered in
+// every environment, since real device data accumulates in production too.
 builder.Services.AddHostedService<TelemetryRetentionService>();
 
-// Self-heals the shared DB: deletes ghost trips (Active + no real start + not our sim) that
-// an outdated build instance leaves behind, so they never linger on the map/dashboard.
+// Removes ghost trips left on the shared database by an outdated build, so they do not
+// linger on the map or the dashboard.
 builder.Services.AddHostedService<TripReaperService>();
 
-// Simulated live telemetry producer. Registered in every environment but OFF by default —
-// SimulatorControl gates it, and an operator turns it on from the Fleet Map only when a
-// demo is wanted. Turning it off deletes the data it produced.
+// Simulated telemetry producer. Registered in every environment but off by default: an
+// operator turns it on from the fleet map when a demonstration is wanted, and turning it
+// off deletes the data it produced.
 builder.Services.AddSingleton<SimulatorControl>();
 builder.Services.AddHostedService<TelemetrySimulator>();
 
@@ -98,19 +99,17 @@ else
 
 app.UseHttpsRedirection();
 
-// Security headers. The Content-Security-Policy is a backstop, not the fix: the real work
-// is not putting typed values into markup in the first place. What it buys is a cap on the
-// damage of any sink that gets missed later.
+// Security headers. The content security policy is a backstop rather than a fix: the real
+// protection is not placing user-supplied values into markup. What the policy adds is a
+// limit on the damage of anywhere that was missed.
 //
-// `connect-src 'self'` is the line that matters most here. Even if an injected script runs,
-// it cannot post the session or the fleet data to somebody else's server, because the
-// browser refuses the request. `frame-ancestors 'none'` stops the dashboard being framed
-// and clickjacked into approving something.
+// The connect-src directive is the one that matters most. Even where an injected script
+// runs, it cannot send the session or fleet data to another server, because the browser
+// refuses the request. The frame-ancestors directive prevents the dashboard being framed.
 //
-// script-src keeps 'unsafe-inline' and that is a real weakness, stated plainly: the views
-// carry inline <script> blocks and onclick handlers throughout, so removing it would break
-// every page until they are all refactored. Tightening it is worth doing later; shipping
-// the rest of the policy now is worth more than shipping none of it.
+// script-src still allows inline script, which is a genuine weakness. The views carry
+// inline blocks and event handlers throughout, so removing it would break every page until
+// they are all rewritten.
 app.Use(async (context, next) =>
 {
     var headers = context.Response.Headers;
@@ -121,8 +120,8 @@ app.Use(async (context, next) =>
         "font-src 'self' data: https://cdn.jsdelivr.net; " +
         // Leaflet pulls map tiles straight from OpenStreetMap.
         "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com; " +
-        // Every call the browser makes is to this server. Supabase is talked to server-side
-        // only, so the browser never needs to reach it.
+        // Every call the browser makes is to this server. The database is reached only
+        // from the server side, so the browser never needs to.
         "connect-src 'self'; " +
         "frame-ancestors 'none'; " +
         "base-uri 'self'; " +
@@ -138,8 +137,8 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// While a user still carries the temp-password flag, lock them to the change page
-// (and logout/static assets) so they can't reach the rest of the dashboard first.
+// A user still carrying the temporary-password claim is confined to the change page, plus
+// sign-out and static assets, so they cannot reach the rest of the dashboard first.
 app.Use(async (context, next) =>
 {
     var user = context.User;

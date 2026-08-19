@@ -6,7 +6,7 @@
 
 <div class="sch-wrap">
 
-    <!-- Toolbar -->
+    @* Toolbar *@
     <div class="sch-toolbar">
         <a class="sch-btn-ghost" href="/Dispatch">&#8592; Back to Dispatch</a>
         <div class="sch-week-nav">
@@ -106,12 +106,12 @@
         </div>
     }
 
-    <!-- Save toast -->
+    @* Save toast *@
     <div id="sch-toast" class="sch-toast">
         <span class="sch-toast-ico">&#10003;</span> Schedule saved
     </div>
 
-    <!-- Conflict popup -->
+    @* Conflict popup *@
     <div id="sch-conflict-modal" class="sch-modal-overlay" style="display:none;">
         <div class="sch-modal">
             <div class="sch-modal-head">
@@ -127,7 +127,7 @@
         </div>
     </div>
 
-    <!-- Override confirmation (second modal) -->
+    @* Override confirmation (second modal) *@
     <div id="sch-override-modal" class="sch-modal-overlay" style="display:none;">
         <div class="sch-modal">
             <div class="sch-modal-head">
@@ -365,7 +365,7 @@
             return;
         }
 
-        // ── same shift + day: duplicate driver / vehicle ──
+        // same shift + day: duplicate driver / vehicle.
         const byDayShift = {};
         filled.forEach(r => { (byDayShift[r.date + '|' + r.shift] ??= []).push(r); });
         Object.values(byDayShift).forEach(group => {
@@ -383,7 +383,7 @@
             });
         });
 
-        // ── same driver: back-to-back shifts ──
+        // same driver: back-to-back shifts.
         const byDriver = {};
         filled.forEach(r => { (byDriver[r.drv] ??= []).push(r); });
         Object.values(byDriver).forEach(list => {

@@ -4,7 +4,7 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<!-- PAGE TITLE -->
+@* PAGE TITLE *@
 <h2 class="vh-title">Vehicles</h2>
 
 @if (TempData["Success"] is string successMsg)
@@ -16,7 +16,7 @@
     <div class="vh-alert vh-alert--error" role="alert">@errorMsg</div>
 }
 
-<!-- SUMMARY CARDS -->
+@* SUMMARY CARDS *@
 <div class="vh-cards">
     <div class="vh-card">
         <div class="vh-card-icon vh-card-icon--green">
@@ -62,7 +62,7 @@
     </div>
 </div>
 
-<!-- TOOLBAR -->
+@* TOOLBAR *@
 <div class="vh-toolbar">
     <button type="button" class="vh-btn vh-btn--primary" data-bs-toggle="modal" data-bs-target="#addVehicleModal">+ Add Vehicle</button>
 
@@ -83,7 +83,7 @@
     </form>
 </div>
 
-<!-- VEHICLE INFORMATION TABLE CARD -->
+@* VEHICLE INFORMATION TABLE CARD *@
 <div class="vh-card-table">
     <div class="vh-card-header">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -127,7 +127,7 @@
 @* Antiforgery token for the View-modal fetch POSTs (add note / resolve / out-of-service). *@
 @Html.AntiForgeryToken()
 
-@* Reusable action overlay — schedule maintenance / take out of service. Custom (not
+@* Shared action overlay for scheduling maintenance and taking a bus out of service. Not
    Bootstrap) so it stacks above the View modal without nesting issues. *@
 <div id="vhActionModal" class="vh-action-overlay" style="display:none;">
     <div class="vh-action-box">
@@ -145,8 +145,8 @@
 </div>
 
 <script>
-    // Phase 8e: proxy endpoints for the camera calibration overlay (service key stays
-    // server-side; camera-calib.js only ever calls these).
+    // Proxy endpoints for the camera calibration overlay. The service key stays on the
+    // server, so the browser only ever calls these.
     window.camUrls = {
         state: '@Url.Action("CameraState", "Vehicles")',
         wake: '@Url.Action("CameraWake", "Vehicles")',
@@ -224,7 +224,7 @@
             });
     }
 
-    // ── Flag review actions (buttons live inside the fetched View-modal partial) ──
+    // Flag review actions (buttons live inside the fetched View-modal partial).
     function vhToken() {
         const el = document.querySelector('input[name="__RequestVerificationToken"]');
         return el ? el.value : '';
@@ -411,7 +411,7 @@
         --vh-shadow: 0 1px 4px rgba(0,0,0,.06);
     }
 
-    /* ── Page title ─────────────────────────────────────────── */
+    /* Page title. */
     .vh-title {
         font-size: 1.6rem;
         font-weight: 700;
@@ -420,7 +420,7 @@
         margin-bottom: 20px;
     }
 
-    /* ── Summary cards ──────────────────────────────────────── */
+    /* Summary cards. */
     .vh-cards {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -479,7 +479,7 @@
         line-height: 1.1;
     }
 
-    /* ── Toolbar ────────────────────────────────────────────── */
+    /* Toolbar. */
     .vh-toolbar {
         display: flex;
         align-items: center;
@@ -538,7 +538,7 @@
 
     .vh-search-input:focus { border-color: var(--vh-teal); }
 
-    /* ── Table card ─────────────────────────────────────────── */
+    /* Table card. */
     .vh-card-table {
         background: var(--vh-white);
         border: 1px solid var(--vh-border);
@@ -595,7 +595,7 @@
     .vh-id { font-weight: 600; color: var(--vh-text); }
     .vh-plate { font-size: 0.78rem; color: var(--vh-muted); }
 
-    /* ── Badges ─────────────────────────────────────────────── */
+    /* Badges. */
     .vh-badge {
         display: inline-block;
         padding: 5px 14px;
@@ -615,7 +615,7 @@
     .vh-badge--repair    { background: #FEF9E7; color: #B7950B; }
     .vh-badge--default   { background: var(--vh-bg); color: var(--vh-text); }
 
-    /* ── Action buttons ─────────────────────────────────────── */
+    /* Action buttons. */
     .vh-actions-cell { display: flex; gap: 8px; }
 
     .vh-btn-action {
@@ -633,7 +633,7 @@
 
     .vh-btn-action:hover { border-color: var(--vh-teal); color: var(--vh-teal); }
 
-    /* ── Table loading spinner / empty state ────────────────── */
+    /* Table loading spinner / empty state. */
     .vh-table-loading {
         text-align: center;
         padding: 32px 14px;
@@ -663,7 +663,7 @@
         }
     }
 
-    /* ── Alerts ─────────────────────────────────────────────── */
+    /* Alerts. */
     .vh-alert {
         padding: 12px 18px;
         border-radius: var(--vh-radius);
@@ -685,7 +685,7 @@
         border: 1px solid #F5B5B5;
     }
 
-    /* ── Topbar filters ─────────────────────────────────────── */
+    /* Topbar filters. */
     .vh-filters {
         display: flex;
         align-items: center;
@@ -726,7 +726,7 @@
         display: flex;
     }
 
-    /* ── Modals (shared by Add/View/Edit Vehicle) ───────────── */
+    /* Modals (shared by Add/View/Edit Vehicle). */
     .vh-modal .modal-content {
         border-radius: var(--vh-radius);
         border: 1px solid var(--vh-border);
@@ -820,7 +820,7 @@
 
     .vh-field-error:empty { display: none; }
 
-    /* ── Detail rows (View modal) ───────────────────────────── */
+    /* Detail rows (View modal). */
     .vh-detail-row {
         font-size: 0.9rem;
         color: var(--vh-text);
@@ -971,7 +971,7 @@
         color: var(--vh-muted);
     }
 
-    /* ── Modal footer / badge inside section header ─────────── */
+    /* Modal footer / badge inside section header. */
     .vh-section-badge {
         display: inline-flex;
         align-items: center;
@@ -990,7 +990,7 @@
         background: currentColor;
     }
 
-    /* ── Flag review (View modal) ───────────────────────────── */
+    /* Flag review (View modal). */
     .vh-badge--oos { background: #4B5563; color: #fff; }
 
     .vh-maint-head-right { display: inline-flex; align-items: center; gap: 10px; }
@@ -1008,7 +1008,7 @@
     }
     .vh-btn-mini:hover { border-color: var(--vh-teal); color: var(--vh-teal); }
 
-    /* ── Action overlay (schedule maintenance / out of service) ─ */
+    /* Action overlay (schedule maintenance / out of service). */
     .vh-action-overlay { position: fixed; inset: 0; background: rgba(13,28,40,.5); z-index: 4000; display: flex; align-items: center; justify-content: center; padding: 24px; }
     .vh-action-box { background: #fff; border-radius: 14px; width: 100%; max-width: 440px; padding: 22px; box-shadow: 0 14px 44px rgba(0,0,0,.28); font-family: 'Segoe UI', sans-serif; }
     .vh-action-title { margin: 0 0 6px; font-size: 1.1rem; font-weight: 800; color: var(--vh-navy); }
@@ -1064,7 +1064,7 @@
     .vh-thread-note { font-size: 0.85rem; color: var(--vh-text); }
     .vh-thread-meta { display: block; font-size: 0.72rem; color: var(--vh-muted); margin-top: 2px; }
 
-    /* ── Responsive ─────────────────────────────────────────── */
+    /* Responsive. */
     @@media (max-width: 900px) {
         .vh-cards { grid-template-columns: 1fr; }
     }

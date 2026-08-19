@@ -3,7 +3,7 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<!-- PAGE TITLE -->
+@* PAGE TITLE *@
 <div class="rp-title-row">
     <h2 class="rp-title">Reports</h2>
     <div class="rp-toolbar-right">
@@ -21,7 +21,7 @@
     </div>
 </div>
 
-<!-- STAT CARDS -->
+@* STAT CARDS *@
 <div class="rp-stat-grid">
 
     <div class="rp-stat-card">
@@ -90,7 +90,7 @@
 
 </div>
 
-<!-- DAILY TRIP REPORTS TABLE -->
+@* DAILY TRIP REPORTS TABLE *@
 <div class="rp-card rp-card--table">
     <div class="rp-card-header">
         <span class="rp-card-icon rp-card-icon--purple">
@@ -127,19 +127,19 @@
         </table>
     </div>
 
-    <!-- Pagination -->
+    @* Pagination *@
     <div class="rp-pagination">
         <span class="rp-pagination-info" id="paginationInfo">Showing 0 to 0 of 0 trips</span>
         <div class="rp-pagination-controls" id="paginationControls">
-            <!-- buttons rendered by JS -->
+            @* buttons rendered by JS *@
         </div>
     </div>
 </div>
 
-<!-- SUMMARY ROW -->
+@* SUMMARY ROW *@
 <div class="rp-summary-grid">
 
-    <!-- Passenger Summary -->
+    @* Passenger Summary *@
     <div class="rp-card">
         <div class="rp-card-header">
             <span class="rp-card-icon rp-card-icon--purple">
@@ -180,14 +180,14 @@
             </div>
         </div>
 
-        <!-- Bar chart: Top Routes by Passengers -->
+        @* Bar chart: Top Routes by Passengers *@
         <div class="rp-bar-section">
             <div class="rp-bar-title">Top Routes by Passengers</div>
             <canvas id="passengerBarChart" class="rp-bar-canvas"></canvas>
         </div>
     </div>
 
-    <!-- Revenue Summary -->
+    @* Revenue Summary *@
     <div class="rp-card">
         <div class="rp-card-header">
             <span class="rp-card-icon rp-card-icon--green">
@@ -228,18 +228,18 @@
             </div>
         </div>
 
-        <!-- Top Earning Routes -->
+        @* Top Earning Routes *@
         <div class="rp-bar-section">
             <div class="rp-bar-title">Top Earning Routes</div>
             <div class="rp-route-bars" id="topEarningRoutes">
-                <!-- rows rendered by JS -->
+                @* rows rendered by JS *@
             </div>
         </div>
     </div>
 
 </div>
 
-<!-- REPORT TEMPLATES -->
+@* REPORT TEMPLATES *@
 <div class="rp-card rp-card--templates">
     <div class="rp-templates-inner">
         <div class="rp-templates-label">
@@ -283,11 +283,11 @@
     </div>
 </div>
 
-<!-- ── Report Generation Modal ───────────────────────────── -->
+@* Report Generation Modal. *@
 <div id="reportGenModal" class="rg-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="rgModalTitle">
     <div class="rg-modal">
 
-        <!-- Header -->
+        @* Header *@
         <div class="rg-modal-header">
             <div class="rg-modal-title-wrap">
                 <span class="rg-modal-icon" id="rgModalIcon">
@@ -302,10 +302,10 @@
             <button class="rg-close" id="rgModalClose" aria-label="Close">&times;</button>
         </div>
 
-        <!-- Body: two-column -->
+        @* Body: two-column *@
         <div class="rg-body">
 
-            <!-- LEFT: Filters -->
+            @* LEFT: Filters *@
             <div class="rg-filters">
                 <div class="rg-filters-heading">Filters</div>
 
@@ -360,21 +360,21 @@
                 </div>
             </div>
 
-            <!-- RIGHT: Preview -->
+            @* RIGHT: Preview *@
             <div class="rg-preview">
                 <div class="rg-preview-sheet" id="rgPreviewSheet">
-                    <!-- Loading -->
+                    @* Loading *@
                     <div id="rgPreviewLoading" class="rg-preview-loading">
                         <div class="rg-spinner"></div>
                         <span>Generating preview…</span>
                     </div>
-                    <!-- Content -->
+                    @* Content *@
                     <div id="rgPreviewContent" style="display:none;">
                         <div class="rg-preview-meta" id="rgPreviewMeta"></div>
                         <div class="rg-preview-report-title" id="rgPreviewReportTitle"></div>
                         <div id="rgPreviewTables"></div>
                     </div>
-                    <!-- Error -->
+                    @* Error *@
                     <div id="rgPreviewError" class="rg-preview-error" style="display:none;">
                         Unable to generate preview. Please try again.
                     </div>
@@ -383,7 +383,7 @@
 
         </div>
 
-        <!-- Footer -->
+        @* Footer *@
         <div class="rg-footer">
             <button class="rg-btn-cancel" id="rgCancelBtn">Cancel</button>
             <div class="rg-format-toggle">
@@ -421,7 +421,7 @@
     </div>
 </div>
 
-<!-- ── Daily Trip Report Modal ────────────────────────────── -->
+@* Daily Trip Report Modal. *@
 <div id="tripModal" class="tr-modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="tripModalTitle">
     <div class="tr-modal">
         <div class="tr-modal-header">
@@ -430,13 +430,13 @@
         </div>
 
         <div id="tripModalBody" class="tr-modal-body">
-            <!-- Loading state -->
+            @* Loading state *@
             <div id="tripModalLoading" class="tr-modal-loading">
                 <div class="tr-spinner"></div>
                 <span>Loading trip details...</span>
             </div>
 
-            <!-- Content (hidden until loaded) -->
+            @* Content (hidden until loaded) *@
             <div id="tripModalContent" style="display:none;">
 
                 <div class="tr-section tr-section--id">
@@ -470,7 +470,7 @@
 
             </div>
 
-            <!-- Error state -->
+            @* Error state *@
             <div id="tripModalError" class="tr-modal-error" style="display:none;">
                 Unable to load trip details. Please try again.
             </div>
@@ -479,12 +479,10 @@
 </div>
 
 
-<!-- Chart.js -->
+@* Chart.js *@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
-    /* ───────────────────────────────────────────────────────────
-    State
-    ─────────────────────────────────────────────────────────── */
+    /* State. */
     let currentPage = 1;
     let passengerChart, revenueChart, passengerBarChart;
 
@@ -497,9 +495,7 @@
     };
     }
 
-    /* ───────────────────────────────────────────────────────────
-    Helpers
-    ─────────────────────────────────────────────────────────── */
+    /* Helpers. */
     function formatCurrency(amount) {
     return '₱ ' + Number(amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
     }
@@ -519,7 +515,7 @@
     return 'rp-shift--morning';
     }
 
-    // Derived trip status pill (Completed / Active / Missed / Not Yet Started).
+    // The trip status pill, derived rather than stored.
     function statusBadge(status) {
     const map = {
     'Completed':       ['#1E7E34', '#E6F4EA'],
@@ -542,9 +538,7 @@
     return value >= 0 ? 'rp-delta--up' : 'rp-delta--down';
     }
 
-    /* ───────────────────────────────────────────────────────────
-    Charts
-    ─────────────────────────────────────────────────────────── */
+    /* Charts. */
     function miniLineChart(id, labels, data, color, tooltipFmt) {
     const fmt = tooltipFmt || (v => v);
     return new Chart(document.getElementById(id).getContext('2d'), {
@@ -643,9 +637,7 @@
     });
     }
 
-    /* ───────────────────────────────────────────────────────────
-    Rendering
-    ─────────────────────────────────────────────────────────── */
+    /* Rendering. */
     function renderRoutes(routes) {
     const select = document.getElementById('routeFilter');
     if (select.dataset.populated) return; // only populate once
@@ -684,10 +676,10 @@
     if (!table.rows || table.rows.length === 0) {
     tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px; color:#9AA5B4;">No trips found.</td></tr>';
     } else {
-    // Built through the DOM, not from an HTML string. driverName, plateNumber and
-    // routeName are typed by admins and land here straight from the database, so with
-    // innerHTML a name like `<img src=x onerror=...>` executed for every reader of this
-    // page. textContent puts the same characters on screen and runs none of them.
+    // Rows are built as elements rather than from an HTML string. Driver names, plate
+    // numbers and route names are typed by administrators and arrive here straight from
+    // the database, so assigning them as markup would execute anything they contain.
+    // Setting them as text displays the same characters and runs none of them.
     const cell = (tr, text) => {
     const td = document.createElement('td');
     td.textContent = text ?? '';
@@ -731,7 +723,7 @@
     });
     }
 
-    // re-wire view buttons for the newly rendered rows
+    // Rebind the view buttons for the rows just rendered.
     tbody.querySelectorAll('.rp-btn-view[data-trip-id]').forEach(btn => {
     btn.addEventListener('click', () => loadTripDetail(btn.dataset.tripId));
     });
@@ -840,9 +832,7 @@
     });
     }
 
-    /* ───────────────────────────────────────────────────────────
-    Main loader
-    ─────────────────────────────────────────────────────────── */
+    /* Main loader. */
     async function loadAll() {
     const f = getFilters();
     const params = new URLSearchParams({
@@ -870,18 +860,14 @@
     }
     }
 
-    /* ───────────────────────────────────────────────────────────
-    Filter event wiring
-    ─────────────────────────────────────────────────────────── */
+    /* Filter event wiring. */
     document.getElementById('routeFilter').addEventListener('change', () => { currentPage = 1; loadAll(); });
     document.getElementById('passengerPeriodSelect').addEventListener('change', () => loadAll());
     document.getElementById('revenuePeriodSelect').addEventListener('change', () => loadAll());
 
-    /* ───────────────────────────────────────────────────────────
-    Date navigation (operational day, 06:00 -> 05:59 next morning)
-    ─────────────────────────────────────────────────────────── */
+    /* Date navigation (operational day, 06:00 -> 05:59 next morning). */
     function rpPHParts() {
-        // "2026-06-19, 04:21" in PH wall-clock
+        // Formatted in Philippine wall-clock time.
         const s = new Date().toLocaleString('en-CA', {
             timeZone: 'Asia/Manila', hour12: false,
             year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
@@ -924,12 +910,10 @@
         const i = document.getElementById('dateFilter');
         if (i.showPicker) i.showPicker();
     });
-    // Manual calendar pick (hidden input) keeps badge + data in sync.
+    // A manual date choice keeps the badge and the data in step.
     document.getElementById('dateFilter').addEventListener('change', function () { rpSetDate(this.value); });
 
-    /* ───────────────────────────────────────────────────────────
-    Manual refresh button + silent 30s auto-refresh
-    ─────────────────────────────────────────────────────────── */
+    /* Manual refresh button + silent 30s auto-refresh. */
     let rpBusy = false;
     function rpAnyModalOpen() {
         return ['reportGenModal', 'tripModal'].some(id => {
@@ -957,18 +941,16 @@
         rpRefresh(false);
     }, 30000);
 
-    // ── Initial load (default to current operational day) ──
+    // Initial load (default to current operational day).
     rpSetDate(rpOperationalDay());
     rpStamp();
 </script>
 
 <script>
-    /* ═══════════════════════════════════════════════════════════
-    Report Generation Modal
-    ═══════════════════════════════════════════════════════════ */
+    /* Report Generation Modal. */
     (function () {
 
-    // ── Config per report type ────────────────────────────────
+    // Config per report type.
     const REPORT_CONFIG = {
     DailyTrip: {
     title: 'Daily Trip Reports',
@@ -994,7 +976,7 @@
     let currentFormat = 'pdf';
     let previewDebounce = null;
 
-    // ── DOM refs ──────────────────────────────────────────────
+    // DOM refs.
     const overlay       = document.getElementById('reportGenModal');
     const modalTitle    = document.getElementById('rgModalTitle');
     const modalIcon     = document.getElementById('rgModalIcon');
@@ -1017,12 +999,12 @@
     const previewTitle   = document.getElementById('rgPreviewReportTitle');
     const previewTables  = document.getElementById('rgPreviewTables');
 
-    // ── Cached filter options ─────────────────────────────────
+    // Cached filter options.
     let allDrivers  = [];
     let allVehicles = [];
     let optionsLoaded = false;
 
-    // ── Open modal ────────────────────────────────────────────
+    // Open modal.
     function openReportModal(type) {
     currentReportType = type;
     const cfg = REPORT_CONFIG[type];
@@ -1061,7 +1043,7 @@
     document.body.style.overflow = '';
     }
 
-    // ── Populate route / driver / vehicle dropdowns ───────────
+    // Populate route / driver / vehicle dropdowns.
     async function populateDropdowns() {
     try {
     const res  = await fetch('/Reports/GetFilterOptions');
@@ -1072,7 +1054,7 @@
     allVehicles = data.vehicles || [];
     optionsLoaded = true;
 
-    // Routes (static — never cascades)
+    // Routes, which never cascade from another filter.
     routeSelect.innerHTML = '<option value="">All Routes</option>';
     (data.routes || []).forEach(r => {
     const o = document.createElement('option');
@@ -1086,7 +1068,7 @@
     }
     }
 
-    // ── Cascade: filter drivers & vehicles by selected route ──
+    // Cascade: filter drivers & vehicles by selected route.
     function refreshCascade() {
     const selectedRoute = parseInt(routeSelect.value) || null;
 
@@ -1122,7 +1104,7 @@
     if (prevVehicle && !filteredVehicles.find(v => v.id === prevVehicle)) vehicleSelect.value = '';
     }
 
-    // ── Preview ───────────────────────────────────────────────
+    // Preview.
     function schedulePreview() {
     clearTimeout(previewDebounce);
     previewDebounce = setTimeout(loadPreview, 350);
@@ -1244,14 +1226,14 @@
     }
     }
 
-    // ── Download ──────────────────────────────────────────────
+    // Download.
     function downloadReport() {
     const params = buildParams();
     const endpoint = currentFormat === 'csv' ? 'DownloadReportCsv' : 'DownloadReport';
     window.location.href = `/Reports/${endpoint}?${params}`;
     }
 
-    // ── Format toggle ─────────────────────────────────────────
+    // Format toggle.
     [fmtPdfBtn, fmtCsvBtn].forEach(btn => {
     btn.addEventListener('click', () => {
     currentFormat = btn.dataset.fmt;
@@ -1260,12 +1242,12 @@
     });
     });
 
-    // ── Wire up template buttons ──────────────────────────────
+    // Wire up template buttons.
     document.querySelectorAll('[data-report-type]').forEach(btn => {
     btn.addEventListener('click', () => openReportModal(btn.dataset.reportType));
     });
 
-    // ── Wire up modal controls ────────────────────────────────
+    // Wire up modal controls.
     closeBtn.addEventListener('click',   closeReportModal);
     cancelBtn.addEventListener('click',  closeReportModal);
     downloadBtn.addEventListener('click', downloadReport);
@@ -1288,7 +1270,7 @@
 </script>
 
 <script>
-    // ── Trip Detail Modal ──────────────────────────────────────
+    // Trip Detail Modal.
     const modal        = document.getElementById('tripModal');
     const modalClose   = document.getElementById('tripModalClose');
     const modalLoading = document.getElementById('tripModalLoading');
@@ -1391,7 +1373,7 @@
     --rp-shadow: 0 1px 4px rgba(0,0,0,.06);
     }
 
-    /* ── Topbar filters ─────────────────────────────────────── */
+    /* Topbar filters. */
     .rp-route-wrap, .rp-date-wrap {
     display: flex;
     align-items: center;
@@ -1454,7 +1436,7 @@
     border-color: var(--rp-teal);
     }
 
-    /* ── Page title ─────────────────────────────────────────── */
+    /* Page title. */
     .rp-title {
     font-size: 1.6rem;
     font-weight: 700;
@@ -1463,7 +1445,7 @@
     margin-bottom: 20px;
     }
 
-    /* ── Title row: date nav + refresh (dispatch-style) ─────── */
+    /* Title row: date nav + refresh (dispatch-style). */
     .rp-title-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
     .rp-title-row .rp-title { margin-bottom:0; }
     .rp-toolbar-right { display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -1481,7 +1463,7 @@
     .rp-updated { font-size:.78rem; color:#8a98a3; }
     .rp-hidden-date { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
 
-    /* ── Stat grid ──────────────────────────────────────────── */
+    /* Stat grid. */
     .rp-stat-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -1588,7 +1570,7 @@
     }
     }
 
-    /* ── Shared card ────────────────────────────────────────── */
+    /* Shared card. */
     .rp-card {
     background: var(--rp-white);
     border: 1px solid var(--rp-border);
@@ -1633,7 +1615,7 @@
     font-family: 'Segoe UI', sans-serif;
     }
 
-    /* ── Table ──────────────────────────────────────────────── */
+    /* Table. */
     .rp-table-wrap {
     overflow-x: auto;
     }
@@ -1678,7 +1660,7 @@
     color: var(--rp-muted);
     }
 
-    /* ── Shift badges ───────────────────────────────────────── */
+    /* Shift badges. */
     .rp-shift {
     display: inline-block;
     padding: 4px 12px;
@@ -1704,7 +1686,7 @@
     color: #3B82F6;
     }
 
-    /* ── View button ────────────────────────────────────────── */
+    /* View button. */
     .rp-btn-view {
     padding: 6px 18px;
     border: 1.5px solid var(--rp-border);
@@ -1723,7 +1705,7 @@
     color: var(--rp-teal);
     }
 
-    /* ── Pagination ─────────────────────────────────────────── */
+    /* Pagination. */
     .rp-pagination {
     display: flex;
     align-items: center;
@@ -1777,7 +1759,7 @@
     cursor: not-allowed;
     }
 
-    /* ── Summary grid ───────────────────────────────────────── */
+    /* Summary grid. */
     .rp-summary-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1848,7 +1830,7 @@
     margin-top: 2px;
     }
 
-    /* ── Bar section ────────────────────────────────────────── */
+    /* Bar section. */
     .rp-bar-section {
     border-top: 1px solid var(--rp-border);
     padding-top: 16px;
@@ -1867,7 +1849,7 @@
     width: 100% !important;
     }
 
-    /* ── Route progress bars ────────────────────────────────── */
+    /* Route progress bars. */
     .rp-route-bars {
     display: flex;
     flex-direction: column;
@@ -1914,7 +1896,7 @@
     text-align: right;
     }
 
-    /* ── Period select ──────────────────────────────────────── */
+    /* Period select. */
     .rp-period-select-wrap {
     position: relative;
     display: flex;
@@ -1935,7 +1917,7 @@
     font-weight: 500;
     }
 
-    /* ── Report templates ───────────────────────────────────── */
+    /* Report templates. */
     .rp-card--templates {
     margin-bottom: 0;
     }
@@ -1996,7 +1978,7 @@
     box-shadow: 0 3px 10px rgba(0,0,0,.08);
     }
 
-    /* ── Responsive ─────────────────────────────────────────── */
+    /* Responsive. */
     @@media (max-width: 1100px) {
     .rp-stat-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -2021,7 +2003,7 @@
     }
     }
 
-    /* ── Trip Modal ─────────────────────────────────────────── */
+    /* Trip Modal. */
     .tr-modal-overlay {
     position: fixed;
     inset: 0;
@@ -2166,7 +2148,7 @@
     }
     }
 
-    /* ── Report Generation Modal ────────────────────────────── */
+    /* Report Generation Modal. */
     .rg-overlay {
     position: fixed;
     inset: 0;
@@ -2247,7 +2229,7 @@
     overflow: hidden;
     }
 
-    /* ── Filters panel ──────────────────────────────────────── */
+    /* Filters panel. */
     .rg-filters {
     padding: 20px 18px;
     border-right: 1px solid var(--rp-border);
@@ -2327,7 +2309,7 @@
     color: var(--rp-muted);
     }
 
-    /* ── Preview panel ──────────────────────────────────────── */
+    /* Preview panel. */
     .rg-preview {
     overflow-y: auto;
     overflow-x: hidden;
@@ -2469,7 +2451,7 @@
     color: var(--rp-text);
     }
 
-    /* ── Footer ─────────────────────────────────────────────── */
+    /* Footer. */
     .rg-footer {
     display: flex;
     align-items: center;

@@ -16,10 +16,10 @@
 
         <div class="app-body">
 
-            <!-- SIDEBAR -->
+            @* SIDEBAR *@
             @await Html.PartialAsync("_Sidebar")
 
-            <!-- MAIN AREA -->
+            @* MAIN AREA *@
             <div class="main-area">
 
                 <header class="topbar">
@@ -29,12 +29,12 @@
                             @await RenderSectionAsync("TopbarContent", required: false)
                         }
                         <div>
-                            <!-- optional user/profile/actions -->
+                            @* optional user/profile/actions *@
                         </div>
                     </div>
                 </header>
 
-                <!-- PAGE CONTENT -->
+                @* PAGE CONTENT *@
                 <main class="main-content">
                     @RenderBody()
                 </main>

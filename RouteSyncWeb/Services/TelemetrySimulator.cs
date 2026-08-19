@@ -5,29 +5,29 @@ using FleetWise.Models;
 namespace FleetWise.Services;
 
 /// <summary>
-/// Development-only stand-in producer for live telemetry. Every 5 seconds it advances
-/// each Active trip along its route geometry and inserts one row into the Supabase
-/// <c>telemetry_data</c> table — the same table real hardware would write to, so the
-/// read path never depends on the data being simulated.
+/// Stand-in producer for live telemetry, for use in development. Every five seconds it
+/// advances each active trip along its route and writes to the same telemetry table real
+/// hardware writes to, so nothing downstream depends on the data being simulated.
 /// </summary>
 public class TelemetrySimulator : BackgroundService
 {
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(5);
 
-    // Bus-like speed envelope (km/h) — jittered per tick so motion looks organic.
+    // Speed range in kilometres per hour, varied slightly each tick so movement does not
+    // look mechanical.
     private const double MinSpeedKmh = 20.0;
     private const double MaxSpeedKmh = 40.0;
 
-    // Passenger drift bounds (clamped to [0, vehicle capacity]). Drift is applied on a
-    // realistic cadence rather than every 5s tick, so cumulative boardings (and therefore
-    // the map's revenue) accrue at a believable pace instead of ballooning over a day.
+    // Bounds for passenger changes, clamped to the vehicle's capacity. Applied on a
+    // realistic cadence rather than every tick, so boardings, and therefore the revenue
+    // figures derived from them, accumulate at a believable rate over a day.
     private const int MaxPassengerDelta = 3;
     private static readonly TimeSpan PassengerDriftInterval = TimeSpan.FromSeconds(30);
 
-    // Write throttle — mirrors the phone (LocationTrackingService): a tick only inserts a
-    // telemetry row when the bus moved far enough, the passenger count changed, or the
-    // heartbeat elapsed. Positions still advance every tick in memory; only the DB write
-    // is gated, so the table stops accruing a row every 5s per bus.
+    // Write throttle, matching the phone's own rule: a tick writes a row only when the bus
+    // has moved far enough, the passenger count changed, or the heartbeat interval elapsed.
+    // Positions still advance every tick in memory, so only the write is gated and the
+    // table does not gain a row per bus every five seconds.
     private const double MinWriteMeters = 25.0;
     private static readonly TimeSpan WriteHeartbeat = TimeSpan.FromSeconds(60);
 
@@ -36,13 +36,14 @@ public class TelemetrySimulator : BackgroundService
     private readonly SimulatorControl _control;
     private readonly Random _rng = new();
 
-    // Route geometry never changes mid-run, so it's cached after the first read.
+    // Route geometry does not change while running, so it is cached after the first read.
     private readonly Dictionary<int, RouteGeometry> _geometryCache = new();
 
-    // Per-trip simulation state lives in memory; on restart buses resume from the route start.
+    // Per-trip state is held in memory, so after a restart buses resume from the start of
+    // their route.
     private readonly Dictionary<string, TripState> _states = new();
 
-    // A driver to attach to auto-created trips (driver_id is NOT NULL); resolved once.
+    // A driver for automatically created trips, since the column cannot be null. Resolved once.
     private int? _cachedDriverId;
 
     public TelemetrySimulator(Supabase.Client supabase, ILogger<TelemetrySimulator> logger, SimulatorControl control)
@@ -54,8 +55,8 @@ public class TelemetrySimulator : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // The Supabase.Client is a singleton used directly here; there are no scoped
-        // services to resolve per tick, so no DI scope is created.
+        // The database client is a singleton used directly, and there are no scoped
+        // services to resolve, so no scope is created per tick.
         using var timer = new PeriodicTimer(TickInterval);
 
         while (!stoppingToken.IsCancellationRequested &&
@@ -71,7 +72,7 @@ public class TelemetrySimulator : BackgroundService
             }
             catch (Exception ex)
             {
-                // A transient Supabase hiccup must not kill the loop — log and try again next tick.
+                // A transient failure must not end the loop, so it is logged and retried.
                 _logger.LogWarning(ex, "TelemetrySimulator tick failed; will retry next interval.");
             }
         }
@@ -79,14 +80,15 @@ public class TelemetrySimulator : BackgroundService
 
     private async Task TickAsync(CancellationToken ct)
     {
-        // Cheap pre-check before taking the gate — avoids contending with a stop/cleanup
-        // when we're already off.
+        // Checked before taking the gate, to avoid contending with a stop and its cleanup
+        // when the simulator is already off.
         if (!_control.Enabled)
             return;
 
-        // Hold the gate for the whole tick so a stop/cleanup can't run concurrently. Re-check
-        // Enabled INSIDE the gate: if a stop+cleanup just completed, we must bail before
-        // creating any trip, or we'd resurrect a demo trip while the switch is OFF.
+        // The gate is held for the whole tick so a stop and its cleanup cannot run
+        // alongside it. The switch is re-checked once the gate is held: if a stop completed
+        // in the meantime, this tick must not create a trip and resurrect demo data while
+        // the simulator is off.
         await _control.TickGate.WaitAsync(ct);
         try
         {
@@ -103,13 +105,13 @@ public class TelemetrySimulator : BackgroundService
 
     private async Task TickBodyAsync(CancellationToken ct)
     {
-        // Close out any demo trip left over from an earlier operational day so boardings
-        // (and the map's revenue) reset each cycle instead of growing forever. Runs before
-        // the spawn below so the fresh trip it creates is dated today.
+        // Any demo trip left from an earlier operational day is closed, so boardings and
+        // the revenue derived from them reset each cycle rather than growing without bound.
+        // This runs before the spawn below, so the trip that replaces it is dated today.
         await RollOverStaleDemoTripsAsync();
 
-        // Ensure one tagged demo trip per route so toggling ON always yields moving buses,
-        // independent of any vehicle's stored status.
+        // One demo trip per route, so turning the simulator on always produces moving
+        // buses regardless of any vehicle's stored status.
         await EnsureDemoTripsAsync();
 
         var tripsResponse = await _supabase
@@ -117,15 +119,15 @@ public class TelemetrySimulator : BackgroundService
             .Filter("trip_status", Postgrest.Constants.Operator.Equals, "Active")
             .Get();
 
-        // Animate ONLY the simulator's own tagged trips. Real driver trips (is_simulated
-        // false) are never touched, so live GPS / passenger counts are never overwritten.
+        // Only the simulator's own trips are animated. Real driver trips are never touched,
+        // so live positions and passenger counts cannot be overwritten.
         var activeTrips = tripsResponse.Models
             .Where(t => t.IsSimulated)
             .ToList();
         if (activeTrips.Count == 0)
             return;
 
-        // Capacities for clamping passenger drift — one small read, fixed vehicle set.
+        // Capacities used to clamp passenger changes. One small read over a fixed set.
         var vehiclesResponse = await _supabase.From<Vehicle>().Get();
         var capacityByVehicle = vehiclesResponse.Models
             .GroupBy(v => v.VehicleId)
@@ -135,7 +137,7 @@ public class TelemetrySimulator : BackgroundService
         {
             var geometry = await GetGeometryAsync(trip.RouteId);
             if (geometry is null)
-                continue; // route has no usable waypoints — nothing to animate
+                continue; // no usable waypoints on this route, so nothing to animate
 
             var capacity = capacityByVehicle.TryGetValue(trip.VehicleId ?? string.Empty, out var c)
                 ? c
@@ -165,9 +167,9 @@ public class TelemetrySimulator : BackgroundService
                 state.HasWritten = true;
             }
 
-            // Persist the cumulative boardings so the map's revenue (total_boarded × fare)
-            // grows and never drops when passengers alight. Column-targeted update — only
-            // total_boarded is written, leaving the trip's date and other fields untouched.
+            // Cumulative boardings are stored, so revenue rises and never falls when
+            // passengers alight. Only that column is written, leaving the trip's date and
+            // other fields alone.
             if (state.TotalBoarded != trip.TotalBoarded)
             {
                 await _supabase.From<Trip>()
@@ -179,11 +181,12 @@ public class TelemetrySimulator : BackgroundService
     }
 
     /// <summary>
-    /// Demo trips loop forever, so a single trip would keep accruing boardings across days
-    /// and inflate the map's revenue (total_boarded × fare) without bound. At each
-    /// operational-day boundary (06:00), finalize any simulated trip left over from an
-    /// earlier operational day. EnsureDemoTripsAsync then starts a fresh trip dated today,
-    /// so boardings reset to a realistic per-day count. Real driver trips are never touched.
+    /// Closes simulated trips left over from an earlier operational day.
+    ///
+    /// Demo trips run indefinitely, so a single trip would accumulate boardings across days
+    /// and inflate revenue without bound. Finalizing at the cycle boundary lets a fresh trip
+    /// start dated today, with boardings back to a realistic daily figure. Real driver trips
+    /// are never touched.
     /// </summary>
     private async Task RollOverStaleDemoTripsAsync()
     {
@@ -198,8 +201,8 @@ public class TelemetrySimulator : BackgroundService
 
         foreach (var trip in staleTrips)
         {
-            // Finalize under its own (older) date so that day's history keeps its totals;
-            // the route then has no demo trip, so a fresh one is created on the next tick.
+            // Finalized under its own earlier date, so that day's history keeps its
+            // totals. The route is then without a demo trip, and the next tick creates one.
             await _supabase.From<Trip>()
                 .Where(t => t.TripId == trip.TripId)
                 .Set(t => t.TripStatus, "Completed")
@@ -214,10 +217,11 @@ public class TelemetrySimulator : BackgroundService
     }
 
     /// <summary>
-    /// Ensure one tagged demo trip exists per route that has geometry, so toggling the
-    /// simulator ON always produces moving buses — independent of any vehicle's stored
-    /// status. Picks a deployable bus on the route (not out of service, not already on an
-    /// Active trip). Idempotent: once a route has its is_simulated trip it is skipped.
+    /// Ensures one demo trip exists per route that has geometry, so turning the simulator
+    /// on always produces moving buses regardless of any vehicle's stored status.
+    ///
+    /// Chooses a deployable bus on the route: not out of service, and not already on an
+    /// active trip. Idempotent, so a route that already has its demo trip is skipped.
     /// </summary>
     private async Task EnsureDemoTripsAsync()
     {
@@ -232,8 +236,8 @@ public class TelemetrySimulator : BackgroundService
             .Filter("trip_status", Postgrest.Constants.Operator.Equals, "Active")
             .Get()).Models;
 
-        // Routes that already have a demo bus, and vehicles already committed to any
-        // Active trip (real or demo) — never double-book a bus.
+        // Routes that already have a demo bus, and vehicles committed to any active trip,
+        // whether real or simulated, so no bus is double-booked.
         var routesWithDemo = activeTrips.Where(t => t.IsSimulated).Select(t => t.RouteId).ToHashSet();
         var busyVehicleIds = activeTrips
             .Where(t => t.VehicleId != null)
@@ -261,7 +265,7 @@ public class TelemetrySimulator : BackgroundService
                 continue; // no free, deployable bus on this route
             busyVehicleIds.Add(v.VehicleId);
 
-            // trip_id is auto-generated by the DB (sequence default) — do NOT supply it.
+            // The trip identifier is generated by the database and must not be supplied.
             var trip = new Trip
             {
                 Date = PhClock.Today,
@@ -286,7 +290,7 @@ public class TelemetrySimulator : BackgroundService
         if (_cachedDriverId is int cached)
             return cached;
 
-        // Drivers are role_id = 2 (see seeded roles); fall back to any user if none.
+        // Role 2 is the driver role. Falls back to any user when none is found.
         var drivers = (await _supabase
             .From<UserModel>()
             .Filter("role_id", Postgrest.Constants.Operator.Equals, "2")
@@ -299,14 +303,15 @@ public class TelemetrySimulator : BackgroundService
         return _cachedDriverId;
     }
 
-    /// <summary>Advance one trip along its route by one tick and return its new state.</summary>
+    /// <summary>Advances one trip along its route by a single tick.</summary>
     private TripState AdvanceTrip(string tripId, RouteGeometry geometry, int capacity, int dbTotalBoarded)
     {
         if (!_states.TryGetValue(tripId, out var state))
         {
-            // First sighting: start somewhere along the route with a plausible load. Seed
-            // cumulative boardings from the DB (so revenue survives a restart) but never
-            // below the current load — everyone aboard boarded at some point.
+            // On first sighting the bus starts somewhere along the route with a plausible
+            // load. Cumulative boardings are seeded from the stored total, so revenue
+            // survives a restart, but never below the current load: everyone aboard boarded
+            // at some point.
             var initialPassengers = _rng.Next(0, Math.Max(1, (int)(capacity * 0.6)));
             state = new TripState
             {
@@ -317,7 +322,7 @@ public class TelemetrySimulator : BackgroundService
             _states[tripId] = state;
         }
 
-        // Move forward by speed × interval, looping at the end of the polyline.
+        // Advances by speed multiplied by the interval, looping at the end of the route.
         var speedKmh = MinSpeedKmh + _rng.NextDouble() * (MaxSpeedKmh - MinSpeedKmh);
         var metresPerTick = speedKmh / 3.6 * TickInterval.TotalSeconds;
         state.DistanceMeters = (state.DistanceMeters + metresPerTick) % geometry.TotalLength;
@@ -328,18 +333,18 @@ public class TelemetrySimulator : BackgroundService
         state.Lng = lng;
         state.Heading = heading;
 
-        // Drift passengers only every PassengerDriftInterval — not every 5s tick — so the
-        // bus keeps moving smoothly on the map while boardings accrue at a believable pace.
+        // Passenger numbers change on their own interval rather than every tick, so the bus
+        // keeps moving smoothly while boardings accumulate at a believable rate.
         var now = DateTime.UtcNow;
         if (now - state.LastDriftUtc >= PassengerDriftInterval)
         {
             state.LastDriftUtc = now;
 
-            // Drift passengers by a small random delta, clamped to the vehicle's capacity.
+            // A small random change, clamped to the vehicle's capacity.
             var delta = _rng.Next(-MaxPassengerDelta, MaxPassengerDelta + 1);
             var newPassengers = Math.Clamp(state.Passengers + delta, 0, capacity);
 
-            // Count only boardings (positive change) toward the cumulative total.
+            // Only increases count toward the cumulative total.
             var boarded = newPassengers - state.Passengers;
             if (boarded > 0)
                 state.TotalBoarded += boarded;
@@ -351,9 +356,9 @@ public class TelemetrySimulator : BackgroundService
     }
 
     /// <summary>
-    /// Mirror of the phone's write gate: emit a row only on the first sighting, when the
-    /// passenger count changed (a boarding/alighting, even while stopped), once the
-    /// heartbeat elapses, or once the bus has moved far enough since the last written row.
+    /// Matches the phone's write rule: a row is emitted on the first sighting, when the
+    /// passenger count changes even while stationary, once the heartbeat interval elapses,
+    /// or once the bus has moved far enough since the last written row.
     /// </summary>
     private static bool ShouldWrite(TripState s)
     {
@@ -388,7 +393,7 @@ public class TelemetrySimulator : BackgroundService
         var route = response.Models.FirstOrDefault();
         var geometry = RouteGeometry.FromJson(route?.WaypointsJson);
 
-        // Cache even a null result so we don't re-query a geometry-less route every tick.
+        // A null result is cached too, so a route without geometry is not queried every tick.
         _geometryCache[routeId] = geometry!;
         return geometry;
     }
@@ -403,10 +408,10 @@ public class TelemetrySimulator : BackgroundService
         public int Passengers { get; set; }
         public int TotalBoarded { get; set; }
 
-        // When passengers last drifted — gates boarding accrual to PassengerDriftInterval.
+        // When passenger numbers last changed, which paces boarding accrual.
         public DateTime LastDriftUtc { get; set; } = DateTime.MinValue;
 
-        // Last row actually written to the DB — drives the write throttle (see ShouldWrite).
+        // The last row actually written, which drives the write throttle.
         public bool HasWritten { get; set; }
         public DateTime LastWriteUtc { get; set; } = DateTime.MinValue;
         public double LastWrittenLat { get; set; }
@@ -455,7 +460,7 @@ public class TelemetrySimulator : BackgroundService
                 cumulative.Add(cumulative[i - 1] + segment);
             }
 
-            // A degenerate (zero-length) route can't be animated.
+            // A zero-length route cannot be animated.
             return cumulative[^1] > 0 ? new RouteGeometry(points, cumulative) : null;
         }
 
@@ -464,7 +469,7 @@ public class TelemetrySimulator : BackgroundService
         {
             var d = Math.Clamp(distanceMeters, 0, TotalLength);
 
-            // Find the segment [i, i+1] containing d.
+            // The segment containing the given distance.
             var i = 0;
             while (i < _cumulative.Count - 2 && _cumulative[i + 1] < d)
                 i++;

@@ -13,10 +13,15 @@ namespace FleetWise.Services
             _fallbackRate = config.GetValue<decimal?>("FleetWise:FareRate") ?? 15.00m;
         }
 
-        // The fleet's standard fare, read from the fare_config table (single row, id=1).
-        // Falls back to the appsettings rate (or 15) if the table is empty/unreachable, so
-        // revenue never breaks. Callers read the rate once per request, then Estimate() with
-        // it for every bus.
+        /// <summary>
+        /// The fleet's standard fare, read from configuration in the database.
+        /// </summary>
+        /// <remarks>
+        /// Falls back to the application settings value, and then to a default, if that
+        /// table is empty or unreachable, so revenue figures never fail outright.
+        ///
+        /// Callers read the rate once per request and reuse it for every bus.
+        /// </remarks>
         public async Task<decimal> GetRateAsync()
         {
             try

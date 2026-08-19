@@ -1,6 +1,6 @@
 @model EditVehicleViewModel
 @*
-    Edit Vehicle form — fetched into #editVehicleContent per vehicle. Edits the Vehicle
+    Edit vehicle form, fetched per vehicle into the edit modal. Edits the vehicle
     Profile (Plate Number + Route) only; posts to VehiclesController.Edit (PRG + TempData).
     Maintenance status / incident lifecycle is handled in the View modal, not here.
 *@
@@ -12,7 +12,7 @@
     </div>
     <div class="modal-body vh-modal-body">
 
-        <!-- Vehicle Profile -->
+        @* Vehicle Profile *@
         <div class="vh-section-header">Vehicle Profile</div>
         <div class="vh-section-body">
             <div class="vh-form-row">

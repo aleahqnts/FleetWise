@@ -3,16 +3,16 @@
 <div id="broadcastModal" class="bm-overlay" role="dialog" aria-modal="true" style="display:none;">
     <div class="bm-dialog">
 
-        <!-- Header -->
+        @* Header *@
         <div class="bm-header">
             <h2 class="bm-title" id="bm-modal-title">Broadcast Message</h2>
             <button class="bm-close" onclick="closeBroadcastModal()">&times;</button>
         </div>
 
-        <!-- Body -->
+        @* Body *@
         <div class="bm-body">
 
-            <!-- Recipients -->
+            @* Recipients *@
             <div class="bm-field">
                 <label class="bm-label">Recipients</label>
                 <div class="bm-recipient-card">
@@ -33,7 +33,7 @@
                 <p class="bm-recipient-note" id="bm-recipient-note">This message will be sent to all active drivers in all routes.</p>
             </div>
 
-            <!-- Subject -->
+            @* Subject *@
             <div class="bm-field">
                 <label class="bm-label" for="bm-subject">
                     Subject <span class="bm-optional">(Optional)</span>
@@ -41,7 +41,7 @@
                 <input type="text" id="bm-subject" class="bm-input" placeholder="Enter Subject" maxlength="120" />
             </div>
 
-            <!-- Message -->
+            @* Message *@
             <div class="bm-field">
                 <label class="bm-label" for="bm-body">
                     Message <span class="bm-required">*</span>
@@ -50,7 +50,7 @@
                 <div class="bm-char-count"><span id="bm-char-used">0</span> / 1000</div>
             </div>
 
-            <!-- Priority -->
+            @* Priority *@
             <div class="bm-field bm-field--inline">
                 <label class="bm-label">Priority:</label>
                 <div class="bm-priority-wrap">
@@ -76,7 +76,7 @@
 
         </div>
 
-        <!-- Footer -->
+        @* Footer *@
         <div class="bm-footer">
             <button class="bm-btn-cancel" onclick="closeBroadcastModal()">Cancel</button>
             <button class="bm-btn-send" id="bm-send-btn" onclick="submitBroadcast()">
@@ -94,7 +94,7 @@
     </div>
 </div>
 
-<!-- Success toast -->
+@* Success toast *@
 <div id="bm-toast" class="bm-toast" style="display:none;">
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
          stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">

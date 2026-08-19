@@ -1,46 +1,50 @@
 namespace FleetWise.Models
 {
-    // Read-only projection for the View Vehicle Details modal: Vehicle Profile + latest driver
-    // Inspection Log + Maintenance Log history, fetched fresh per vehicle.
+    /// <summary>
+    /// Read-only projection for the vehicle details modal: the profile, the most recent
+    /// driver inspection, and the maintenance history. Fetched per vehicle.
+    /// </summary>
     public class VehicleDetailsViewModel
     {
         public string VehicleId { get; set; } = string.Empty;
 
-        // ── Vehicle Profile ──
+        // Vehicle Profile.
         public string PlateNumber { get; set; } = string.Empty;
         public string RouteName { get; set; } = string.Empty;
-        /// <summary>Phase 8: counter phone bound to this bus (null/empty = none bound).</summary>
+        /// <summary>The counter phone bound to this bus, or empty when none is bound.</summary>
         public string? CounterDeviceId { get; set; }
 
-        // ── Inspection Log (latest bus_checklist) ──
+        // Inspection Log (latest bus_checklist).
         public bool HasInspection { get; set; }
         public string ReportedBy { get; set; } = string.Empty;
         public string TimeOfReport { get; set; } = string.Empty;
-        /// <summary>The flagged areas — checklist sections whose value isn't "Pass".</summary>
+        /// <summary>The flagged areas: checklist sections that did not pass.</summary>
         public string Issue { get; set; } = string.Empty;
-        /// <summary>Failed checklist items (rephrased) grouped by section — the collapsible flag detail.</summary>
+        /// <summary>Failed checklist items, rewritten and grouped by section.</summary>
         public List<InspectionSectionViewModel> InspectionSections { get; set; } = new();
-        /// <summary>Derived badge: Failed → Flagged, else Passed / Pending.</summary>
+        /// <summary>The badge shown for the inspection: a failure reads as flagged.</summary>
         public string InspectionBadge { get; set; } = string.Empty;
 
-        // ── Maintenance Log ──
+        // Maintenance Log.
         public bool HasMaintenance { get; set; }
-        /// <summary>Mockup badge: No Issues / Needs Attention / Under Repair.</summary>
+        /// <summary>The maintenance badge: no issues, needs attention, or under repair.</summary>
         public string CurrentStatus { get; set; } = "No Issues";
-        /// <summary>Maintenance timeline, newest first: date + what the issue was + outcome.</summary>
+        /// <summary>Maintenance timeline, newest first: when, what the issue was, and the outcome.</summary>
         public List<MaintenanceEntryViewModel> MaintenanceEntries { get; set; } = new();
 
-        // ── Flag review / actions ──
-        /// <summary>Admin road-safety gate: bus is grounded, dispatch can't assign it.</summary>
+        // Flag review / actions.
+        /// <summary>Whether the bus is grounded, which prevents dispatch assigning it.</summary>
         public bool OutOfService { get; set; }
-        /// <summary>The open (unresolved) incident to act on — resolve / note. Null = none open.</summary>
+        /// <summary>The unresolved incident to act on, or null when none is open.</summary>
         public int? OpenLogId { get; set; }
-        /// <summary>Audit history grouped by incident (one maintenance lifecycle = one log_id),
-        /// newest incident first, newest note first within each.</summary>
+        /// <summary>
+        /// History grouped by incident, so each maintenance lifecycle forms one block.
+        /// Newest incident first, and newest note first within each.
+        /// </summary>
         public List<VehicleIncidentThreadViewModel> IncidentThreads { get; set; } = new();
     }
 
-    // One line in the Maintenance Log timeline: when, what the issue was, and the outcome.
+    /// <summary>One entry in the maintenance timeline.</summary>
     public class MaintenanceEntryViewModel
     {
         public string Date { get; set; } = string.Empty;
@@ -49,22 +53,24 @@ namespace FleetWise.Models
         public bool IsResolved { get; set; }
     }
 
-    // One incident's audit thread (every note sharing a log_id) — a single flagged→resolved
-    // lifecycle, rendered as one visually separated block in the History.
+    /// <summary>
+    /// One incident's thread: every note against the same log, covering a single lifecycle
+    /// from flagged through to resolved, rendered as one block.
+    /// </summary>
     public class VehicleIncidentThreadViewModel
     {
         public int LogId { get; set; }
         public List<VehicleNoteViewModel> Notes { get; set; } = new();
     }
 
-    // One inspection section + its failed items, for the collapsible flag detail.
+    /// <summary>One inspection section and the items in it that failed.</summary>
     public class InspectionSectionViewModel
     {
         public string Section { get; set; } = string.Empty;
         public List<string> Items { get; set; } = new();
     }
 
-    // One audit-thread line for the View Vehicle modal.
+    /// <summary>One entry in an incident's thread.</summary>
     public class VehicleNoteViewModel
     {
         public string Action { get; set; } = string.Empty;

@@ -5,20 +5,23 @@ using FleetWise.Models;
 
 namespace FleetWise.Services
 {
-    // Phase 10b - the web half of the audit trail (see MOTHER-LOGS-plan.md).
-    //
-    // The dashboard talks to Supabase through ONE shared service key, so every write the
-    // DB triggers see arrives as `service_role` with no name on it. Which admin actually
-    // clicked is known only here, in the ASP.NET cookie. This service supplies that
-    // missing half: one row per admin action, actor read from the signed-in principal
-    // (never from the request body, which a client could forge), source = "web".
-    //
-    // The pair is deliberate. The DB trigger row says WHAT changed (the before/after
-    // diff); this row says WHO asked and from which IP. Same event, two witnesses.
-    //
-    // Rule, same as the edge writer: logging must NEVER break the action being logged.
-    // Every failure is swallowed and the write is time-boxed, so an unreachable audit
-    // table can slow nothing down and lock nobody out.
+    /// <summary>
+    /// Records administrator actions in the audit trail.
+    /// </summary>
+    /// <remarks>
+    /// The dashboard reaches the database through one shared service key, so every write
+    /// arrives at the database triggers as the same anonymous role. Which administrator
+    /// acted is known only here, from the authentication cookie. This service supplies
+    /// that half: one entry per action, with the actor taken from the signed-in principal
+    /// rather than the request body, which a client could forge.
+    ///
+    /// The two records are complementary. The trigger's entry says what changed, as a
+    /// before and after difference. This one says who asked for it and from which address.
+    ///
+    /// Recording must never break the action being recorded. Every failure is swallowed
+    /// and each write is time-boxed, so an unreachable audit table cannot slow anything
+    /// down or lock anyone out.
+    /// </remarks>
     public class AuditLog
     {
         private static readonly HttpClient _http = new();
@@ -33,15 +36,16 @@ namespace FleetWise.Services
             _accessor = accessor;
         }
 
-        /// <summary>Display name of the signed-in operator, for summaries.</summary>
+        /// <summary>The signed-in operator's display name, used in entry summaries.</summary>
         public string ActorName =>
             _accessor.HttpContext?.User?.FindFirst(ClaimTypes.Name)?.Value ?? "An admin";
 
-        /// <summary>
-        /// Append one row. <paramref name="phrase"/> is the predicate only: the operator's
-        /// name is prepended here so every line reads the same way ("Chester reset the
-        /// password for Juan Dela Cruz"). Never pass a password, hash, or key.
-        /// </summary>
+        /// <summary>Appends one entry to the trail.</summary>
+        /// <param name="phrase">
+        /// The predicate only. The operator's name is prepended here, so every entry reads
+        /// the same way: "<c>{name} reset the password for Juan Dela Cruz</c>". Never pass
+        /// a password, a hash, or a key.
+        /// </param>
         public async Task WriteAsync(
             string action,
             string phrase,
@@ -56,8 +60,8 @@ namespace FleetWise.Services
             {
                 ["actor_type"] = "admin",
                 ["actor_id"] = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value,
-                // Dashboard role (Admin, Dispatcher...), not a Postgres role. `source`
-                // already tells a reader which vocabulary this column is speaking.
+                // The dashboard role, such as Admin or Dispatcher, not a database role.
+                // The source column already says which vocabulary this one is using.
                 ["actor_role"] = user?.FindFirst(ClaimTypes.Role)?.Value,
                 ["action"] = action,
                 ["target_table"] = targetTable,
@@ -68,13 +72,15 @@ namespace FleetWise.Services
             });
         }
 
-        /// <summary>
-        /// Append a row for a dashboard sign-in attempt. Separate from <see cref="WriteAsync"/>
-        /// because at this point there may be no principal to read: a failed attempt has no
-        /// identity at all, and a successful one is signed in on the RESPONSE, not yet on the
-        /// request. So the caller passes what auth just established, and nothing else.
-        /// Never pass the password, right or wrong.
-        /// </summary>
+        /// <summary>Appends an entry for a dashboard sign-in attempt.</summary>
+        /// <remarks>
+        /// Separate from <see cref="WriteAsync"/> because there may be no principal to read
+        /// at this point. A failed attempt has no identity at all, and a successful one is
+        /// signed in on the response rather than the current request. The caller therefore
+        /// passes what authentication has just established, and nothing more.
+        ///
+        /// Never pass the password, whether it was correct or not.
+        /// </remarks>
         public async Task WriteSignInAsync(
             string action, string summary, int? userId, string outcome = "ok", string? role = null)
         {
@@ -82,9 +88,10 @@ namespace FleetWise.Services
             {
                 ["actor_type"] = userId is null ? "anon" : "admin",
                 ["actor_id"] = userId?.ToString(),
-                // Passed in, not read from claims: on a sign-in the principal does not exist
-                // on this request yet. Without it a login row cannot tell an Admin from a
-                // Dispatcher, since actor_type says "dashboard operator" for both.
+                // Passed in rather than read from claims, because the principal does not
+                // exist on this request yet. Without it a sign-in entry cannot distinguish
+                // an administrator from a dispatcher, since the actor type says only that
+                // it was a dashboard operator.
                 ["actor_role"] = role,
                 ["action"] = action,
                 ["target_table"] = "users",
@@ -94,12 +101,13 @@ namespace FleetWise.Services
             });
         }
 
-        /// <summary>
-        /// Read the trail back for the Audit Log page (10c). <paramref name="query"/> is a
-        /// PostgREST query string built by the controller. Returns null rows when the read
-        /// itself failed, so the page can say so instead of showing an empty trail, which
-        /// would read as "nothing ever happened".
-        /// </summary>
+        /// <summary>Reads the trail back for the audit log page.</summary>
+        /// <param name="query">A PostgREST query string built by the controller.</param>
+        /// <returns>
+        /// The matching entries and the unpaged total. The entries are null when the read
+        /// itself failed, so the page can report that rather than showing an empty trail,
+        /// which would suggest nothing had ever happened.
+        /// </returns>
         public async Task<(List<AuditEntryViewModel>? Rows, int Total)> QueryAsync(string query)
         {
             try
@@ -111,8 +119,8 @@ namespace FleetWise.Services
                 var req = new HttpRequestMessage(HttpMethod.Get, $"{url}/rest/v1/audit_log?{query}");
                 req.Headers.TryAddWithoutValidation("apikey", key);
                 req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {key}");
-                // Asks PostgREST for the unpaged total, returned in Content-Range as
-                // "0-49/1234". Without it there is no way to size the pager.
+                // Requests the unpaged total, which comes back in the Content-Range header
+                // as a range and count. Without it the pager cannot be sized.
                 req.Headers.TryAddWithoutValidation("Prefer", "count=exact");
 
                 var res = await _http.SendAsync(req);
