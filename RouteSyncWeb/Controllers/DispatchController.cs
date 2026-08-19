@@ -61,10 +61,12 @@ namespace FleetWise.Controllers
             // A vehicle with an unresolved maintenance log is flagged regardless of any
             // trip, so the flag survives the bus going on trip and outlives the
             // vehicle_status column, which later shifts overwrite.
-            var flaggedVehicleIds = maintTask.Result.Models
+            var openIncidents = maintTask.Result.Models
                 .Where(l => l.ResolvedAt == null && l.VehicleId != null)
-                .Select(l => l.VehicleId)
-                .ToHashSet();
+                .GroupBy(l => l.VehicleId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(l => l.CreatedAt).First());
+
+            var flaggedVehicleIds = openIncidents.Keys.ToHashSet();
 
             // Lookups keyed by id, used while resolving each trip below.
             var vehicleDict = vehicles.ToDictionary(v => v.VehicleId);
@@ -77,62 +79,20 @@ namespace FleetWise.Controllers
                 .GroupBy(c => c.TripId)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.SubmittedAt).First());
 
-            // Vehicle, driver and trip status are resolved once per trip from the
-            // inspection log, so this board always agrees with the trip detail modal:
-            //
-            //   no checklist submitted      vehicle is Pending
-            //   checklist status Passed     vehicle is Ready to Deploy
-            //   anything else               vehicle is Flagged
-            //
-            // The comparison is case-insensitive, matching the check the modal performs.
+            // Status comes from TripStatus so this board, the trip detail modal and the
+            // counters below cannot drift apart. See that class for the rules.
             (Vehicle Vehicle, UserModel Driver, string VehicleStatus, string DriverStatus, string TripStatus, bool Flagged) Resolve(Trip trip)
             {
                 vehicleDict.TryGetValue(trip.VehicleId, out var vehicle);
                 driverDict.TryGetValue(trip.DriverId, out var driver);
                 var driverAvail = availabilityDict.TryGetValue(trip.DriverId, out var avail) ? avail : "Available";
-
-                // Roadworthiness comes from this trip's own inspection rather than the
-                // shared vehicle_status column, which a later shift overwrites and which
-                // would otherwise show a missed trip as ready. A submitted checklist that
-                // did not pass is a flag, reported separately from the operational state.
                 var cl = checklistDict.TryGetValue(trip.TripId, out var c0) ? c0 : null;
-                // After a reassignment the trip's earlier checklist describes a different
-                // bus, so it is ignored. The bus now on the trip needs its own inspection.
-                if (cl != null && !string.Equals(cl.VehicleId, trip.VehicleId, StringComparison.OrdinalIgnoreCase))
-                    cl = null;
-                bool flagged = (cl != null && !string.Equals(cl.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase))
-                               || flaggedVehicleIds.Contains(trip.VehicleId);
 
-                if (trip.TripStatus == "Active")
-                    return (vehicle, driver, "On Trip", "On Trip", "Active", flagged);
+                var view = TripStatus.Resolve(
+                    trip, vehicle, driver, driverAvail, cl,
+                    flaggedVehicleIds.Contains(trip.VehicleId), PhClock.Now);
 
-                if (trip.TripStatus == "Completed")
-                    return (vehicle, driver, "Completed", "Available", "Completed", flagged);
-
-                // Waiting to depart. Readiness comes from the trip's checklist rather than
-                // the bus row: none yet is Pending, a failure is Flagged, a pass is Ready.
-                var vehicleStatus = cl == null ? "Pending" : flagged ? "Flagged" : "Ready to Deploy";
-
-                // Missing availability counts as available.
-                var driverStatus = driver == null
-                    ? "Unavailable"
-                    : string.IsNullOrEmpty(driverAvail) ? "Available" : driverAvail;
-
-                // A shift that ended without the trip ever starting counts as missed. This
-                // is derived per request rather than stored, so a past operational day
-                // shows missed trips instead of a stale "not yet started".
-                //
-                // A flag is advisory and the bus stays deployable. Only a grounded bus or
-                // an unavailable driver blocks the assignment.
-                var tripStatus = ShiftEndAt(trip) < PhClock.Now
-                    ? "Missed"
-                    : (vehicle?.OutOfService == true || driverStatus == "Unavailable")
-                        ? "Assignment Issue"
-                        : vehicleStatus == "Pending"
-                            ? "Pending"
-                            : "Not Yet Started";
-
-                return (vehicle, driver, vehicleStatus, driverStatus, tripStatus, flagged);
+                return (vehicle, driver, view.VehicleStatus, view.DriverStatus, view.TripStatus, view.VehicleFlagged);
             }
 
             var resolved = new Dictionary<string, (Vehicle Vehicle, UserModel Driver, string VehicleStatus, string DriverStatus, string TripStatus, bool Flagged)>();
@@ -228,7 +188,8 @@ namespace FleetWise.Controllers
                             TripStatus = r.TripStatus,
                             Flagged = r.Flagged,
                             AssignmentIssueReason = r.TripStatus == "Assignment Issue"
-                                ? BuildIssueReason(r.Vehicle, r.DriverStatus)
+                                ? BuildIssueReason(r.Vehicle, r.DriverStatus,
+                                    openIncidents.GetValueOrDefault(trip.VehicleId))
                                 : null
                         });
                     }
@@ -266,8 +227,12 @@ namespace FleetWise.Controllers
                                     .Filter("user_id", Operator.Equals, trip.DriverId.ToString()).Get();
             var checklistTask = _supabase.From<BusChecklist>()
                                     .Filter("trip_id", Operator.Equals, id).Get();
+            // The flag lives on the incident, not the inspection, so this modal has to
+            // read the same maintenance log the board and the vehicles tab read.
+            var maintTask = _supabase.From<MaintenanceLog>()
+                                    .Filter("vehicle_id", Operator.Equals, trip.VehicleId).Get();
 
-            await Task.WhenAll(vehicleTask, driverTask, routeTask, availabilityTask, checklistTask);
+            await Task.WhenAll(vehicleTask, driverTask, routeTask, availabilityTask, checklistTask, maintTask);
 
             var vehicle = vehicleTask.Result.Models.FirstOrDefault();
             var driver = driverTask.Result.Models.FirstOrDefault();
@@ -280,49 +245,17 @@ namespace FleetWise.Controllers
                 .OrderByDescending(c => c.SubmittedAt)
                 .FirstOrDefault();
 
-            // Display statuses.
-            string vehicleStatus, driverStatus, resolvedTripStatus;
-            if (trip.TripStatus == "Active")
-            {
-                vehicleStatus = "On Trip";
-                driverStatus = "On Trip";
-                resolvedTripStatus = "Active";
-            }
-            else if (trip.TripStatus == "Completed")
-            {
-                vehicleStatus = "Trip Completed";
-                driverStatus = "Trip Completed";
-                resolvedTripStatus = "Completed";
-            }
-            else
-            {
-                // Vehicle status comes from this trip's inspection log rather than the
-                // shared vehicle_status column, which a later shift overwrites, so the
-                // vehicle details always agree with the inspection log card:
-                //
-                //   no checklist submitted      Pending
-                //   checklist status Passed     Ready to Deploy
-                //   anything else               Flagged
-                //
-                // The comparison is case-insensitive, matching the check the modal performs.
-                var clFailed = checklist != null && !string.Equals(checklist.ChecklistStatus, "Passed", StringComparison.OrdinalIgnoreCase);
-                vehicleStatus = checklist == null ? "Pending" : clFailed ? "Flagged" : "Ready to Deploy";
+            // Resolved through TripStatus, the same call the dispatch board makes, so
+            // the badge here cannot disagree with the row behind it.
+            var vehicleFlagged = maintTask.Result.Models.Any(l => l.ResolvedAt == null);
 
-                driverStatus = driver == null
-                    ? "Unavailable"
-                    : (availability?.AvailabilityStatus ?? "Available");
+            var view = TripStatus.Resolve(
+                trip, vehicle, driver, availability?.AvailabilityStatus, checklist,
+                vehicleFlagged, PhClock.Now);
 
-                // Trip status is resolved the same way as on the dispatch board, so the
-                // header badge agrees with the vehicle status and inspection log. A trip
-                // past its window that never ran is missed.
-                resolvedTripStatus = ShiftEndAt(trip) < PhClock.Now
-                    ? "Missed"
-                    : (vehicleStatus == "Flagged" || driverStatus == "Unavailable")
-                        ? "Assignment Issue"
-                        : vehicleStatus == "Pending"
-                            ? "Pending"
-                            : "Not Yet Started";
-            }
+            var vehicleStatus = view.VehicleStatus;
+            var driverStatus = view.DriverStatus;
+            var resolvedTripStatus = view.TripStatus;
 
             var vm = new TripDetailViewModel
             {
@@ -373,6 +306,8 @@ namespace FleetWise.Controllers
                 {
                     LogId = l.LogId,
                     IssueDetails = l.IssueDetails?.Issues ?? new(),
+                    IsCritical = l.IssueDetails?.IsCritical == true,
+                    CriticalIssues = l.IssueDetails?.CriticalIssues ?? new(),
                     MaintenanceStatus = l.MaintenanceStatus,
                     CreatedAt = l.CreatedAt,
                     ResolvedAt = l.ResolvedAt,
@@ -881,21 +816,24 @@ namespace FleetWise.Controllers
         }
 
         /// <summary>Short reason a trip is an assignment issue, shown in the badge tooltip.</summary>
-        private static string BuildIssueReason(Vehicle vehicle, string driverStatus)
+        /// <remarks>
+        /// A grounded bus is named along with what grounded it, because "out of service"
+        /// alone leaves a dispatcher to go hunting through the vehicles tab to find out
+        /// whether this is a reassignment or something being repaired.
+        /// </remarks>
+        private static string BuildIssueReason(Vehicle vehicle, string driverStatus, MaintenanceLog openIncident)
         {
             var parts = new List<string>();
-            if (vehicle?.OutOfService == true) parts.Add("Bus is out of service");
+            if (vehicle?.OutOfService == true)
+            {
+                var critical = openIncident?.IssueDetails?.IsCritical == true;
+                parts.Add(critical
+                    ? $"Bus grounded by inspection: {openIncident.IssueDetails.CriticalSummary}"
+                    : "Bus is out of service");
+            }
             if (driverStatus == "Unavailable") parts.Add("Driver is unavailable");
             return parts.Count > 0 ? string.Join(" · ", parts) : "Needs reassignment";
         }
-
-        /// <summary>
-        /// The shift end as a point in time on the trip's own date, rolling to the next day
-        /// when the shift runs overnight. Used to decide whether a trip that never started
-        /// is already past its window.
-        /// </summary>
-        private static DateTime ShiftEndAt(Trip t) =>
-            t.Date.Date.Add(t.ShiftEndTime).AddDays(t.ShiftEndTime <= t.ShiftStartTime ? 1 : 0);
 
         /// <summary>The shift that immediately follows this one on the same day.</summary>
         private static readonly Dictionary<string, string> NextShift = new()

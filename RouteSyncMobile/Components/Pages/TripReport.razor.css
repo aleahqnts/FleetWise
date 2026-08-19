@@ -255,3 +255,4 @@
     color: #b6bdc9;
     font-size: 22px;
 }
+.check-status.bad { background: #fdecea; color: #d0494b; }

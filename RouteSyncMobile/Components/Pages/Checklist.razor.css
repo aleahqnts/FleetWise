@@ -244,3 +244,34 @@
 .cl-confirm .btn-teal {
     max-width: 340px;
 }
+
+/* Marks an item that will block the trip if it fails, so a driver knows the
+   weight of the tap before making it. */
+.crit {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #fdecea;
+    color: #c0392b;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    vertical-align: middle;
+}
+
+.confirm-check.bad svg { stroke: #d0494b; }
+.confirm-check.warn svg { stroke: #d99b1a; }
+
+.confirm-row .bad { color: #d0494b; font-weight: 700; }
+
+.btn-plain {
+    width: 100%;
+    margin-top: 10px;
+    border: none;
+    background: none;
+    color: #6b7280;
+    font-size: 14px;
+    padding: 10px;
+    cursor: pointer;
+}
