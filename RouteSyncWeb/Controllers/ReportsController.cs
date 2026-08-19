@@ -21,10 +21,12 @@ namespace FleetWise.Controllers
 
         public async Task<IActionResult> Index() => View();
 
-        // ── Main data endpoint for the Reports page ──────────────────
-        // Returns stat cards, table page, pagination, and the passenger /
-        // revenue summary cards (mini chart + top routes), all filtered
-        // by the global Route/Date filters and the per-card period selects.
+        /// <summary>
+        /// Main data endpoint for the reports page: the stat cards, one page of the table,
+        /// its pagination, and the passenger and revenue summary cards.
+        /// </summary>
+        /// <remarks>Everything is filtered by the page's route and date selection, and the
+        /// summary cards additionally by their own period.</remarks>
         [HttpGet]
         public async Task<IActionResult> GetData(
             int? routeId,
@@ -34,11 +36,11 @@ namespace FleetWise.Controllers
             string revenuePeriod = "This Week")
         {
             if (page < 1) page = 1;
-            // Default to the current operating cycle (06:00->05:59 next day), not raw
-            // calendar day — before 6 AM we're still inside yesterday's service day.
+            // Defaults to the current operational day, 06:00 to 05:59 the next morning,
+            // rather than the calendar day. Before 6 AM that is still the previous day.
             var anchor = (date ?? PhClock.OperationalDay).Date;
 
-            // ── Reference data ─────────────────────────────────────
+            // Reference data.
             var routesResp = await _supabase.From<BusRoute>().Get();
             var routes = routesResp.Models;
             var routeNames = routes.ToDictionary(r => r.RouteId, r => r.RouteName);
@@ -58,15 +60,16 @@ namespace FleetWise.Controllers
                 (!routeId.HasValue || routeId.Value == 0 || t.RouteId == routeId.Value) &&
                 (!date.HasValue || t.Date.Date == anchor);
 
-            // ── All filtered trips: drives the stat cards (incl. Missed) ───
+            // Every filtered trip. Drives the stat cards, including missed trips.
             var filtered = allTrips
                 .Where(MatchesGlobalFilters)
                 .OrderByDescending(t => t.Date)
                 .ThenBy(t => t.TripId)
                 .ToList();
 
-            // ── Table (Daily Trip Reports): completed only — finished trips are the
-            // ones with real passenger/revenue data; in-progress/missed add noise here.
+            // The table lists completed trips only. Those are the ones with settled
+            // passenger and revenue figures; in-progress and missed trips would add rows
+            // with nothing to report.
             var tableTrips = filtered
                 .Where(t => string.Equals(t.TripStatus, "Completed", StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -89,10 +92,10 @@ namespace FleetWise.Controllers
                 status = DeriveStatus(t)
             });
 
-            // ── Stat cards ──────────────────────────────────────────
+            // Stat cards.
             int completedTrips = filtered.Count(t => string.Equals(t.TripStatus, "completed", StringComparison.OrdinalIgnoreCase));
-            // "Missed" is never stored — derived from the shift window (see DeriveStatus),
-            // so this counts trips past their window that never went Active/Completed.
+            // Missed is never stored. It is derived from the shift window, so this counts
+            // trips past their window that never started or completed.
             int delayedTrips = filtered.Count(t => DeriveStatus(t) == "Missed");
 
             int totalPassengers = filtered.Sum(Passengers);
@@ -106,7 +109,7 @@ namespace FleetWise.Controllers
             int prevPassengers = prevDayTrips.Sum(Passengers);
             decimal prevRevenue = prevDayTrips.Sum(t => t.EstimatedRevenue);
 
-            // ── Summary cards (passenger / revenue) ────────────────
+            // Summary cards (passenger / revenue).
             var passengerSummary = BuildSummary(allTrips, Passengers, routeNames, routeId, anchor, passengerPeriod, isPassenger: true);
             var revenueSummary = BuildSummary(allTrips, Passengers, routeNames, routeId, anchor, revenuePeriod, isPassenger: false);
 
@@ -164,7 +167,8 @@ namespace FleetWise.Controllers
                 ? (total == 0 ? 0 : 100)
                 : (double)((total - prevTotal) / prevTotal * 100);
 
-            // 7-day (Mon–Sun) series for the mini line chart — the week containing the anchor date
+            // Seven-day series for the mini chart, Monday to Sunday, covering the week
+            // containing the selected date.
             int offset = ((int)anchor.DayOfWeek + 6) % 7; // days since Monday
             var weekStart = anchor.AddDays(-offset);
             var weekData = new decimal[7];
@@ -175,7 +179,7 @@ namespace FleetWise.Controllers
                 weekData[i] = isPassenger ? dayTrips.Sum(passengers) : dayTrips.Sum(t => t.EstimatedRevenue);
             }
 
-            // Top 3 routes within the selected period
+            // The three busiest routes in the selected period.
             var topRoutes = current
                 .GroupBy(t => t.RouteId)
                 .Select(g => new
@@ -249,7 +253,7 @@ namespace FleetWise.Controllers
             }
         }
 
-        // ── Called by the View button via fetch() — returns JSON for the modal ──
+        /// <summary>Trip detail for the modal, requested when a row's view button is used.</summary>
         [HttpGet]
         public async Task<IActionResult> TripDetail(string tripId)
         {
@@ -311,9 +315,9 @@ namespace FleetWise.Controllers
 
             var latestTelemetry = telemetryResponse.Models.FirstOrDefault();
 
-            // Telemetry total_passengers is sparse/often 0 for real driver trips. Fall back to
-            // trips.total_boarded (source of truth) so the modal never shows 0 when the trip
-            // actually boarded passengers. (Same flat-0 bug fixed on the dashboard.)
+            // Telemetry passenger counts are sparse and frequently zero on real trips, so
+            // the trip's own total is used instead. Without the fallback the modal reports
+            // zero for trips that carried passengers.
             var liveBoarded = latestTelemetry?.TotalPassengers ?? 0;
             if (liveBoarded <= 0) liveBoarded = tripResponse.TotalBoarded;
 
@@ -324,7 +328,7 @@ namespace FleetWise.Controllers
                 shiftStart = ShiftStartAt(tripResponse).ToString("hh:mm tt"),
                 shiftEnd = ShiftEndLabel(tripResponse),
                 routeName = routeResponse?.RouteName ?? "N/A",
-                vehicleType = "Bus", // vehicle_type column dropped — every unit is a bus
+                vehicleType = "Bus", // the vehicle_type column was dropped; every unit is a bus
                 vehicleId = vehicleResponse?.VehicleId ?? "N/A",
                 plateNumber = vehicleResponse?.PlateNumber ?? "N/A",
                 driverName = driverResponse != null
@@ -339,7 +343,7 @@ namespace FleetWise.Controllers
 
             return Json(result);
         }
-        // ── Filter options for the report generation modal ────────────
+        /// <summary>Filter options for the report generation modal.</summary>
         [HttpGet]
         public async Task<IActionResult> GetFilterOptions()
         {
@@ -348,19 +352,19 @@ namespace FleetWise.Controllers
             var vehiclesResp = await _supabase.From<Vehicle>().Get();
             var tripsResp = await _supabase.From<Trip>().Get();
 
-            // Driver role ID is 2
+            // Role 2 is the driver role.
             var driverIds = usersResp.Models
                 .Where(u => u.RoleId == 2)
                 .Select(u => u.UserId)
                 .ToHashSet();
 
-            // Map each driver to the routes they've driven (from trips)
+            // Routes each driver has driven, taken from their trips.
             var driverRoutes = tripsResp.Models
                 .Where(t => driverIds.Contains(t.DriverId))
                 .GroupBy(t => t.DriverId)
                 .ToDictionary(g => g.Key, g => g.Select(t => t.RouteId).Distinct().ToList());
 
-            // Map each vehicle to the routes it's been on (from trips)
+            // Routes each vehicle has run, taken from its trips.
             var vehicleRoutes = tripsResp.Models
                 .GroupBy(t => t.VehicleId)
                 .ToDictionary(g => g.Key, g => g.Select(t => t.RouteId).Distinct().ToList());
@@ -390,7 +394,7 @@ namespace FleetWise.Controllers
             return Json(new { routes, drivers, vehicles });
         }
 
-        // ── Generate report preview (returns grouped JSON) ────────────
+        /// <summary>Builds the report preview, grouped by route.</summary>
         [HttpGet]
         public async Task<IActionResult> GenerateReport(
             string reportType,
@@ -399,11 +403,11 @@ namespace FleetWise.Controllers
             int? driverId,
             string? vehicleId)
         {
-            // Default to the current operating cycle (06:00->05:59 next day), not raw
-            // calendar day — before 6 AM we're still inside yesterday's service day.
+            // Defaults to the current operational day, 06:00 to 05:59 the next morning,
+            // rather than the calendar day. Before 6 AM that is still the previous day.
             var anchor = (date ?? PhClock.OperationalDay).Date;
 
-            // ── Reference data ────────────────────────────────────────
+            // Reference data.
             var routesResp = await _supabase.From<BusRoute>().Get();
             var routeNames = routesResp.Models.ToDictionary(r => r.RouteId, r => r.RouteName);
 
@@ -418,7 +422,7 @@ namespace FleetWise.Controllers
 
             int Passengers(Trip t) => t.TotalBoarded;
 
-            // ── Apply filters ─────────────────────────────────────────
+            // Apply filters.
             var filtered = allTrips
                 .Where(t => t.Date.Date == anchor)
                 .Where(t => !routeId.HasValue || t.RouteId == routeId.Value)
@@ -435,7 +439,7 @@ namespace FleetWise.Controllers
                 _ => BuildDailyTripReport(filtered, routeNames, userNames, vehiclesById, Passengers),
             };
 
-            // Grand totals across all filtered trips (rendered as a clear total at the end).
+            // Totals across every filtered trip, shown at the end of the report.
             var totals = new
             {
                 trips = filtered.Count,
@@ -530,7 +534,7 @@ namespace FleetWise.Controllers
             return groups;
         }
 
-        // ── Download report as PDF (QuestPDF) ────────────────────────
+        /// <summary>Renders the report as a PDF.</summary>
         [HttpGet]
         public async Task<IActionResult> DownloadReport(
             string reportType,
@@ -539,8 +543,8 @@ namespace FleetWise.Controllers
             int? driverId,
             string? vehicleId)
         {
-            // Default to the current operating cycle (06:00->05:59 next day), not raw
-            // calendar day — before 6 AM we're still inside yesterday's service day.
+            // Defaults to the current operational day, 06:00 to 05:59 the next morning,
+            // rather than the calendar day. Before 6 AM that is still the previous day.
             var anchor = (date ?? PhClock.OperationalDay).Date;
 
             var routesResp = await _supabase.From<BusRoute>().Get();
@@ -565,7 +569,7 @@ namespace FleetWise.Controllers
                 .ThenBy(t => t.ShiftStartTime)
                 .ToList();
 
-            // ── Build report data ─────────────────────────────────────
+            // Build report data.
             string reportTitle = reportType switch
             {
                 "Passenger" => "Passenger Reports",
@@ -624,7 +628,7 @@ namespace FleetWise.Controllers
                 }
             };
 
-            // Groups: keyed by route name
+            // Grouped by route name.
             var groups = filtered
                 .GroupBy(t => routeNames.TryGetValue(t.RouteId, out var rn) ? rn : $"Route {t.RouteId}")
                 .Select(g => new ReportGroup
@@ -634,7 +638,7 @@ namespace FleetWise.Controllers
                 })
                 .ToList();
 
-            // ── Generate PDF with QuestPDF ────────────────────────────
+            // Generate PDF with QuestPDF.
             QuestPDF.Settings.License = LicenseType.Community;
 
             var accentColor = reportType switch
@@ -652,7 +656,7 @@ namespace FleetWise.Controllers
                     page.Margin(32, Unit.Point);
                     page.DefaultTextStyle(x => x.FontFamily("Arial").FontSize(9).FontColor("#2D3748"));
 
-                    // ── Header ────────────────────────────────────────
+                    // Header.
                     page.Header().Column(col =>
                     {
                         col.Item().Row(row =>
@@ -679,7 +683,7 @@ namespace FleetWise.Controllers
                             .LineColor(accentColor);
                     });
 
-                    // ── Content ───────────────────────────────────────
+                    // Content.
                     page.Content().PaddingTop(12).Column(col =>
                     {
                         if (groups.Count == 0)
@@ -739,7 +743,7 @@ namespace FleetWise.Controllers
                             });
                         }
 
-                        // ── Clear grand total at the end ──────────────
+                        // Clear grand total at the end.
                         var totalTrips = filtered.Count;
                         var totalPax = filtered.Sum(Passengers);
                         var totalRev = filtered.Sum(t => t.EstimatedRevenue);
@@ -759,7 +763,7 @@ namespace FleetWise.Controllers
                             });
                     });
 
-                    // ── Footer ────────────────────────────────────────
+                    // Footer.
                     page.Footer().AlignCenter()
                         .Text(text =>
                         {
@@ -776,7 +780,7 @@ namespace FleetWise.Controllers
             return File(pdfBytes, "application/pdf", fileName);
         }
 
-        // ── Download report as CSV ────────────────────────────────────
+        /// <summary>Renders the report as CSV.</summary>
         [HttpGet]
         public async Task<IActionResult> DownloadReportCsv(
             string reportType,
@@ -785,8 +789,8 @@ namespace FleetWise.Controllers
             int? driverId,
             string? vehicleId)
         {
-            // Default to the current operating cycle (06:00->05:59 next day), not raw
-            // calendar day — before 6 AM we're still inside yesterday's service day.
+            // Defaults to the current operational day, 06:00 to 05:59 the next morning,
+            // rather than the calendar day. Before 6 AM that is still the previous day.
             var anchor = (date ?? PhClock.OperationalDay).Date;
 
             var routesResp = await _supabase.From<BusRoute>().Get();
@@ -819,7 +823,7 @@ namespace FleetWise.Controllers
             var sb = new System.Text.StringBuilder();
             string fileName;
 
-            // Banner: brand + the operational day this report covers, then a blank line.
+            // A banner naming the operational day the report covers, then a blank line.
             var reportLabel = reportType switch
             {
                 "Passenger" => "Passenger Report",
@@ -879,7 +883,7 @@ namespace FleetWise.Controllers
                     break;
             }
 
-            // ── Clear grand total at the end ──────────────────────────
+            // Clear grand total at the end.
             sb.AppendLine();
             sb.AppendLine("TOTAL");
             sb.AppendLine($"Total Trips,{filtered.Count}");
@@ -892,17 +896,20 @@ namespace FleetWise.Controllers
             return File(bytes, "text/csv", fileName);
         }
 
-        // ── Shift-time helpers ───────────────────────────────────────
-        // Trips are dated their START day. A shift whose end <= start is overnight and
-        // actually ends the NEXT calendar day, so build the times off the trip's real date
-        // (not PhClock.Today) and roll the end +1 day when overnight.
+        // Shift-time helpers.
+        //
+        // A trip is dated by the day it starts. A shift whose end is at or before its start
+        // runs overnight and ends the following day, so these build times from the trip's
+        // own date rather than today's, and roll the end forward when needed.
         private static bool IsOvernight(Trip t) => t.ShiftEndTime <= t.ShiftStartTime;
         private static DateTime ShiftStartAt(Trip t) => t.Date.Date + t.ShiftStartTime;
         private static DateTime ShiftEndAt(Trip t) => t.Date.Date + t.ShiftEndTime
             + (IsOvernight(t) ? TimeSpan.FromDays(1) : TimeSpan.Zero);
 
-        // Trip status is partly derived: "Missed" is never stored. A trip past its shift
-        // window that never went Active/Completed was missed (mirrors the Dispatch board).
+        /// <summary>
+        /// The trip's status, with missed derived rather than stored: a trip past its shift
+        /// window that never started or completed was missed. Matches the dispatch board.
+        /// </summary>
         private static string DeriveStatus(Trip t)
         {
             if (string.Equals(t.TripStatus, "Completed", StringComparison.OrdinalIgnoreCase)) return "Completed";
@@ -911,24 +918,29 @@ namespace FleetWise.Controllers
             return "Not Yet Started";
         }
 
-        // Plain clock end time, e.g. "06:00 AM" — no date/"+1" suffix (the operational-day
-        // header at the top of the report already makes the service window clear).
+        /// <summary>
+        /// The end time alone, without a date or a next-day marker. The operational-day
+        /// header already establishes the window the report covers.
+        /// </summary>
         private static string ShiftEndLabel(Trip t) => ShiftEndAt(t).ToString("hh:mm tt");
 
-        // Full window: "10:00 PM – 06:00 AM".
+        /// <summary>The full shift window, for example "10:00 PM - 06:00 AM".</summary>
         private static string ShiftRange(Trip t, string dash = "–") =>
             $"{ShiftStartAt(t):hh:mm tt} {dash} {ShiftEndLabel(t)}";
 
-        // Actual logged start/end. Stored timestamptz comes back LOCAL-kind (+8h shifted),
-        // so normalize to UTC to recover the true PH wall-clock digits. "—" when not logged.
+        /// <summary>
+        /// The logged start or end time, or a placeholder when the trip never recorded one.
+        /// </summary>
+        /// <remarks>The stored value returns as a local-kind timestamp shifted eight hours
+        /// ahead, so it is normalized back to recover the digits as written.</remarks>
         private static string FmtActual(DateTime? dt) =>
             dt.HasValue ? dt.Value.ToUniversalTime().ToString("hh:mm tt") : "—";
 
-        // Operational-day banner: "June 18, 2026  •  6:00 AM – June 19, 5:59 AM".
+        /// <summary>The operational-day banner, naming both ends of the service window.</summary>
         private static string OpDayLabel(DateTime anchor) =>
             $"{anchor:MMMM d, yyyy}  •  6:00 AM – {anchor.AddDays(1):MMMM d}, 5:59 AM";
 
-        // ── Internal model for report groups ─────────────────────────
+        // Report grouping model.
         private class ReportGroup
         {
             public string GroupName { get; set; } = "";

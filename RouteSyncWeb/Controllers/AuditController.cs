@@ -5,12 +5,16 @@ using FleetWise.Services;
 
 namespace FleetWise.Controllers
 {
-    // Phase 10c - the Audit Log viewer (see MOTHER-LOGS-plan.md).
-    // Gated on its own "audit" permission, which no role has until it is granted
-    // explicitly: read access to the trail is a separate decision from running the fleet.
-    //
-    // Read-only by design. There is no edit or delete action here and there never will be;
-    // the table itself refuses both (10a append-only triggers).
+    /// <summary>
+    /// Read-only viewer for the audit trail.
+    /// </summary>
+    /// <remarks>
+    /// Gated on its own permission, which no role holds until it is granted explicitly:
+    /// reading the trail is a separate decision from operating the fleet.
+    ///
+    /// There is no edit or delete action here, and adding one would achieve nothing. The
+    /// table refuses both through triggers of its own.
+    /// </remarks>
     [Authorize]
     [RequirePermission("audit")]
     public class AuditController : Controller
@@ -21,9 +25,9 @@ namespace FleetWise.Controllers
 
         public AuditController(AuditLog audit) => _audit = audit;
 
-        // The filter param is `type`, not `action`: MVC's default route is
-        // {controller}/{action}/{id?}, so a parameter named `action` binds to the route
-        // value "Index" instead of the query string.
+        // The filter parameter is named `type` rather than `action`, because the default
+        // route pattern is {controller}/{action}/{id?}: a parameter called `action` would
+        // bind to the route value instead of the query string.
         public async Task<IActionResult> Index(
             string? type, string? source, string? outcome,
             string? q, string? from, string? to, int page = 1)
@@ -45,9 +49,9 @@ namespace FleetWise.Controllers
             if (!string.IsNullOrWhiteSpace(outcome))
                 filters.Add($"outcome=eq.{Uri.EscapeDataString(outcome.Trim())}");
 
-            // Dates are picked as PH calendar days but stored as UTC instants, so the
-            // boundaries carry the +08:00 offset explicitly. "To" is inclusive of the whole
-            // day, hence lt. the next midnight rather than lte. the same one.
+            // Dates are chosen as Philippine calendar days but stored as UTC instants, so
+            // both boundaries carry the offset explicitly. The end date includes its whole
+            // day, which is why the filter is less-than the following midnight.
             if (DateTime.TryParse(from, out var d1))
                 filters.Add($"occurred_at=gte.{Uri.EscapeDataString($"{d1:yyyy-MM-dd}T00:00:00+08:00")}");
             if (DateTime.TryParse(to, out var d2))
@@ -78,9 +82,14 @@ namespace FleetWise.Controllers
             });
         }
 
-        // A search term goes inside PostgREST's or=(a,b,c) list, where commas and
-        // parentheses are structure. Strip them (plus the ilike wildcard) rather than try
-        // to escape them, so a stray character can never reshape the query.
+        /// <summary>
+        /// Prepares a search term for use inside a PostgREST or-list.
+        /// </summary>
+        /// <remarks>
+        /// Commas and parentheses are structural in that syntax. They are removed, along
+        /// with the wildcard character, rather than escaped, so no input can reshape the
+        /// query.
+        /// </remarks>
         private static string Sanitize(string? raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return "";
