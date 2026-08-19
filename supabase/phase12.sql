@@ -1,9 +1,9 @@
 -- ============================================================================
 -- RouteSync pre-trip inspection: critical and minor items.
 --
--- The items a driver inspects used to be a hardcoded list in the app, which made
--- every wording change a rebuild and left no way to say which faults matter more
--- than others. They live here instead, each carrying whether it is critical.
+-- The items a driver inspects live here rather than in the app, so their wording
+-- and their weight can change without a new build reaching every phone. Each one
+-- carries whether it is critical.
 --
 -- Critical means the bus cannot be driven safely or legally without it. Failing
 -- one blocks the trip and grounds the bus. Failing anything else is a defect: the

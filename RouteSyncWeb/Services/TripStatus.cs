@@ -20,9 +20,9 @@ namespace FleetWise.Services
     ///
     /// A vehicle is flagged when it has an unresolved maintenance incident, and by
     /// nothing else. A failed inspection opens one of those incidents, so the fault
-    /// still surfaces, but the flag now clears the moment someone resolves it in the
-    /// vehicles tab. Reading the flag from the checklist row instead left a bus
-    /// flagged for good, because no action on the dashboard rewrites an inspection.
+    /// still surfaces, and the flag clears when someone resolves it in the vehicles
+    /// tab. The flag is deliberately not read from the checklist row, which no
+    /// action on the dashboard can rewrite.
     ///
     /// A flag is advisory and the bus stays deployable. Only a grounded bus or an
     /// unavailable driver is an assignment issue.
