@@ -235,7 +235,7 @@ namespace FleetWise.Controllers
                 if (trip.VehicleId is null)
                     continue;
                 if (!latestByTrip.TryGetValue(trip.TripId, out var telemetry))
-                    continue; // no telemetry yet (simulator hasn't ticked for this trip)
+                    continue; // no telemetry reported for this trip yet
 
                 vehiclesById.TryGetValue(trip.VehicleId, out var vehicle);
 
