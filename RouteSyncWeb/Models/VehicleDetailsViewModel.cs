@@ -37,6 +37,11 @@ namespace FleetWise.Models
         public bool OutOfService { get; set; }
         /// <summary>The unresolved incident to act on, or null when none is open.</summary>
         public int? OpenLogId { get; set; }
+
+        // Set when the open incident is one that grounds the bus, so the review panel
+        // can say what happened rather than only that the bus cannot be assigned.
+        public bool OpenIncidentCritical { get; set; }
+        public string OpenIncidentSummary { get; set; } = "";
         /// <summary>
         /// History grouped by incident, so each maintenance lifecycle forms one block.
         /// Newest incident first, and newest note first within each.

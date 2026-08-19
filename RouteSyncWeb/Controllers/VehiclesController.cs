@@ -203,6 +203,8 @@ namespace FleetWise.Controllers
             vm.OutOfService = vehicle.OutOfService;
             var openLog = logs.FirstOrDefault(l => l.ResolvedAt == null);
             vm.OpenLogId = openLog?.LogId;
+            vm.OpenIncidentCritical = openLog?.IssueDetails?.IsCritical == true;
+            vm.OpenIncidentSummary = openLog?.IssueDetails?.CriticalSummary ?? "";
 
             // History across every incident on this vehicle, not only the open one.
             // Limiting it to a single thread hides earlier notes as soon as a second
@@ -784,7 +786,10 @@ namespace FleetWise.Controllers
         private static string DeriveInspectionBadge(string checklistStatus)
         {
             var s = (checklistStatus ?? "").Trim();
+            // A critical failure grounds the bus; defects leave it deployable but worth
+            // a look. Both read as flagged here, since both open an incident.
             if (s.Equals("Failed", OIC)) return "Flagged";
+            if (s.Equals("Passed with Defects", OIC)) return "Defects";
             return string.IsNullOrEmpty(s) ? "Pending" : s;
         }
 

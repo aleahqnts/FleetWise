@@ -108,7 +108,7 @@ else
 
                     @if (VehicleGrounded && assignment.TripStatus != "Active")
                     {
-                        <div class="grounded-note">This bus is out of service. Contact your dispatcher for a reassignment before driving.</div>
+                        <div class="grounded-note">@GroundedMessage</div>
                     }
                     else if (!CanStart)
                     {
@@ -230,6 +230,17 @@ else
     // A bus grounded by an admin cannot have a trip started on it. An already active trip
     // can still be resumed, so a driver is never stranded mid-route.
     private bool VehicleGrounded => vehicle?.OutOfService == true;
+
+    private bool checklistBlocked =>
+        string.Equals(checklist?.ChecklistStatus, "Failed", StringComparison.OrdinalIgnoreCase);
+
+    // A driver who has just failed a critical item on their own inspection knows why
+    // the bus is grounded and needs to be told what happens next, not to phone in.
+    private string GroundedMessage =>
+        checklistBlocked
+            ? "This bus failed a critical inspection item and is out of service. "
+              + "Your operator will reassign a bus or cancel the trip. Wait here for an update."
+            : "This bus is out of service. Contact your dispatcher for a reassignment before driving.";
 
     private string Greeting
     {

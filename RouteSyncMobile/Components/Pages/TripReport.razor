@@ -145,7 +145,8 @@ else
     private string ChecklistClass => checklist?.ChecklistStatus?.ToLowerInvariant() switch
     {
         "passed" or "complete" or "completed" => "ok",
-        _ => "warn"
+        "passed with defects" => "warn",
+        _ => "bad"
     };
 
     private string Duration

@@ -120,3 +120,4 @@
 
 .badge.pass { background: #e3f7ea; color: #3aaf5d; }
 .badge.fail { background: #fce8e8; color: #d0494b; }
+.sum-status.warn { color: #d9822b; }
