@@ -77,12 +77,6 @@ builder.Services.AddHostedService<TelemetryRetentionService>();
 // linger on the map or the dashboard.
 builder.Services.AddHostedService<TripReaperService>();
 
-// Simulated telemetry producer. Registered in every environment but off by default: an
-// operator turns it on from the fleet map when a demonstration is wanted, and turning it
-// off deletes the data it produced.
-builder.Services.AddSingleton<SimulatorControl>();
-builder.Services.AddHostedService<TelemetrySimulator>();
-
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

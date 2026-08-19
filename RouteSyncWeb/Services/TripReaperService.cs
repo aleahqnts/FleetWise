@@ -12,9 +12,9 @@ namespace FleetWise.Services;
 /// • A real driver trip always stamps <c>actual_start_time</c> the moment it goes Active
 ///   (mobile <c>StartTripAsync</c> writes both in one PATCH), so a null start on an Active
 ///   trip can never be a legitimate trip.
-/// • Our own demo trips are tagged <c>is_simulated = true</c> and are managed by the
-///   simulator's own rollover and cleanup. Excluding them here keeps this service from
-///   competing with the simulator over a live demo bus.
+/// • Rows tagged <c>is_simulated = true</c> were produced by the retired telemetry
+///   simulator. They are excluded so that any left in the database are not mistaken for
+///   the ghosts this service removes.
 ///
 /// What remains matches exactly what an outdated build leaves on the shared database:
 /// untagged active trips it created before the simulated tag and the operational-day
