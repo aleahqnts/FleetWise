@@ -383,3 +383,11 @@ skills-lock.json
 # Phase 7: Supabase service key override (never commit)
 appsettings.Secret.json
 **/appsettings.Secret.json
+
+# Local planning notes. These stay on the machine, never in the repository.
+CameraApp-plan.md
+DOC-PLAN.md
+MOTHER-LOGS-plan.md
+PHASE7-security-plan.md
+QA-PLAN.md
+REMOTE-CONTROL-plan.md
