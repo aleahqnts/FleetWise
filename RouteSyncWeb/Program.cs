@@ -3,6 +3,7 @@ using FleetWise.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,6 +50,39 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<FareCalculator>();
+
+// Sign-in rate limit, per caller address.
+//
+// The dashboard sign-in is the one door with no limit in front of it: the mobile app goes
+// through an edge function that has its own. Without this, guesses are limited only by the
+// network.
+//
+// Ten a minute is far above what a person typing a password needs and far below what makes
+// guessing practical. Nothing is queued, because a caller who is over the limit should be
+// told now rather than served slowly.
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("login", http => RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        }));
+
+    // The sign-in page reads this and explains the wait, rather than showing a bare error.
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.Redirect("/Home/Index?throttled=1");
+        await Task.CompletedTask;
+    };
+});
+
+// Counts failures per account, which the address limit above cannot see.
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<LoginThrottle>();
 
 // The audit writer needs the request context, both to read who is signed in, which the
 // database cannot tell from the shared service key, and to record the caller's address.
@@ -127,6 +161,8 @@ app.Use(async (context, next) =>
 });
 
 app.UseRouting();
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

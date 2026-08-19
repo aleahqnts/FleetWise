@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using FleetWise.Models;
 using FleetWise.Services;
 
@@ -13,27 +14,45 @@ namespace FleetWise.Controllers
     {
         private readonly AuthService _authService;
         private readonly AuditLog _audit;
+        private readonly LoginThrottle _throttle;
 
-        public HomeController(AuthService authService, AuditLog audit)
+        public HomeController(AuthService authService, AuditLog audit, LoginThrottle throttle)
         {
             _authService = authService;
             _audit = audit;
+            _throttle = throttle;
         }
 
-        public IActionResult Index()
+        public IActionResult Index(int? throttled)
         {
+            if (throttled == 1)
+                ModelState.AddModelError("", "Too many sign-in attempts. Wait a minute and try again.");
             return View();
         }
 
         [HttpPost]
+        [EnableRateLimiting("login")]
         public async Task<IActionResult> Index(LoginViewModel model)
         {
             if (!ModelState.IsValid)
                 return View(model);
 
+            // Checked before the password is, so a blocked account costs no hashing work.
+            if (_throttle.IsBlocked(model.Email))
+            {
+                await _audit.WriteSignInAsync("login_throttled",
+                    $"Sign-in attempts paused for {Attempted(model.Email)} after repeated failures",
+                    null, "denied");
+
+                ModelState.AddModelError("", "Too many failed attempts for this account. Try again shortly.");
+                return View(model);
+            }
+
             var user = await _authService.ValidateAsync(model.Email, model.Password);
             if (user is null)
             {
+                _throttle.RecordFailure(model.Email);
+
                 // The edge functions never see dashboard sign-ins, so this is the only
                 // place a failed attempt at it can be recorded. The typed email is kept,
                 // which is the point of the entry, but length-capped. The password never is.
@@ -49,6 +68,8 @@ namespace FleetWise.Controllers
             // temporary password then they have never set their own, so a claim marks the
             // session and they are routed to the change page. Middleware blocks the rest of
             // the app until that is done.
+            _throttle.Clear(model.Email);
+
             var mustChange = model.Password == PasswordPolicy.TemporaryPassword;
             await SignInUserAsync(user, mustChange);
 
