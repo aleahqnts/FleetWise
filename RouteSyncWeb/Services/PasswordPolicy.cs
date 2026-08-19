@@ -1,7 +1,7 @@
 namespace FleetWise.Services
 {
     /// <summary>
-    /// The temporary password issued to new accounts.
+    /// What counts as an acceptable password, and the temporary one issued to new accounts.
     /// </summary>
     /// <remarks>
     /// A user is still on the temporary password when a successful sign-in used exactly
@@ -9,6 +9,15 @@ namespace FleetWise.Services
     /// the need for a column tracking whether the password has been changed.
     ///
     /// The change form rejects this value, so it cannot be kept.
+    ///
+    /// The rules below are the browser-side half only. The edge functions apply the same
+    /// policy server-side in _shared/password.ts, which is the half that actually holds:
+    /// anything here can be skipped by a caller that does not use the form. Keep the two
+    /// in step.
+    ///
+    /// A special character is allowed but not required. Length carries most of the
+    /// strength, and demanding a symbol pushes people towards predictable endings while
+    /// being awkward on a phone keyboard.
     /// </remarks>
     public static class PasswordPolicy
     {
@@ -16,5 +25,24 @@ namespace FleetWise.Services
 
         // Stamped on the authentication cookie while the password still has to be changed.
         public const string MustChangeClaim = "pwd_temp";
+
+        public const int MinLength = 8;
+
+        // Not a strength rule. Hashing is PBKDF2 at 100k iterations, so an unbounded
+        // password would let anyone spend the server's CPU at will.
+        public const int MaxLength = 128;
+
+        // One lowercase letter, one uppercase letter, one digit, in any order. Written as
+        // lookaheads so a single attribute covers all three and still works client-side.
+        public const string ComplexityPattern = @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).*$";
+
+        // Messages are literals rather than interpolations because attribute arguments
+        // must be compile-time constants. They restate MinLength, so change both together.
+        public const string LengthMessage = "Password must be at least 8 characters.";
+        public const string ComplexityMessage =
+            "Password needs an uppercase letter, a lowercase letter and a number.";
+
+        /// <summary>The rule in one line, for hint text above a password field.</summary>
+        public const string Rule = "8+ characters, with upper case, lower case and a number.";
     }
 }

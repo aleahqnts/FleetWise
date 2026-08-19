@@ -220,3 +220,141 @@ body {
     .link-button:hover {
         text-decoration: underline;
     }
+
+.field-hint {
+    color: #8a94a6;
+    font-size: 12px;
+    margin: -4px 0 12px;
+}
+
+/* Reset steps. Smaller than the sign-in heading: these are interruptions in a
+   flow, not the front door. */
+.step-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1e3a5f;
+    margin-bottom: 6px;
+    text-align: center;
+}
+
+.step-hint {
+    font-size: 14px;
+    color: #7b8494;
+    text-align: center;
+    margin-bottom: 22px;
+}
+
+/* One box per digit. The real value lives in a hidden field the boxes feed. */
+.code-boxes {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.code-box {
+    width: 46px;
+    height: 56px;
+    border: 1px solid #d9dee6;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 24px;
+    font-weight: 600;
+    color: #1e3a5f;
+    background: #fff;
+}
+
+    .code-box:focus {
+        outline: none;
+        border-color: #3ab5a4;
+        box-shadow: 0 0 0 3px rgba(58, 181, 164, 0.18);
+    }
+
+.sign-in-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* Edge draws its own reveal control, but only while the field has focus, so it
+   vanishes the moment you tab away. Ours replaces it and stays put. */
+.input-field::-ms-reveal,
+.input-field::-ms-clear {
+    display: none;
+}
+
+.eye {
+    border: none;
+    background: none;
+    padding: 0 0 0 8px;
+    color: #aaa;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+    .eye svg {
+        width: 18px;
+        height: 18px;
+        display: block;
+    }
+
+    .eye:hover {
+        color: #3ab5a4;
+    }
+
+    .eye .i-hide {
+        display: none;
+    }
+
+    .eye.showing .i-show {
+        display: none;
+    }
+
+    .eye.showing .i-hide {
+        display: block;
+    }
+
+/* Live rule checklist. Hollow circle until the rule is met, filled green after,
+   so the requirements never need repeating as an error message. */
+.pw-rules {
+    list-style: none;
+    padding: 0;
+    margin: -2px 0 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px 12px;
+}
+
+    .pw-rules li {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+        color: #9aa3b2;
+        transition: color .15s ease;
+    }
+
+    .pw-rules .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        border: 1.5px solid #cfd6e0;
+        background: transparent;
+        flex: none;
+        transition: background .15s ease, border-color .15s ease;
+    }
+
+    .pw-rules li.met {
+        color: #2f8d7e;
+    }
+
+        .pw-rules li.met .dot {
+            background: #3ab5a4;
+            border-color: #3ab5a4;
+        }
+
+.link-button:disabled {
+    color: #9aa3b2;
+    cursor: default;
+    text-decoration: none;
+}

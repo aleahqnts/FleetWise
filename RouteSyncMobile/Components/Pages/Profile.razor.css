@@ -350,3 +350,68 @@
     font-weight: 700;
     cursor: pointer;
 }
+
+/* Password rows carry their own reveal toggle, so the input leaves room on the
+   right for it. */
+.pform .pw-row {
+    position: relative;
+}
+
+    .pform .pw-row input {
+        padding-right: 40px;
+    }
+
+.pform .eye {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    border: none;
+    background: none;
+    padding: 0;
+    color: #9aa3b2;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+    .pform .eye svg {
+        width: 18px;
+        height: 18px;
+        display: block;
+    }
+
+/* Rule checklist. Hollow circle until met, filled green after. */
+.pform .pw-rules {
+    list-style: none;
+    padding: 0;
+    margin: -4px 0 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px 10px;
+}
+
+    .pform .pw-rules li {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+        color: #9aa3b2;
+    }
+
+    .pform .pw-rules .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        border: 1.5px solid #cfd6e0;
+        background: transparent;
+        flex: none;
+    }
+
+    .pform .pw-rules li.met {
+        color: #2f8d7e;
+    }
+
+        .pform .pw-rules li.met .dot {
+            background: #2e9e8f;
+            border-color: #2e9e8f;
+        }

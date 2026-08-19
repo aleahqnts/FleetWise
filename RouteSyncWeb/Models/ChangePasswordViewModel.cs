@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using FleetWise.Services;
 
 namespace FleetWise.Models
 {
@@ -7,12 +8,15 @@ namespace FleetWise.Models
     {
         [Required(ErrorMessage = "Enter a new password.")]
         [DataType(DataType.Password)]
-        [StringLength(100, MinimumLength = 6, ErrorMessage = "Password must be at least 6 characters.")]
+        [StringLength(PasswordPolicy.MaxLength, MinimumLength = PasswordPolicy.MinLength,
+            ErrorMessage = PasswordPolicy.LengthMessage)]
+        [RegularExpression(PasswordPolicy.ComplexityPattern,
+            ErrorMessage = PasswordPolicy.ComplexityMessage)]
         public string NewPassword { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Confirm your new password.")]
         [DataType(DataType.Password)]
-        [Compare(nameof(NewPassword), ErrorMessage = "Passwords don't match.")]
+        [Compare(nameof(NewPassword), ErrorMessage = "Passwords do not match.")]
         public string ConfirmPassword { get; set; } = string.Empty;
     }
 }
