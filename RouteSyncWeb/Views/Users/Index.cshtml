@@ -8,7 +8,7 @@
     var searchTerm = ViewBag.SearchTerm as string;
 }
 
-<!-- PAGE TITLE -->
+@* PAGE TITLE *@
 <h2 class="us-title">User Management</h2>
 
 @if (TempData["Success"] is string successMsg)
@@ -24,7 +24,7 @@
     <div class="us-alert us-alert--error" role="alert">Please correct the highlighted fields.</div>
 }
 
-<!-- TOOLBAR -->
+@* TOOLBAR *@
 <div class="us-toolbar">
     <div class="us-actions">
         <button type="button" class="us-btn us-btn--primary" data-bs-toggle="modal" data-bs-target="#addUserModal">+ Add User</button>
@@ -46,7 +46,7 @@
     </form>
 </div>
 
-<!-- USERS TABLE CARD -->
+@* USERS TABLE CARD *@
 <div class="us-card">
     <div class="us-card-header">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -95,7 +95,7 @@
             new bootstrap.Modal(document.getElementById(modalIds[openModal])).show();
         }
 
-        // Reset Password — two-step confirm inside the Edit User modal
+        // Password reset, confirmed in two steps inside the edit user modal.
         function resetPasswordConfirmUi() {
             document.getElementById('rpDefault').hidden = false;
             document.getElementById('rpConfirm').hidden = true;
@@ -109,7 +109,7 @@
 
         document.getElementById('rpCancel').addEventListener('click', resetPasswordConfirmUi);
 
-        // Edit User — populate fields from the clicked row's data-* attributes
+        // Edit user, with the fields populated from the clicked row's data attributes.
         document.getElementById('editUserModal').addEventListener('show.bs.modal', function (event) {
             resetPasswordConfirmUi();
 
@@ -125,7 +125,7 @@
             document.getElementById('euAccountStatus').value = btn.dataset.accountStatus;
         });
 
-        // Manage Roles — switch the right pane based on the selected role
+        // Manage roles, switching the right-hand pane to the selected role.
         const WEB_PERMISSION_KEYS = ['dashboard', 'routes', 'vehicles', 'reports', 'users', 'audit'];
         const MOBILE_PERMISSION_KEYS = ['tracking', 'messages', 'checklist'];
 
@@ -187,7 +187,7 @@
         --us-shadow: 0 1px 4px rgba(0,0,0,.06);
     }
 
-    /* ── Table loading spinner ──────────────────────────────── */
+    /* Table loading spinner. */
     .us-table-loading {
         text-align: center;
         padding: 32px 14px;
@@ -209,7 +209,7 @@
         }
     }
 
-    /* ── Top role-filter bar ─────────────────────────────────── */
+    /* Top role-filter bar. */
     .us-role-filter {
         display: flex;
         align-items: center;
@@ -223,7 +223,7 @@
         font-family: 'Segoe UI', sans-serif;
     }
 
-    /* ── Page title ─────────────────────────────────────────── */
+    /* Page title. */
     .us-title {
         font-size: 1.6rem;
         font-weight: 700;
@@ -232,7 +232,7 @@
         margin-bottom: 20px;
     }
 
-    /* ── Card ───────────────────────────────────────────────── */
+    /* Card. */
     .us-card {
         background: var(--us-white);
         border: 1px solid var(--us-border);
@@ -241,7 +241,7 @@
         box-shadow: var(--us-shadow);
     }
 
-    /* ── Card header ────────────────────────────────────────── */
+    /* Card header. */
     .us-card-header {
         display: flex;
         align-items: center;
@@ -260,7 +260,7 @@
         flex-shrink: 0;
     }
 
-    /* ── Toolbar ────────────────────────────────────────────── */
+    /* Toolbar. */
     .us-toolbar {
         display: flex;
         align-items: center;
@@ -333,7 +333,7 @@
         border-color: var(--us-teal);
     }
 
-    /* ── Action buttons ─────────────────────────────────────── */
+    /* Action buttons. */
     .us-actions {
         display: flex;
         align-items: center;
@@ -372,7 +372,7 @@
         cursor: not-allowed;
     }
 
-    /* ── Table ──────────────────────────────────────────────── */
+    /* Table. */
     .us-table-wrap {
         overflow-x: auto;
     }
@@ -418,7 +418,7 @@
         padding: 24px 14px;
     }
 
-    /* ── Role badges ────────────────────────────────────────── */
+    /* Role badges. */
     .us-role-badge {
         display: inline-block;
         padding: 4px 12px;
@@ -449,7 +449,7 @@
         color: var(--us-text);
     }
 
-    /* ── Status badges ──────────────────────────────────────── */
+    /* Status badges. */
     .us-status {
         display: inline-block;
         padding: 4px 12px;
@@ -470,7 +470,7 @@
         color: #9AA5B4;
     }
 
-    /* ── Edit button ────────────────────────────────────────── */
+    /* Edit button. */
     .us-btn-edit {
         padding: 6px 20px;
         border: 1.5px solid var(--us-border);
@@ -494,7 +494,7 @@
         cursor: not-allowed;
     }
 
-    /* ── Alerts ─────────────────────────────────────────────── */
+    /* Alerts. */
     .us-alert {
         padding: 12px 18px;
         border-radius: var(--us-radius);
@@ -516,7 +516,7 @@
         border: 1px solid #F5B5B5;
     }
 
-    /* ── Modals ─────────────────────────────────────────────── */
+    /* Modals. */
     .us-modal .modal-content {
         border-radius: var(--us-radius);
         border: 1px solid var(--us-border);
@@ -552,7 +552,7 @@
         padding: 0;
     }
 
-    /* ── Section headers & form rows ───────────────────────── */
+    /* Section headers & form rows. */
     .us-section-header {
         background: var(--us-bg);
         color: var(--us-muted);
@@ -641,7 +641,7 @@
         border-bottom-color: var(--us-teal);
     }
 
-    /* ── Reset Password (Edit User modal) ───────────────────── */
+    /* Reset Password (Edit User modal). */
     .us-reset-row {
         display: flex;
         align-items: center;
@@ -675,7 +675,7 @@
         color: #fff;
     }
 
-    /* ── Manage Roles modal ─────────────────────────────────── */
+    /* Manage Roles modal. */
     .us-roles-body {
         display: flex;
         padding: 0;
@@ -768,7 +768,7 @@
         border-bottom: none;
     }
 
-    /* ── Toggle switch ──────────────────────────────────────── */
+    /* Toggle switch. */
     .us-switch {
         position: relative;
         display: inline-block;
@@ -821,7 +821,7 @@
         border-top: 1px solid var(--us-border);
     }
 
-    /* ── Responsive ─────────────────────────────────────────── */
+    /* Responsive. */
     @@media (max-width: 768px) {
         .us-toolbar {
             flex-direction: column;

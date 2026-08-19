@@ -3,22 +3,22 @@
 <div id="tripDetailModal" class="tdm-overlay" role="dialog" aria-modal="true" style="display:none;">
     <div class="tdm-dialog">
 
-        <!-- Header -->
+        @* Header *@
         <div class="tdm-header">
             <h2 class="tdm-title">TRIP <span id="tdm-trip-id">—</span></h2>
             <button class="tdm-close" onclick="closeTripModal()">&times;</button>
         </div>
 
-        <!-- Loading -->
+        @* Loading *@
         <div id="tdm-loading" class="tdm-loading">
             <div class="tdm-spinner"></div>
             <span>Loading trip details…</span>
         </div>
 
-        <!-- Content -->
+        @* Content *@
         <div id="tdm-content" style="display:none;">
 
-            <!-- Trip Information -->
+            @* Trip Information *@
             <div class="tdm-section-header">
                 <span class="tdm-section-title">Trip Information</span>
                 <span id="tdm-status-badge" class="tdm-badge"></span>
@@ -40,7 +40,7 @@
                 </div>
             </div>
 
-            <!-- Trip Summary (completed trips only) -->
+            @* Trip Summary (completed trips only) *@
             <div id="tdm-summary-section" style="display:none;">
                 <div class="tdm-section-header">
                     <span class="tdm-section-title">Trip Summary</span>
@@ -67,12 +67,12 @@
                 </div>
             </div>
 
-            <!-- Assignment Information -->
+            @* Assignment Information *@
             <div class="tdm-section-header">
                 <span class="tdm-section-title">Assignment Information</span>
             </div>
 
-            <!-- Vehicle Details -->
+            @* Vehicle Details *@
             <div class="tdm-subsection-header">Vehicle Details</div>
             <div class="tdm-section-body">
                 <div class="tdm-info-grid">
@@ -90,7 +90,7 @@
                     </div>
                 </div>
 
-                <!-- Inspection Log Accordion -->
+                @* Inspection Log Accordion *@
                 <div class="tdm-accordion">
                     <button class="tdm-accordion-btn" onclick="toggleInspectionLog()">
                         <span>View Inspection Log</span>
@@ -132,7 +132,7 @@
                 </div>
             </div>
 
-            <!-- Driver Details -->
+            @* Driver Details *@
             <div class="tdm-subsection-header">Driver Details</div>
             <div class="tdm-section-body" style="border-bottom:none;">
                 <div class="tdm-info-grid">
@@ -151,8 +151,8 @@
                 </div>
             </div>
 
-        </div><!-- /tdm-content -->
-        <!-- Error -->
+        </div>@* /tdm-content *@
+        @* Error *@
         <div id="tdm-error" class="tdm-error" style="display:none;">
             <i class="ti ti-alert-circle"></i> Failed to load trip details. Please try again.
         </div>

@@ -12,9 +12,8 @@
 @using System.Security.Claims
 
 @*
-    ── Icon helper ─────────────────────────────────────────────────────────────
-    Each icon is a self-contained inline SVG using currentColor so it inherits
-    the link's color automatically (active = white, hover = teal, default = muted).
+    Icon helper. Each icon is a self-contained inline SVG that draws with the current
+    colour, so it follows the link's own state without needing its own rules.
 *@
 @functions {
     public static IHtmlContent NavIcon(string name)
@@ -163,7 +162,7 @@
 </aside>
 
 <style>
-    /* ─── Variables ─────────────────────────────────────────── */
+    /* Variables. */
     :root {
         --fw-sidebar-collapsed: 72px;
         --fw-sidebar-expanded:  220px;
@@ -176,7 +175,7 @@
         --fw-transition:        220ms ease;
     }
 
-    /* ─── Sidebar shell ─────────────────────────────────────── */
+    /* Sidebar shell. */
     .fw-sidebar {
         position: fixed;
         top: 0;
@@ -196,7 +195,7 @@
         width: var(--fw-sidebar-expanded);
     }
 
-    /* ─── Logo ──────────────────────────────────────────────── */
+    /* Logo. */
     .fw-sidebar__logo {
         padding: 18px 14px 12px;
         flex-shrink: 0;
@@ -233,7 +232,7 @@
         transform: translateX(0);
     }
 
-    /* ─── Divider ───────────────────────────────────────────── */
+    /* Divider. */
     .fw-sidebar__divider {
         border: none;
         border-top: 1px solid gray;
@@ -241,7 +240,7 @@
         flex-shrink: 0;
     }
 
-    /* ─── Nav list ──────────────────────────────────────────── */
+    /* Nav list. */
     .fw-sidebar__nav {
         flex: 1;
         overflow: hidden;
@@ -258,7 +257,7 @@
 
     .fw-sidebar__item { padding: 3px 10px; }
 
-    /* ─── Link ──────────────────────────────────────────────── */
+    /* Link. */
     .fw-sidebar__link {
         display: flex;
         align-items: center;
@@ -282,7 +281,7 @@
         
     }
 
-    /* ─── Icon wrapper ──────────────────────────────────────── */
+    /* Icon wrapper. */
     .fw-sidebar__icon {
         width: 22px;
         height: 22px;
@@ -298,7 +297,7 @@
         height: 22px;
     }
 
-    /* ─── Labels (hidden when collapsed) ───────────────────── */
+    /* Labels (hidden when collapsed). */
     .fw-sidebar__label {
         font-size: 0.875rem;
         font-weight: 500;
@@ -314,7 +313,7 @@
         transform: translateX(0);
     }
 
-    /* ─── Profile block ─────────────────────────────────────── */
+    /* Profile block. */
     .fw-sidebar__profile {
         display: flex;
         align-items: center;
@@ -363,7 +362,7 @@
         font-family: 'Segoe UI', sans-serif;
     }
 
-    /* ─── Logout button ─────────────────────────────────────── */
+    /* Logout button. */
     .fw-sidebar__logout {
         margin-left: auto;
         opacity: 0;
@@ -394,13 +393,13 @@
         color: var(--fw-teal);
     }
 
-    /* ─── Push page content away from the collapsed sidebar ── */
+    /* Push page content away from the collapsed sidebar. */
     .fw-main-content {
         margin-left: var(--fw-sidebar-collapsed);
         transition: margin-left var(--fw-transition);
     }
 
-    /* ─── Accessibility: respect reduced motion ─────────────── */
+    /* Accessibility: respect reduced motion. */
     @@media (prefers-reduced-motion: reduce) {
         .fw-sidebar,
         .fw-sidebar__label,

@@ -13,8 +13,8 @@ public class TelemetryRetentionService : BackgroundService
 {
     private static readonly TimeSpan StartupDelay = TimeSpan.FromMinutes(1);
 
-    // Sweep cadence is derived from the window (half of it), clamped to a sane range — so a
-    // short retention is actually enforced instead of waiting a full day between sweeps.
+    // The sweep interval is half the retention window, within bounds, so a short retention
+    // is actually enforced rather than waiting a full day between sweeps.
     private static readonly TimeSpan MinSweepInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan MaxSweepInterval = TimeSpan.FromHours(12);
 
@@ -45,8 +45,7 @@ public class TelemetryRetentionService : BackgroundService
             "Telemetry retention active: window {Minutes}m, sweeping every {Interval}.",
             _retentionMinutes, sweepInterval);
 
-        // Let the app finish starting before the first sweep so we don't compete with
-        // boot-time work.
+        // The first sweep waits for startup to finish rather than competing with it.
         try { await Task.Delay(StartupDelay, stoppingToken); }
         catch (OperationCanceledException) { return; }
 
@@ -60,7 +59,7 @@ public class TelemetryRetentionService : BackgroundService
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                // A transient Supabase hiccup must not kill the loop — log and retry next interval.
+                // A transient failure must not end the loop, so it is logged and retried.
                 _logger.LogWarning(ex, "Telemetry retention sweep failed; will retry next interval.");
             }
         }

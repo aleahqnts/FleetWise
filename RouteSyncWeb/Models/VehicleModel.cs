@@ -7,7 +7,7 @@ namespace FleetWise.Models;
 [Table("vehicles")]
 public class Vehicle : BaseModel
 {
-    // shouldInsert: true — unlike the serial PKs (user_id/role_id), vehicle_id is a
+    // Marked for insert because, unlike the generated keys elsewhere, this identifier is a
     // user-entered varchar with no DB default, so it must be included on Insert.
     // (PrimaryKey defaults to shouldInsert:false, which silently sent null → 23502.)
     [PrimaryKey("vehicle_id", true)]
@@ -33,7 +33,7 @@ public class Vehicle : BaseModel
     [Column("out_of_service")]
     public bool OutOfService { get; set; }
 
-    // Phase 8: the counter phone bound to this bus (camera app claims it at bind).
+    // The counter phone bound to this bus, claimed by the camera app when it binds.
     [Column("counter_device_id")]
     public string CounterDeviceId { get; set; }
 

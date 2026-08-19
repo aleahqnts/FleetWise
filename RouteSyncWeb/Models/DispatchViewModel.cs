@@ -44,7 +44,7 @@
 
         // Roadworthiness, derived from THIS trip's own checklist (a failed inspection),
         // kept separate from the operational dot so a flagged bus that proceeds shows
-        // both "On Trip" AND the flag — they can no longer overwrite each other.
+        // both the trip state and the flag, so neither overwrites the other.
         public bool Flagged { get; set; }
 
         // Why a trip is an Assignment Issue (out-of-service bus / unavailable driver),

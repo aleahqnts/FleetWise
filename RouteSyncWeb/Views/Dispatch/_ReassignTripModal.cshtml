@@ -3,13 +3,13 @@
 <div id="reassignModal" class="rtm-overlay" role="dialog" aria-modal="true" style="display:none;">
     <div class="rtm-dialog">
 
-        <!-- Header -->
+        @* Header *@
         <div class="rtm-header">
             <h2 class="rtm-title">Reassign Trip</h2>
             <button class="rtm-close" onclick="closeReassignModal()">&times;</button>
         </div>
 
-        <!-- Loading state -->
+        @* Loading state *@
         <div id="rtm-loading" class="rtm-loading">
             <svg class="rtm-spin" xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none"
                  stroke="#4AADA8" stroke-width="2.5" viewBox="0 0 24 24">
@@ -18,10 +18,10 @@
             <span>Loading trip details…</span>
         </div>
 
-        <!-- Body (hidden until loaded) -->
+        @* Body (hidden until loaded) *@
         <div id="rtm-body" class="rtm-body" style="display:none;">
 
-            <!-- Trip Information -->
+            @* Trip Information *@
             <div class="rtm-section-label">
                 Trip Information
                 <span id="rtm-status-badge" class="rtm-status-badge rtm-badge--issue" style="display:none;">
@@ -44,7 +44,7 @@
                 </div>
             </div>
 
-            <!-- Vehicle Details -->
+            @* Vehicle Details *@
             <div class="rtm-section-label">Vehicle Details</div>
             <div class="rtm-section">
                 
@@ -59,7 +59,7 @@
                 </div>
             </div>
 
-            <!-- Driver Details -->
+            @* Driver Details *@
             <div class="rtm-section-label">Driver Details</div>
             <div class="rtm-section rtm-section--last">
                 <div class="rtm-field">
@@ -75,7 +75,7 @@
 
         </div>
 
-        <!-- Footer -->
+        @* Footer *@
         <div class="rtm-footer">
             <button class="rtm-btn-cancel" onclick="closeReassignModal()">Cancel</button>
             <button class="rtm-btn-save" id="rtm-save-btn" onclick="submitReassign()">
@@ -93,7 +93,7 @@
     </div>
 </div>
 
-<!-- Override confirmation (step 2): shown when ReassignTrip reports an overridable conflict -->
+@* Override confirmation (step 2): shown when ReassignTrip reports an overridable conflict *@
 <div id="rtm-override-modal" class="rtm-overlay" style="display:none; z-index:1200;">
     <div class="rtm-dialog" style="max-width:430px;">
         <div class="rtm-header">
@@ -113,7 +113,7 @@
     </div>
 </div>
 
-<!-- Remove confirmation: shown when both bus AND driver are cleared (delete the trip) -->
+@* Remove confirmation: shown when both bus AND driver are cleared (delete the trip) *@
 <div id="rtm-remove-modal" class="rtm-overlay" style="display:none; z-index:1200;">
     <div class="rtm-dialog" style="max-width:430px;">
         <div class="rtm-header">
@@ -159,7 +159,7 @@
             background: #CFA600;
         }
 
-    /* ── Overlay & dialog ───────────────────────────────────── */
+    /* Overlay & dialog. */
     .rtm-overlay {
         position: fixed;
         inset: 0;
@@ -184,7 +184,7 @@
         flex-direction: column;
     }
 
-    /* ── Header ─────────────────────────────────────────────── */
+    /* Header. */
     .rtm-header {
         display: flex;
         align-items: center;
@@ -222,7 +222,7 @@
             background: #F0F2F5;
         }
 
-    /* ── Loading ─────────────────────────────────────────────── */
+    /* Loading. */
     .rtm-loading {
         display: flex;
         align-items: center;
@@ -233,7 +233,7 @@
         color: #9AA5B4;
     }
 
-    /* ── Section labels ──────────────────────────────────────── */
+    /* Section labels. */
     .rtm-section-label {
         font-size: 0.8rem;
         font-weight: 700;
@@ -249,7 +249,7 @@
         gap: 10px;
     }
 
-    /* ── Status badge ────────────────────────────────────────── */
+    /* Status badge. */
     .rtm-status-badge {
         display: inline-flex;
         align-items: center;
@@ -280,7 +280,7 @@
         flex-shrink: 0;
     }
 
-    /* ── Info rows (Trip Information) ────────────────────────── */
+    /* Info rows (Trip Information). */
     .rtm-section {
         padding: 16px 28px;
         display: flex;
@@ -310,7 +310,7 @@
         color: #2D3748;
     }
 
-    /* ── Form fields ─────────────────────────────────────────── */
+    /* Form fields. */
     .rtm-field {
         display: flex;
         flex-direction: column;
@@ -370,7 +370,7 @@
         display: block;
     }
 
-    /* ── Footer ──────────────────────────────────────────────── */
+    /* Footer. */
     .rtm-footer {
         display: flex;
         align-items: center;
@@ -426,7 +426,7 @@
             cursor: not-allowed;
         }
 
-    /* ── Spinner animation ───────────────────────────────────── */
+    /* Spinner animation. */
     @@keyframes rtm-spin {
         to {
             transform: rotate(360deg);
@@ -440,14 +440,12 @@
 </style>
 
 <script>
-    /* ═══════════════════════════════════════════════════════
-       Reassign Trip Modal
-    ═══════════════════════════════════════════════════════ */
+    /* Reassign Trip Modal. */
     (function () {
         let _rtmOptions  = null;   // full options from server
         let _rtmTripId   = null;   // trip being reassigned
 
-        // ── DOM refs ──────────────────────────────────────────
+        // DOM refs.
         const overlay     = document.getElementById('reassignModal');
         const loadingEl   = document.getElementById('rtm-loading');
         const bodyEl      = document.getElementById('rtm-body');
@@ -462,7 +460,7 @@
         const driverHint  = document.getElementById('rtm-driver-hint');
         const saveBtn     = document.getElementById('rtm-save-btn');
 
-        // ── Open ──────────────────────────────────────────────
+        // Open.
         window.openReassignModal = async function (tripId) {
             _rtmTripId  = tripId;
             _rtmOptions = null;
@@ -495,7 +493,7 @@
                     statusBadge.style.display = 'none';
                 }
 
-                // Populate dropdowns — pre-select current assignments
+                // Populate the dropdowns, pre-selecting the current assignments.
                 refreshRtmVehicles(_rtmOptions.tripInfo.currentVehicleId);
                 refreshRtmDrivers(_rtmOptions.tripInfo.currentDriverId);
 
@@ -507,7 +505,7 @@
             }
         };
 
-        // ── Close ─────────────────────────────────────────────
+        // Close.
         window.closeReassignModal = function () {
             overlay.style.display = 'none';
             document.body.style.overflow = '';
@@ -574,7 +572,7 @@
             driverHint.classList.toggle('rtm-hint--visible', list.length === 0);
         }
 
-        // ── Submit ────────────────────────────────────────────
+        // Submit.
         // Holds a reassignment blocked by an overridable conflict, so the override
         // confirmation can re-send it with override:true.
         let _rtmPending = null;
@@ -625,7 +623,7 @@
             }
         };
 
-        // ── Override confirmation (step 2) ────────────────────
+        // Override confirmation (step 2).
         function rtmShowOverride(message) {
             document.getElementById('rtm-override-msg').textContent = message;
             document.getElementById('rtm-override-modal').style.display = 'flex';
@@ -643,7 +641,7 @@
             submitReassign(true);   // re-send with override:true (skips the conflict gate)
         };
 
-        // ── Remove trip (both bus + driver cleared) ───────────
+        // Remove trip (both bus + driver cleared).
         window.rtmCancelRemove = function () {
             document.getElementById('rtm-remove-modal').style.display = 'none';
         };

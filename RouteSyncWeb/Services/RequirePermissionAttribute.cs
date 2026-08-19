@@ -3,16 +3,21 @@ using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace FleetWise.Services
 {
-    // Gates a controller/action on a web permission from the signed-in user's role.
-    // Permission claims ("perm") are stamped at login from roles.web_permissions; a user
-    // whose role lacks the permission is bounced to the Dashboard. Pairs with the sidebar,
-    // which hides the nav link for the same permission. Changing a role's permissions takes
-    // effect on the user's next login (claims are issued at sign-in).
-    //
-    // Phase 10b: a bounce is also an audit event. The sidebar already hides the link, so
-    // reaching here means someone typed the URL, and that is worth a permanent row.
-    // Async filter (not IAuthorizationFilter) purely so the write can be awaited instead
-    // of blocking a request thread.
+    /// <summary>
+    /// Gates a controller or action on a permission held by the signed-in user's role.
+    /// </summary>
+    /// <remarks>
+    /// Permission claims are stamped at sign-in from the role's stored permissions, and a
+    /// user whose role lacks the permission is redirected to the dashboard. This pairs with
+    /// the sidebar, which hides the link for the same permission. Because claims are issued
+    /// at sign-in, a change to a role takes effect on that user's next sign-in.
+    ///
+    /// A redirect is also an audit event. The sidebar has already hidden the link, so
+    /// arriving here means the address was entered directly, which is worth recording.
+    ///
+    /// The filter is asynchronous so that write can be awaited rather than blocking a
+    /// request thread.
+    /// </remarks>
     public class RequirePermissionAttribute : Attribute, IAsyncAuthorizationFilter
     {
         private readonly string _permission;

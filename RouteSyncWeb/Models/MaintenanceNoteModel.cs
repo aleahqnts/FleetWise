@@ -6,7 +6,7 @@ namespace FleetWise.Models;
 
 // One entry in a maintenance incident's audit thread: an admin comment or an action
 // (Out of Service / Returned to Service / Resolved) taken on a maintenance_log. Gives the
-// flagged-vehicle review its history — who did what, when, and why.
+// flagged-vehicle review its history: who did what, when, and why.
 [Table("maintenance_notes")]
 public class MaintenanceNote : BaseModel
 {

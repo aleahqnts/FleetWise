@@ -5,8 +5,8 @@ namespace FleetWise.Services
 {
     public class AuthService
     {
-        // Drivers (role_id = 2) belong to the RouteSync mobile app, never the web dashboard —
-        // mirrors the mobile AuthService, which only admits this role.
+        // Role 2 is the driver role, which belongs to the mobile app rather than the
+        // dashboard. The mobile app's own sign-in admits only that role.
         private const int DriverRoleId = 2;
 
         private readonly Supabase.Client _supabase;
@@ -24,7 +24,7 @@ namespace FleetWise.Services
             if (user is null || user.PasswordHash is null || user.AccountStatus != "Activated")
                 return null;
 
-            // Web dashboard is for operators (admin/dispatcher) only — drivers use the app.
+            // The dashboard is for operators only. Drivers use the mobile app.
             if (user.RoleId == DriverRoleId)
                 return null;
 
@@ -40,7 +40,7 @@ namespace FleetWise.Services
 
             var role = rolesResponse.Models.FirstOrDefault();
             var roleName = role?.RoleName ?? "Unknown";
-            // The web-dashboard sections this role may see (e.g. "dashboard","routes","reports").
+            // The dashboard sections this role may see.
             var permissions = role?.WebPermissions?
                 .Where(kv => kv.Value).Select(kv => kv.Key).ToList() ?? new List<string>();
 
@@ -52,8 +52,8 @@ namespace FleetWise.Services
                 permissions);
         }
 
-        // Hashes and stores a new password for the given user. Used by the forced
-        // first-login change flow.
+        /// <summary>Hashes and stores a new password, used by the forced first-sign-in
+        /// change.</summary>
         public async Task UpdatePasswordAsync(int userId, string newPassword)
         {
             var resp = await _supabase

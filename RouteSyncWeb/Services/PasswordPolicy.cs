@@ -1,14 +1,20 @@
 namespace FleetWise.Services
 {
-    // Single source of truth for the temporary password handed to brand-new accounts.
-    // A user is "still on the temp password" if a successful login used exactly this value
-    // (auth already proved the hash matches), so no extra DB column is needed to force the
-    // first-login change. The change form rejects this value so nobody can keep it.
+    /// <summary>
+    /// The temporary password issued to new accounts.
+    /// </summary>
+    /// <remarks>
+    /// A user is still on the temporary password when a successful sign-in used exactly
+    /// this value, since authentication has already proved the hash matches. That removes
+    /// the need for a column tracking whether the password has been changed.
+    ///
+    /// The change form rejects this value, so it cannot be kept.
+    /// </remarks>
     public static class PasswordPolicy
     {
         public const string TemporaryPassword = "@Temp123";
 
-        // Claim stamped on the auth cookie while the user must still change their temp password.
+        // Stamped on the authentication cookie while the password still has to be changed.
         public const string MustChangeClaim = "pwd_temp";
     }
 }

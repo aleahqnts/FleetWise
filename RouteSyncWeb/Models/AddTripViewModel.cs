@@ -2,15 +2,15 @@ using System.ComponentModel.DataAnnotations;
 
 namespace FleetWise.ViewModels
 {
-    // Validation lives on the REQUEST models only (the ones below with a [FromBody]
-    // action behind them), never on the view models above, which the server fills in.
+    // Validation belongs on the request models below, the ones bound from a request body,
+    // and never on the view models above, which the server fills in itself.
     //
-    // The forms already check these fields in the browser, which is a courtesy to the
-    // person typing and no defence at all: the endpoints are plain JSON, so anyone with
-    // a session can post to them directly and skip every one of those checks. These
-    // attributes are the copy that actually runs.
+    // The forms check these fields in the browser, which helps the person typing and
+    // defends nothing. These endpoints accept plain JSON, so anyone with a session can post
+    // to them directly and skip every one of those checks. The attributes here are the copy
+    // that runs on every request.
 
-    // Returned by GET /Dispatch/GetAddTripOptions
+    // Returned to the add trip modal.
     public class AddTripOptionsViewModel
     {
         public List<RouteOption> Routes { get; set; } = new();
@@ -29,7 +29,7 @@ namespace FleetWise.ViewModels
         public string VehicleId { get; set; }
         public string PlateNumber { get; set; }
         public string VehicleType { get; set; }
-        // Shifts this vehicle is already booked for today
+        // Shifts this vehicle is already booked for today.
         public List<string> BookedShifts { get; set; } = new();
     }
 
@@ -37,11 +37,11 @@ namespace FleetWise.ViewModels
     {
         public int DriverId { get; set; }
         public string DriverName { get; set; }
-        // Shifts this driver is already booked for today
+        // Shifts this driver is already booked for today.
         public List<string> BookedShifts { get; set; } = new();
     }
 
-    // Posted by POST /Dispatch/CreateTrip
+    // Posted when a trip is created.
     public class CreateTripRequest
     {
         [Required, RegularExpression("^(Morning|Afternoon|Evening)$",
@@ -66,7 +66,7 @@ namespace FleetWise.ViewModels
         public bool Override { get; set; }
     }
 
-    // Posted by POST /Dispatch/ReassignTrip
+    // Posted when a trip is reassigned.
     public class ReassignTripRequest
     {
         [Required, RegularExpression(@"^[A-Za-z0-9_-]{1,64}$", ErrorMessage = "That is not a trip ID.")]
@@ -83,15 +83,15 @@ namespace FleetWise.ViewModels
         public bool Override { get; set; }
     }
 
-    // Posted by POST /Dispatch/RemoveTrip — clearing both bus + driver in Reassign deletes
-    // the trip (mirrors clearing a cell in the schedule planner).
+    // Posted when a trip is removed. Clearing both the bus and the driver in the reassign
+    // modal deletes it, matching how clearing a cell works in the schedule planner.
     public class RemoveTripRequest
     {
         [Required, RegularExpression(@"^[A-Za-z0-9_-]{1,64}$", ErrorMessage = "That is not a trip ID.")]
         public string TripId { get; set; }
     }
 
-    // Posted by POST /Dispatch/BroadcastMessage
+    // Posted when a message goes to every driver.
     public class BroadcastMessageRequest
     {
         [StringLength(120, ErrorMessage = "Subject is too long.")]
@@ -106,7 +106,7 @@ namespace FleetWise.ViewModels
         public string Priority { get; set; }
     }
 
-    // Posted by POST /Dispatch/SendRouteMessage
+    // Posted when a message goes to the drivers on one route.
     public class RouteMessageRequest
     {
         [Range(1, int.MaxValue, ErrorMessage = "A route is required.")]
@@ -124,7 +124,7 @@ namespace FleetWise.ViewModels
         public string Priority { get; set; }
     }
 
-    // Posted by POST /Dispatch/SendTripMessage
+    // Posted when a message goes to the driver on one trip.
     public class TripMessageRequest
     {
         [Required, RegularExpression(@"^[A-Za-z0-9_-]{1,64}$", ErrorMessage = "That is not a trip ID.")]

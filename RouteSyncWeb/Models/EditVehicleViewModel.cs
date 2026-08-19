@@ -9,7 +9,7 @@ namespace FleetWise.Models
     // dropdown data so the partial is self-sufficient whether fetched or re-rendered on a failed POST.
     public class EditVehicleViewModel
     {
-        // Read-only — the PK can't change.
+        // Read-only: the primary key cannot change.
         [Display(Name = "Vehicle ID")]
         public string VehicleId { get; set; } = string.Empty;
 
@@ -21,7 +21,7 @@ namespace FleetWise.Models
         [Display(Name = "Route")]
         public int RouteId { get; set; }
 
-        // ── Dropdown data ──
+        // Dropdown data.
         public List<SelectListItem> RouteOptions { get; set; } = new();
     }
 }

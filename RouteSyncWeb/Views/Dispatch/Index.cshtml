@@ -4,7 +4,7 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-<!-- PAGE TITLE -->
+@* PAGE TITLE *@
 <div class="dp-title-row">
     <h2 class="rp-title">Dispatch</h2>
     <div class="dp-date-nav">
@@ -26,7 +26,7 @@
     </div>
 </div>
 
-<!-- STAT CARDS -->
+@* STAT CARDS *@
 <div class="dp-stat-grid" id="dpStats">
 
     <div class="rp-stat-card">
@@ -82,7 +82,7 @@
 
 </div>
 
-<!-- TOOLBAR -->
+@* TOOLBAR *@
 <div class="dp-toolbar">
     <button class="dp-btn-primary" onclick="openAddTripModal()">
         <i class="ti ti-plus"></i> Add Trip
@@ -99,7 +99,7 @@
     <span class="dp-updated" id="dpUpdated" title="Auto-refreshes every 30 seconds"></span>
 </div>
 
-<!-- ROUTE BLOCKS -->
+@* ROUTE BLOCKS *@
 <div id="dpRoutes">
 @foreach (var route in Model.Routes)
 {
@@ -151,10 +151,11 @@
                             {
                                 var trip = shiftTrips[i];
 
-                                // Operational/readiness dot — trip-derived, so a bus used by
-                                // another shift can never bleed a stale colour here. A missed
-                                // trip is grey (not green), completed is slate. Roadworthiness
-                                // shows as a SEPARATE flag marker, never overwriting this dot.
+                                // Readiness dot, derived from the trip, so a bus used by
+                                // another shift cannot colour this one. A missed trip is
+                                // grey rather than green, and a completed one slate.
+                                // Roadworthiness is a separate marker and never overwrites
+                                // this dot.
                                 var (vDotClass, vTooltip) =
                                     trip.TripStatus == "Missed" ? ("dp-dot--missed", "Missed (bus not used)") :
                                     trip.VehicleStatus switch
@@ -253,12 +254,12 @@
         </div>
     </div>
 }
-</div><!-- /dpRoutes -->
+</div>@* /dpRoutes *@
 
-<!-- spacer so content above isn't hidden behind the fixed legend bar -->
+@* spacer so content above isn't hidden behind the fixed legend bar *@
 <div style="height:64px;"></div>
 
-<!-- LEGEND -->
+@* LEGEND *@
 <div class="rp-card dp-legend-card">
     <div class="dp-legend-row">
         <span class="dp-legend-label">Legend</span>
@@ -271,7 +272,7 @@
     </div>
 </div>
 
-<!-- Shared message popup (Add Trip / Reassign conflicts) -->
+@* Shared message popup (Add Trip / Reassign conflicts) *@
 <div id="dp-msg-modal" class="dp-msg-overlay" style="display:none;">
     <div class="dp-msg-box">
         <div class="dp-msg-head">
@@ -286,8 +287,8 @@
 <script>
     function dpShowMsg(messages, title) {
         document.getElementById('dp-msg-title').textContent = title || 'Schedule conflict';
-        // Server-built sentences, but rendered as text: a conflict line is data, and a
-        // <li> is the wrong place to find out otherwise.
+        // These sentences are built on the server, and still rendered as text. A conflict
+        // line is data, and a list item is the wrong place to discover otherwise.
         const ul = document.getElementById('dp-msg-list');
         ul.replaceChildren();
         (Array.isArray(messages) ? messages : [messages]).forEach(function (m) {
@@ -307,10 +308,12 @@
         rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    // ── Assignment-Issue hover popup ───────────────────────────
-    // Floating element on document body (delegated, immune to the route card's
-    // overflow:hidden). A live-refresh can swap the hovered badge out from under the
-    // cursor so mouseout never fires — a mousemove fallback kills the ghost.
+    // Hover popup for an assignment issue.
+    //
+    // A floating element on the document body, with delegated handlers, so the route
+    // card's overflow rule cannot clip it. A refresh can replace the hovered badge while
+    // the pointer is still over it, in which case no mouseout fires, so a pointer-move
+    // fallback clears the popup.
     (function () {
         let tip = null, current = null;
         function ensure() {
@@ -344,7 +347,7 @@
             const b = e.target.closest && e.target.closest('.dp-badge--hint');
             if (b && b !== current) show(b);
         });
-        // Fallback: any pointer move that isn't over the current badge clears it.
+        // Any pointer movement away from the current badge clears the popup.
         document.addEventListener('mousemove', e => {
             if (!current) return;
             const b = e.target.closest && e.target.closest('.dp-badge--hint');
@@ -353,11 +356,14 @@
         window.addEventListener('scroll', hide, true);
     })();
 
-    // ── Live refresh ───────────────────────────────────────────
-    // Re-fetch THIS page (current date in the URL) and swap only the stats +
-    // route blocks. No full browser reload, no SignalR. Manual button always
-    // runs; the 30s auto-poll skips when a modal is open, the user is searching,
-    // or the tab is hidden so it never yanks the view mid-action.
+    // Live refresh.
+    //
+    // Re-fetches this page, including the date in the address, and replaces only the stats
+    // and route blocks. No full reload and no persistent connection.
+    //
+    // The button always runs. The automatic poll skips while a modal is open, while the
+    // user is searching, or while the tab is hidden, so it never disturbs work in
+    // progress.
     let dpBusy = false;
 
     function dpAnyModalOpen() {
@@ -384,7 +390,7 @@
                 const cur = document.getElementById(id);
                 if (fresh && cur) cur.innerHTML = fresh.innerHTML;
             });
-            // Re-apply active search filter to the swapped rows.
+            // Reapply the active search filter to the replaced rows.
             const s = document.getElementById('searchInput');
             if (s && s.value) filterRows();
             dpStamp();
@@ -454,7 +460,7 @@
         --rp-shadow: 0 1px 4px rgba(0,0,0,.06);
     }
 
-    /* ── Page title ─────────────────────────────────────────── */
+    /* Page title. */
     .rp-title {
         font-size: 1.6rem;
         font-weight: 700;
@@ -463,7 +469,7 @@
         margin-bottom: 20px;
     }
 
-    /* ── Topbar filters ─────────────────────────────────────── */
+    /* Topbar filters. */
     .rp-route-wrap, .rp-status-wrap {
         display: flex;
         align-items: center;
@@ -506,7 +512,7 @@
         display: flex;
     }
 
-    /* ── Stat grid ──────────────────────────────────────────── */
+    /* Stat grid. */
     .dp-stat-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -580,7 +586,7 @@
         text-align: center;
     }
 
-    /* ── Side info card (flagged/unavailable) ──────────────── */
+    /* Side info card (flagged/unavailable). */
     .dp-side-card {
         display: flex;
         flex-direction: column;
@@ -625,7 +631,7 @@
         margin-top: 2px;
     }
 
-    /* ── Toolbar ────────────────────────────────────────────── */
+    /* Toolbar. */
     .dp-toolbar {
         display: flex;
         align-items: center;
@@ -709,7 +715,7 @@
             border-color: var(--rp-teal);
         }
 
-    /* ── Route card ─────────────────────────────────────────── */
+    /* Route card. */
     .rp-card {
         background: var(--rp-white);
         border: 1px solid var(--rp-border);
@@ -787,7 +793,7 @@
             color: var(--rp-teal);
         }
 
-    /* ── Table ──────────────────────────────────────────────── */
+    /* Table. */
     .rp-table-wrap {
         overflow-x: auto;
     }
@@ -878,7 +884,7 @@
         font-family: 'Segoe UI', sans-serif;
     }
 
-    /* ── Status icons / dots ────────────────────────────────── */
+    /* Status icons / dots. */
     .dp-status-wrap {
         position: relative;
         display: inline-flex;
@@ -922,7 +928,7 @@
         background: #B42318;
     }
 
-    /* Roadworthiness flag — independent of the operational dot, so an on-trip bus
+    /* Roadworthiness flag, independent of the readiness dot, so a bus on a trip
        still shows it. */
     .dp-flag {
         display: inline-flex;
@@ -953,7 +959,7 @@
         opacity: 1;
     }
 
-    /* ── Trip status badges ─────────────────────────────────── */
+    /* Trip status badges. */
     .dp-badge {
         display: inline-block;
         padding: 4px 12px;
@@ -1032,7 +1038,7 @@
         opacity: 1;
     }
 
-    /* ── Action buttons ─────────────────────────────────────── */
+    /* Action buttons. */
     .dp-actions-cell {
         display: flex;
         align-items: center;
@@ -1100,7 +1106,7 @@
             color: var(--rp-teal);
         }
 
-    /* ── Legend ─────────────────────────────────────────────── */
+    /* Legend. */
     .dp-legend-card {
         position: fixed;
         left: 72px;   /* clear the collapsed sidebar */
@@ -1234,7 +1240,7 @@
                 const groupRows = shiftGroups[sid];
 
                 // Step 1: Always restore shift cell to the first row of the group
-                // so we start from a clean, predictable state each time filters run.
+                // so each filtering pass starts from a clean, predictable state.
                 let shiftCell = null;
                 groupRows.forEach(row => {
                     const cell = row.querySelector('.dp-shift-cell');
@@ -1294,7 +1300,7 @@
     document.getElementById('statusFilter').addEventListener('change', applyFilters);
 </script>
 
-@* ── Trip Detail Modal ──────────────────────────────────────── *@
+@* Trip Detail Modal. *@
 @await Html.PartialAsync("_TripDetailModal")
 @await Html.PartialAsync("_AddTripModal")
 @await Html.PartialAsync("_ReassignTripModal")

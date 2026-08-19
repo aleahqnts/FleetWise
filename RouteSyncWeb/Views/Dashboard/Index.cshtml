@@ -8,7 +8,7 @@
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-<!-- PAGE TITLE + REFRESH -->
+@* PAGE TITLE + REFRESH *@
 <div class="db-title-row">
     <h2 class="db-title">Dashboard</h2>
     <div class="db-title-tools">
@@ -20,13 +20,13 @@
     </div>
 </div>
 
-<!-- LIVE REGION (swapped by AJAX refresh) -->
+@* LIVE REGION (swapped by AJAX refresh) *@
 <div id="dbStats">
 
-<!-- chart data carried here so refresh can update the chart without reloading the page -->
+@* chart data carried here so refresh can update the chart without reloading the page *@
 <script type="application/json" id="dbChartData">@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ChartData))</script>
 
-<!-- STAT CARDS -->
+@* STAT CARDS *@
 <div class="db-stat-grid">
 
     <div class="db-stat-card">
@@ -103,11 +103,11 @@
 
 </div>
 
-<!-- TOTAL PASSENGERS MODAL (opened by the card) -->
+@* TOTAL PASSENGERS MODAL (opened by the card) *@
 <div class="db-modal-overlay" id="dbBreakdown" style="display:none;" onclick="if(event.target===this)dbCloseModal()">
     <div class="db-modal">
         @{
-            // Only trips that actually boarded — not-yet-started (0) rows add no signal.
+            // Only trips that carried passengers. A trip yet to start contributes nothing.
             var boardedRows = Model.ActiveTripBreakdown.Where(r => r.Passengers > 0).ToList();
         }
         <div class="db-modal-head">
@@ -147,12 +147,12 @@
     </div>
 </div>
 
-</div><!-- /#dbStats -->
+</div>@* /#dbStats *@
 
-<!-- MIDDLE ROW: Chart + Map -->
+@* MIDDLE ROW: Chart + Map *@
 <div class="db-mid-grid">
 
-    <!-- Passenger Demand Chart -->
+    @* Passenger Demand Chart *@
     <div class="db-card db-card--chart">
         <div class="db-card-header">
             <span class="db-card-icon db-card-icon--teal">
@@ -173,7 +173,7 @@
         <canvas id="demandChart" class="db-chart-canvas"></canvas>
     </div>
 
-    <!-- Fleet Map -->
+    @* Fleet Map *@
     <div class="db-card db-card--map">
         <div class="db-card-header">
             <span class="db-card-icon db-card-icon--green">
@@ -199,7 +199,7 @@
     </div>
 
 
-    <!-- Chart.js -->
+    @* Chart.js *@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script>
         // Hour labels from the ViewModel; per-hour onboard counts read from the live
@@ -313,7 +313,7 @@
         window.demandChart.update();
         }
 
-        // ── Total Passengers modal ────────────────────────────────────
+        // Total Passengers modal.
         function dbToggleBreakdown() {
         const m = document.getElementById('dbBreakdown');
         if (m) m.style.display = 'flex';
@@ -324,7 +324,7 @@
         }
         document.addEventListener('keydown', e => { if (e.key === 'Escape') dbCloseModal(); });
 
-        // ── AJAX refresh (manual button + silent 30s poll) ────────────
+        // AJAX refresh (manual button + silent 30s poll).
         let dbBusy = false;
         function dbStamp() {
         const el = document.getElementById('dbUpdated');
@@ -360,19 +360,19 @@
         }, 30000);
         dbStamp();
 
-        // ── Filter form helper ────────────────────────────────────────
+        // Filter form helper.
         // Re-submits the filter form whenever the route dropdown changes.
         document.getElementById('routeSelect').addEventListener('change', function () {
         document.getElementById('filterForm').submit();
         });
     </script>
 
-    <!-- Fleet Map preview (same live data as the Fleet Map page) -->
+    @* Fleet Map preview (same live data as the Fleet Map page) *@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="~/js/dashboard-fleetmap.js" asp-append-version="true"></script>
 
     <style>
-        /* ── Variables (inherit from sidebar) ──────────────────── */
+        /* Variables (inherit from sidebar). */
         :root {
         --db-teal: #4AADA8;
         --db-teal-light: #E8F6F5;
@@ -385,7 +385,7 @@
         --db-shadow: 0 1px 4px rgba(0,0,0,.06);
         }
 
-        /* ── Top bar ────────────────────────────────────────────── */
+        /* Top bar. */
         .db-topbar {
         display: flex;
         align-items: center;
@@ -439,7 +439,7 @@
         color: var(--db-text);
         }
 
-        /* ── Page title ─────────────────────────────────────────── */
+        /* Page title. */
         .db-title {
         font-size: 1.6rem;
         font-weight: 700;
@@ -448,7 +448,7 @@
         margin-bottom: 20px;
         }
 
-        /* ── Title row + refresh + date ─────────────────────────── */
+        /* Title row + refresh + date. */
         .db-title-row {
         display: flex;
         align-items: center;
@@ -502,7 +502,7 @@
         @@keyframes dbSpin { to { transform: rotate(360deg); } }
         .db-updated { font-size: .78rem; color: var(--db-muted); font-family: 'Segoe UI', sans-serif; }
 
-        /* ── Clickable Total Passengers card + breakdown ────────── */
+        /* Clickable Total Passengers card + breakdown. */
         .db-stat-card--click { cursor: pointer; transition: box-shadow .15s, transform .15s; }
         .db-stat-card--click:hover { box-shadow: 0 6px 18px rgba(59,130,246,.18); transform: translateY(-2px); }
         .db-stat-chevron { margin-left: auto; color: var(--db-muted); font-size: .8rem; }
@@ -580,7 +580,7 @@
 
         .db-breakdown-table .db-num { text-align: right; }
 
-        /* ── Stat grid ──────────────────────────────────────────── */
+        /* Stat grid. */
         .db-stat-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -664,7 +664,7 @@
         color: #E74C3C;
         }
 
-        /* ── Middle row ─────────────────────────────────────────── */
+        /* Middle row. */
         .db-mid-grid {
         display: grid;
         grid-template-columns: 1.4fr 1fr;
@@ -672,7 +672,7 @@
         margin-bottom: 20px;
         }
 
-        /* ── Shared card ────────────────────────────────────────── */
+        /* Shared card. */
         .db-card {
         background: var(--db-white);
         border: 1px solid var(--db-border);
@@ -759,13 +759,13 @@
         font-family: 'Segoe UI', sans-serif;
         }
 
-        /* ── Chart canvas ───────────────────────────────────────── */
+        /* Chart canvas. */
         .db-chart-canvas {
         height: 260px !important;
         width: 100% !important;
         }
 
-        /* ── Map ────────────────────────────────────────────────── */
+        /* Map. */
         .db-card--map {
         display: flex;
         flex-direction: column;
@@ -929,7 +929,7 @@
         flex-shrink: 0;
         }
 
-        /* ── Bottom row ─────────────────────────────────────────── */
+        /* Bottom row. */
         .db-bottom-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -962,7 +962,7 @@
         color: var(--db-text);
         }
 
-        /* ── Responsive ─────────────────────────────────────────── */
+        /* Responsive. */
         @@media (max-width: 1100px) {
         .db-stat-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -990,7 +990,7 @@
     </style>
 
     @section TopbarContent {
-        @* Single form — sends routeId on every submit *@
+        @* One form, which sends the route on every submission. *@
         <form id="filterForm" method="get" action="@Url.Action("Index", "Dashboard")" style="display:contents;">
 
             <div class="db-route-wrap">
