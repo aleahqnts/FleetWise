@@ -1,4 +1,4 @@
-// password-reset-verify: step two of recovering a forgotten driver password.
+// password-reset-verify: step two of recovering a forgotten password.
 // Body: { email, otp } -> 200 { reset_token } | 400 | 401.
 // Deploy with --no-verify-jwt (the caller is still locked out at this point).
 //
@@ -20,7 +20,6 @@ import {
 } from "../_shared/auth.ts";
 import { audit } from "../_shared/audit.ts";
 
-const DRIVER_ROLE_ID = 2;
 const MAX_ATTEMPTS = 5;
 const TOKEN_TTL_MIN = 10;
 const REJECTED = "That code is invalid or has expired.";
@@ -62,14 +61,13 @@ Deno.serve(async (req) => {
 
   const { data: userRows, error: userErr } = await service
     .from("users")
-    .select("user_id, first_name, last_name, role_id, account_status")
+    .select("user_id, first_name, last_name, account_status")
     .eq("email_address", email)
     .limit(1);
   if (userErr) return json(500, { error: "Lookup failed" });
 
   const user = userRows?.[0];
   if (!user) return await refuse("no such account");
-  if (user.role_id !== DRIVER_ROLE_ID) return await refuse("not a driver account", user.user_id);
   if (user.account_status !== "Activated") {
     return await refuse(`account ${user.account_status}`, user.user_id);
   }

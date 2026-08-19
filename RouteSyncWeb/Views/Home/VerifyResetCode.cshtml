@@ -1,4 +1,4 @@
-﻿@model FleetWise.Models.LoginViewModel
+@model FleetWise.Models.VerifyResetCodeViewModel
 @{
     Layout = "~/Views/Shared/_LoginLayout.cshtml";
 }
@@ -20,13 +20,13 @@
 
         @* Right Panel *@
         <div class="right-panel">
-            <h1 class="sign-in-title">Sign In</h1>
+            <h1 class="sign-in-title">Enter Code</h1>
+            <p class="brand-sub" style="margin-bottom:18px;">
+                If @Model.Email has an account, a 6-digit code is on its way. It expires in 10 minutes.
+            </p>
 
-            <form asp-action="Index" asp-controller="Home" method="post">
-                @if (TempData["ResetDone"] is string resetDone)
-                {
-                    <div class="success-message">@resetDone</div>
-                }
+            <form asp-action="VerifyResetCode" asp-controller="Home" method="post">
+                @Html.AntiForgeryToken()
                 @if (!ViewData.ModelState.IsValid)
                 {
                     <div class="error-message">
@@ -34,16 +34,7 @@
                     </div>
                 }
 
-                <div class="input-group">
-                    <span class="input-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                            <circle cx="12" cy="7" r="4" />
-                        </svg>
-                    </span>
-                    <input asp-for="Email" class="input-field" placeholder="Email" />
-                </div>
-                <span asp-validation-for="Email" class="field-error"></span>
+                <input type="hidden" asp-for="Email" />
 
                 <div class="input-group">
                     <span class="input-icon">
@@ -52,16 +43,23 @@
                             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                         </svg>
                     </span>
-                    <input asp-for="Password" class="input-field" placeholder="Password" />
+                    <input asp-for="Code" class="input-field" placeholder="6-digit code"
+                           inputmode="numeric" maxlength="6" autocomplete="one-time-code"
+                           style="letter-spacing:6px;font-weight:600;" />
                 </div>
-                <span asp-validation-for="Password" class="field-error"></span>
+                <span asp-validation-for="Code" class="field-error"></span>
 
-                <div class="forgot-password">
-                    <a asp-action="ForgotPassword" asp-controller="Home">Forgot Password?</a>
-                </div>
-
-                <button type="submit" class="sign-in-btn">Sign In</button>
+                <button type="submit" class="sign-in-btn">Verify Code</button>
             </form>
+
+            <div class="forgot-password" style="display:flex;justify-content:space-between;margin-top:16px;">
+                <form asp-action="ForgotPassword" asp-controller="Home" method="post" style="display:inline;">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="Email" value="@Model.Email" />
+                    <button type="submit" class="link-button">Send a new code</button>
+                </form>
+                <a asp-action="ForgotPassword" asp-controller="Home">Wrong email?</a>
+            </div>
         </div>
 
     </div>
