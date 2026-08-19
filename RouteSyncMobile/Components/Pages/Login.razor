@@ -37,6 +37,11 @@
 
         <div class="forgot"><a @onclick="Forgot">Forgot Password?</a></div>
 
+        @if (!string.IsNullOrEmpty(notice))
+        {
+            <div class="notice">@notice</div>
+        }
+
         @if (!string.IsNullOrEmpty(message))
         {
             <div class="message">@message</div>
@@ -52,11 +57,16 @@
     private string email = "";
     private string password = "";
     private string? message;
+    private string? notice;
     private bool busy;
     private bool showPwd;
 
     protected override async Task OnInitializedAsync()
     {
+        // The reset flow issues no session, so it lands back here and says so.
+        if (new Uri(Nav.Uri).Query.Contains("reset=1"))
+            notice = "Password updated. Sign in with your new password.";
+
         if (await Session.RestoreAsync())
         {
             Watch.Start(Session.CurrentUser!.UserId);
@@ -118,6 +128,5 @@
         if (e.Key == "Enter") await SignIn();
     }
 
-    private void Forgot()
-        => message = "Password reset isn't available yet. Ask your operator.";
+    private void Forgot() => Nav.NavigateTo("/forgot-password");
 }
