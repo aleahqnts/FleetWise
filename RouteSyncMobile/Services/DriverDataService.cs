@@ -345,8 +345,8 @@ public class DriverDataService
             vehicle_id = vehicleId,
             trip_id = tripId,
             // severity and critical_issues are extra keys inside the same json column.
-            // Older rows simply lack them, and the reader treats a missing severity as
-            // a defect, which is what every incident before this change was.
+            // Rows without them read as a defect, which is the safe assumption: an
+            // incident that never named a critical fault did not ground anything.
             issue_details = new { issues, severity = critical ? "Critical" : "Minor", critical_issues = criticalIssues },
             maintenance_status = critical ? "Out of Service" : "Needs Attention",
             created_at = PhTime.Now
