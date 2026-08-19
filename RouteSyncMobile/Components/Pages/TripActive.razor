@@ -144,6 +144,36 @@ else
     }
 }
 
+@if (askLeave)
+{
+    @* Back from the counter asks first. The trip is unaffected either way, but leaving by
+       accident mid-boarding costs the driver the tap controls until they navigate back. *@
+    <div style="position:fixed; inset:0; z-index:9400; background:rgba(15,22,44,.55);
+                display:flex; align-items:center; justify-content:center; padding:28px;"
+         @onclick="@(() => askLeave = false)">
+        <div style="width:100%; max-width:340px; background:#fff; border-radius:20px;
+                    padding:22px 20px 16px; box-shadow:0 24px 60px rgba(15,22,44,.45);"
+             @onclick:stopPropagation="true">
+            <p style="margin:0 0 6px; font:800 18px sans-serif; color:#1b2a56;">Leave the counter?</p>
+            <p style="margin:0 0 18px; font:14px sans-serif; color:#5a6473; line-height:1.45;">
+                The trip keeps running and your count is saved. You can come back from Home.
+            </p>
+            <div style="display:flex; gap:10px;">
+                <button @onclick="@(() => askLeave = false)"
+                        style="flex:1; padding:12px 0; border:1px solid #e2e5ec; border-radius:999px;
+                               background:#fff; color:#1b2a56; font:700 14px sans-serif; cursor:pointer;">
+                    Stay
+                </button>
+                <button @onclick="LeaveToHome"
+                        style="flex:1; padding:12px 0; border:none; border-radius:999px;
+                               background:#1b2a56; color:#fff; font:700 14px sans-serif; cursor:pointer;">
+                    Leave
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public string TripId { get; set; } = "";
 
@@ -156,6 +186,8 @@ else
     private Trip? trip;
     private BusRoute? route;
     private Vehicle? vehicle;
+
+    private bool askLeave;
 
     private System.Threading.Timer? timer;
     private int tick;
@@ -237,6 +269,21 @@ else
 
         if (trip is null) await LoadCacheAsync();
 
+        // A finished trip must never reach the counting screen. Opening it here would set
+        // this trip as the resume target and start GPS tracking against it, so a stray
+        // navigation would attach telemetry to a trip that ended and send the next app
+        // launch straight back into it.
+        if (trip is not null && !string.Equals(trip.TripStatus, "Active", StringComparison.OrdinalIgnoreCase))
+        {
+            // Clear the resume target too, so a stale one does not send every launch back
+            // through this screen.
+            if (await SecureStorage.Default.GetAsync(ActiveKey) == TripId)
+                SecureStorage.Default.Remove(ActiveKey);
+
+            Nav.NavigateTo($"/trip-report/{TripId}", new NavigationOptions { ReplaceHistoryEntry = true });
+            return;
+        }
+
         if (trip is not null)
         {
             // Prefer the locally saved running count, which survives a crash.
@@ -258,6 +305,10 @@ else
             // grant may have been revoked since the last trip.
             await EnsureLocationPermissionAsync();
             Tracker.Start(TripId);
+
+            // Hardware back asks before leaving, because a single stray press mid-boarding
+            // takes the tap controls away until the driver navigates back.
+            BackNavigation.PageHandler = HandleHardwareBack;
 
             // Back online, so drain any queued telemetry and trip finalizations.
             _ = Queue.FlushAsync();
@@ -452,5 +503,25 @@ else
         }
     }
 
-    public void Dispose() => timer?.Dispose();
+    private bool HandleHardwareBack()
+    {
+        if (askLeave) { InvokeAsync(() => { askLeave = false; StateHasChanged(); }); return true; }
+        InvokeAsync(() => { askLeave = true; StateHasChanged(); });
+        return true;
+    }
+
+    private async Task LeaveToHome()
+    {
+        askLeave = false;
+        // Push whatever has been tapped since the last flush, so the count on the server
+        // matches the screen the driver is walking away from.
+        if (!cameraAlive) { try { await Flush(); } catch { } }
+        Nav.NavigateTo("/home");
+    }
+
+    public void Dispose()
+    {
+        timer?.Dispose();
+        if (BackNavigation.PageHandler == HandleHardwareBack) BackNavigation.PageHandler = null;
+    }
 }
