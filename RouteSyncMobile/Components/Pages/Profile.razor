@@ -125,7 +125,7 @@ else
         {
             <div class="pform expanded">
                 <div class="pw-row">
-                    <input type="@(showCur ? "text" : "password")" @bind="curPwd" placeholder="Current password" />
+                    <input type="@(showCur ? "text" : "password")" @bind="curPwd" @bind:event="oninput" placeholder="Current password" />
                     <button type="button" class="eye" @onclick="@(() => showCur = !showCur)">
                         @if (showCur)
                         {
@@ -138,7 +138,7 @@ else
                     </button>
                 </div>
                 <div class="pw-row">
-                    <input type="@(showNew ? "text" : "password")" @bind="newPwd" placeholder="New password" />
+                    <input type="@(showNew ? "text" : "password")" @bind="newPwd" @bind:event="oninput" placeholder="New password" />
                     <button type="button" class="eye" @onclick="@(() => showNew = !showNew)">
                         @if (showNew)
                         {
@@ -150,6 +150,8 @@ else
                         }
                     </button>
                 </div>
+                @* Bound on oninput above, so these fill in as the driver types rather
+                   than waiting for the field to lose focus. *@
                 <ul class="pw-rules">
                     <li class="@(Met(p => p.Length >= PasswordPolicy.MinLength))"><span class="dot"></span>@(PasswordPolicy.MinLength)+ characters</li>
                     <li class="@(Met(p => p.Any(char.IsDigit)))"><span class="dot"></span>A number</li>
@@ -157,7 +159,7 @@ else
                     <li class="@(Met(p => p.Any(char.IsLower)))"><span class="dot"></span>Lowercase</li>
                 </ul>
                 <div class="pw-row">
-                    <input type="@(showConfirm ? "text" : "password")" @bind="confirmPwd" placeholder="Confirm new password" />
+                    <input type="@(showConfirm ? "text" : "password")" @bind="confirmPwd" @bind:event="oninput" placeholder="Confirm new password" />
                     <button type="button" class="eye" @onclick="@(() => showConfirm = !showConfirm)">
                         @if (showConfirm)
                         {
