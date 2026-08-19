@@ -68,34 +68,38 @@ async function countSince(
   return count ?? 0;
 }
 
-function codeMail(code: string, firstName: string | null, roleId: number) {
+function codeMail(code: string, firstName: string | null, roleId: number, expiresAt: Date) {
   const who = firstName ? `Hi ${firstName},` : "Hi,";
   // Named from the stored role rather than anything the caller sent, so the mail
   // cannot be made to point someone at the wrong surface.
   const where = roleId === DRIVER_ROLE_ID ? "the driver app" : "the operator dashboard";
 
-  const text = [
-    who,
-    "",
-    `Your RouteSync password reset code is ${code}`,
-    "",
-    `The code expires in ${CODE_TTL_MIN} minutes and can be used once.`,
-    `Enter it in ${where} to choose a new password.`,
-    "",
-    "If you did not ask for this, you can ignore this message. Your password has not changed.",
-    "",
-    "RouteSync",
-  ].join("\n");
+  // Mail clients thread messages sharing a subject and fold away whatever repeats
+  // between them. Everything a reader needs therefore sits above the code, and the
+  // closing line carries an expiry time that differs on every send, so no identical
+  // block remains for a client to collapse.
+  const until = new Intl.DateTimeFormat("en-PH", {
+    timeZone: "Asia/Manila",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(expiresAt);
+
+  const lead =
+    `Use this code to set a new password in ${where}. ` +
+    `It works once and expires in ${CODE_TTL_MIN} minutes.`;
+  const tail =
+    `This code stops working at ${until}. If you did not ask for it, ignore this ` +
+    `message: your password has not changed.`;
+
+  const text = [who, "", lead, "", code, "", tail, "", "RouteSync"].join("\n");
 
   const html = `
 <div style="font-family:Segoe UI,Arial,sans-serif;color:#1b2a56;line-height:1.5">
   <p>${who}</p>
-  <p>Your RouteSync password reset code is:</p>
+  <p>${lead}</p>
   <p style="font-size:30px;font-weight:700;letter-spacing:6px;color:#2e9e8f;margin:18px 0">${code}</p>
-  <p>The code expires in ${CODE_TTL_MIN} minutes and can be used once.
-     Enter it in ${where} to choose a new password.</p>
-  <p style="color:#6b7280;font-size:13px">If you did not ask for this, you can ignore this
-     message. Your password has not changed.</p>
+  <p style="color:#6b7280;font-size:13px">${tail}</p>
   <p style="color:#6b7280;font-size:13px">RouteSync</p>
 </div>`.trim();
 
@@ -176,15 +180,17 @@ Deno.serve(async (req) => {
   const code = generateCode();
   const otpHash = await hmacHex(secret, `otp:${user.user_id}:${code}`);
 
+  const expiresAt = new Date(Date.now() + CODE_TTL_MIN * 60_000);
+
   const { error: insErr } = await service.from("password_reset_otp").insert({
     user_id: user.user_id,
     otp_hash: otpHash,
-    expires_at: new Date(Date.now() + CODE_TTL_MIN * 60_000).toISOString(),
+    expires_at: expiresAt.toISOString(),
     ip,
   });
   if (insErr) return await quietly("could not record the code");
 
-  const mail = codeMail(code, user.first_name, user.role_id);
+  const mail = codeMail(code, user.first_name, user.role_id, expiresAt);
   const sent = await sendMail({
     to: user.email_address,
     toName: `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || undefined,
