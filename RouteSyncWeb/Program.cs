@@ -107,6 +107,10 @@ builder.Services.AddSingleton(provider => {
 // every environment, since real device data accumulates in production too.
 builder.Services.AddHostedService<TelemetryRetentionService>();
 
+// Closes trips a driver started but never ended, so a forgotten trip does not hold its bus
+// and grow an unbounded duration.
+builder.Services.AddHostedService<StaleTripCloserService>();
+
 // Removes ghost trips left on the shared database by an outdated build, so they do not
 // linger on the map or the dashboard.
 builder.Services.AddHostedService<TripReaperService>();
