@@ -15,3 +15,20 @@ window.otpSet = function (index, value) {
     var boxes = document.querySelectorAll('.code-box');
     if (boxes[index]) boxes[index].value = value || '';
 };
+
+// Pasting a whole code into one box. The boxes hold a single character each, so
+// the browser would otherwise keep the first digit and drop the rest. The digits
+// are handed to the component, which owns the values and re-renders every box.
+window.otpAttachPaste = function (dotNetRef) {
+    var wrap = document.querySelector('.code-boxes');
+    if (!wrap || wrap.dataset.pasteBound === '1') return;
+    wrap.dataset.pasteBound = '1';
+
+    wrap.addEventListener('paste', function (e) {
+        var text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+        var digits = text.replace(/\D/g, '').slice(0, 6);
+        if (!digits) return;
+        e.preventDefault();
+        dotNetRef.invokeMethodAsync('PasteCode', digits);
+    });
+};
