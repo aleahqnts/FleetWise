@@ -1,15 +1,18 @@
-// password-reset-request: step one of recovering a forgotten driver password.
+// password-reset-request: step one of recovering a forgotten password.
 // Body: { email } -> 200 { ok: true }, or 429 when a shared limit is hit.
 // Deploy with --no-verify-jwt (the caller is locked out of the app by definition).
 //
+// Serves both surfaces: drivers in the mobile app and staff on the dashboard. The
+// account's role decides only which one the email tells them to go back to.
+//
 // Mails a six-digit code to the address on the account and records an HMAC of it.
-// The response is 200 whatever the lookup finds: an unknown address, a web admin
-// account, a suspended driver and a mail outage all look identical from outside,
-// so this endpoint cannot be used to discover who holds an account. The real
-// reason lands in the audit trail instead.
+// The response is 200 whatever the lookup finds: an unknown address, a suspended
+// account and a mail outage all look identical from outside, so this endpoint
+// cannot be used to discover who holds an account. The real reason lands in the
+// audit trail instead.
 //
 // Response timing still differs slightly between a hit and a miss, since a hit
-// calls out to the mail provider. That is accepted: driver addresses are already
+// calls out to the mail provider. That is accepted: staff addresses are already
 // visible to every administrator, so timing buys an attacker nothing new.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -22,7 +25,7 @@ const CODE_TTL_MIN = 10;
 
 // Limits are counted from password_reset_otp rather than held in memory, because
 // edge isolates come and go and an in-memory counter resets with them.
-const PER_USER = { max: 3, minutes: 15 };     // one driver asking over and over
+const PER_USER = { max: 3, minutes: 15 };     // one account asking over and over
 const PER_IP = { max: 10, minutes: 60 };      // one machine working through addresses
 const GLOBAL = { max: 50, minutes: 60 * 24 }; // whole fleet, keeps the mail quota safe
 
@@ -65,8 +68,11 @@ async function countSince(
   return count ?? 0;
 }
 
-function codeMail(code: string, firstName: string | null) {
+function codeMail(code: string, firstName: string | null, roleId: number) {
   const who = firstName ? `Hi ${firstName},` : "Hi,";
+  // Named from the stored role rather than anything the caller sent, so the mail
+  // cannot be made to point someone at the wrong surface.
+  const where = roleId === DRIVER_ROLE_ID ? "the driver app" : "the operator dashboard";
 
   const text = [
     who,
@@ -74,7 +80,7 @@ function codeMail(code: string, firstName: string | null) {
     `Your RouteSync password reset code is ${code}`,
     "",
     `The code expires in ${CODE_TTL_MIN} minutes and can be used once.`,
-    "Enter it in the driver app to choose a new password.",
+    `Enter it in ${where} to choose a new password.`,
     "",
     "If you did not ask for this, you can ignore this message. Your password has not changed.",
     "",
@@ -87,7 +93,7 @@ function codeMail(code: string, firstName: string | null) {
   <p>Your RouteSync password reset code is:</p>
   <p style="font-size:30px;font-weight:700;letter-spacing:6px;color:#2e9e8f;margin:18px 0">${code}</p>
   <p>The code expires in ${CODE_TTL_MIN} minutes and can be used once.
-     Enter it in the driver app to choose a new password.</p>
+     Enter it in ${where} to choose a new password.</p>
   <p style="color:#6b7280;font-size:13px">If you did not ask for this, you can ignore this
      message. Your password has not changed.</p>
   <p style="color:#6b7280;font-size:13px">RouteSync</p>
@@ -158,7 +164,6 @@ Deno.serve(async (req) => {
   };
 
   if (!user) return await quietly("no such account");
-  if (user.role_id !== DRIVER_ROLE_ID) return await quietly("not a driver account");
   if (user.account_status !== "Activated") return await quietly(`account ${user.account_status}`);
   if (!user.email_address) return await quietly("no address on file");
 
@@ -179,7 +184,7 @@ Deno.serve(async (req) => {
   });
   if (insErr) return await quietly("could not record the code");
 
-  const mail = codeMail(code, user.first_name);
+  const mail = codeMail(code, user.first_name, user.role_id);
   const sent = await sendMail({
     to: user.email_address,
     toName: `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || undefined,
