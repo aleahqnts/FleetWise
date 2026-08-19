@@ -51,6 +51,10 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<FareCalculator>();
 
+// Forgotten-password steps run in the edge functions the driver app also calls, so
+// the dashboard reaches them over HTTP rather than repeating the logic here.
+builder.Services.AddHttpClient<PasswordResetApi>(c => c.Timeout = TimeSpan.FromSeconds(12));
+
 // Sign-in rate limit, per caller address.
 //
 // The dashboard sign-in is the one door with no limit in front of it: the mobile app goes

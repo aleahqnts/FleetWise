@@ -15,12 +15,15 @@ namespace FleetWise.Controllers
         private readonly AuthService _authService;
         private readonly AuditLog _audit;
         private readonly LoginThrottle _throttle;
+        private readonly PasswordResetApi _reset;
 
-        public HomeController(AuthService authService, AuditLog audit, LoginThrottle throttle)
+        public HomeController(AuthService authService, AuditLog audit, LoginThrottle throttle,
+            PasswordResetApi reset)
         {
             _authService = authService;
             _audit = audit;
             _throttle = throttle;
+            _reset = reset;
         }
 
         public IActionResult Index(int? throttled)
@@ -81,6 +84,100 @@ namespace FleetWise.Controllers
             return mustChange
                 ? RedirectToAction(nameof(ChangePassword))
                 : RedirectToAction("Index", "Dashboard");
+        }
+
+        // ---------------------------------------------------------------------
+        // Forgotten password: email a code, trade the code for a token, spend the
+        // token on a new password. The work happens in the edge functions, which the
+        // driver app uses too; these actions only move the user between the steps.
+        //
+        // Nothing here is kept in session, since the user has not signed in. The
+        // address and then the reset token travel in hidden fields instead. The token
+        // is short-lived and single use, so a copy of it is worth nothing later.
+        // ---------------------------------------------------------------------
+
+        [HttpGet]
+        public IActionResult ForgotPassword() => View(new ForgotPasswordViewModel());
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [EnableRateLimiting("login")]
+        public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model)
+        {
+            if (!ModelState.IsValid)
+                return View(model);
+
+            var r = await _reset.RequestAsync(model.Email.Trim());
+            if (r.Outcome == PasswordResetApi.Outcome.Unreachable)
+            {
+                ModelState.AddModelError("", "Couldn't reach the server. Try again in a moment.");
+                return View(model);
+            }
+            // A rejection is a rate limit, never "no such account": the function answers
+            // the same way for an address it has never seen. The next step is shown either
+            // way rather than confirming who holds an account.
+            if (r.Outcome == PasswordResetApi.Outcome.Denied)
+            {
+                ModelState.AddModelError("", r.Message ?? "Reset request rejected.");
+                return View(model);
+            }
+
+            return View(nameof(VerifyResetCode),
+                new VerifyResetCodeViewModel { Email = model.Email.Trim() });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [EnableRateLimiting("login")]
+        public async Task<IActionResult> VerifyResetCode(VerifyResetCodeViewModel model)
+        {
+            if (!ModelState.IsValid)
+                return View(model);
+
+            var r = await _reset.VerifyAsync(model.Email, model.Code.Trim());
+            if (r.Outcome == PasswordResetApi.Outcome.Unreachable)
+            {
+                ModelState.AddModelError("", "Couldn't reach the server. Try again in a moment.");
+                return View(model);
+            }
+            if (r.Outcome == PasswordResetApi.Outcome.Denied)
+            {
+                ModelState.AddModelError("", r.Message ?? "That code is invalid or has expired.");
+                return View(model);
+            }
+
+            return View(nameof(ResetPassword),
+                new ResetPasswordViewModel { ResetToken = r.Token! });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ResetPassword(ResetPasswordViewModel model)
+        {
+            if (model.NewPassword == PasswordPolicy.TemporaryPassword)
+                ModelState.AddModelError(nameof(model.NewPassword),
+                    "Choose a password different from the temporary one.");
+
+            if (!ModelState.IsValid)
+                return View(model);
+
+            var r = await _reset.CompleteAsync(model.ResetToken, model.NewPassword);
+            if (r.Outcome == PasswordResetApi.Outcome.Unreachable)
+            {
+                ModelState.AddModelError("", "Couldn't reach the server. Try again in a moment.");
+                return View(model);
+            }
+            if (r.Outcome == PasswordResetApi.Outcome.Denied)
+            {
+                // The token is spent or has timed out, so the code cannot be reused and
+                // the whole flow has to start again.
+                ModelState.AddModelError("", r.Message ?? "Start the reset again.");
+                return View(nameof(ForgotPassword), new ForgotPasswordViewModel());
+            }
+
+            // The reset issues no cookie, so the password is proved once more at sign-in.
+            TempData["ResetDone"] = "Password updated. Sign in with your new password.";
+            return RedirectToAction(nameof(Index));
         }
 
         [Authorize]
