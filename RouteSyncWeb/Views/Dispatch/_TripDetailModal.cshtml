@@ -314,6 +314,16 @@
             background: #E74C3C;
         }
 
+    /* Nothing critical failed, so the bus ran, but the faults still need review. */
+    .tdm-badge--defects {
+        background: #FDF3E3;
+        color: #B87A15;
+    }
+
+        .tdm-badge--defects::before {
+            background: #D99B1A;
+        }
+
     /* Sections */
     .tdm-section-header {
         display: flex;
@@ -591,16 +601,17 @@
             'Flagged':         'tdm-dot--red',
             'Unavailable':     'tdm-dot--red',
             'Pending':         'tdm-dot--yellow',
-            'Trip Completed':  'tdm-dot--gray',
+            'Completed':       'tdm-dot--gray',
         };
         return `<span class="tdm-dot ${map[status] ?? 'tdm-dot--gray'}"></span>${status}`;
     }
 
     function applyInspectionBadge(el, status) {
         const map = {
-            'Passed':  ['tdm-badge--passed',  'Passed'],
-            'Failed':  ['tdm-badge--failed',  'Failed'],
-            'Pending': ['tdm-badge--pending', 'Pending'],
+            'Passed':              ['tdm-badge--passed',  'Passed'],
+            'Passed with Defects': ['tdm-badge--defects', 'Passed with defects'],
+            'Failed':              ['tdm-badge--failed',  'Failed'],
+            'Pending':             ['tdm-badge--pending', 'Pending'],
         };
         const [cls, label] = map[status] ?? ['tdm-badge--pending', 'Pending'];
         el.className = 'tdm-badge ' + cls;
@@ -675,8 +686,11 @@
                 inspRemarks.textContent  = 'No inspection log submitted for this trip yet.';
                 inspRemarksWrap.style.display = 'block';
             } else {
-                const passed = d.checklist.checklistStatus?.toLowerCase() === 'passed';
-                applyInspectionBadge(inspBadge, passed ? 'Passed' : 'Failed');
+                // The badge now shows the inspection's own outcome, which distinguishes
+                // a bus that was grounded from one that merely reported defects.
+                const status = d.checklist.checklistStatus ?? 'Pending';
+                const passed = status.toLowerCase() === 'passed';
+                applyInspectionBadge(inspBadge, status);
 
                 inspReporter.textContent = d.driverName ?? '—';
                 inspTime.textContent = new Date(d.checklist.submittedAt).toLocaleString('en-PH',
@@ -686,10 +700,19 @@
                 if (d.checklist.notes) remarks.push(d.checklist.notes);
 
                 if (!passed && d.maintenanceLogs?.length > 0) {
-                    // Issues = union of issue names across maintenance log entries
-                    const issueNames = d.maintenanceLogs.flatMap(l => l.issueDetails ?? []);
-                    if (issueNames.length > 0) {
-                        inspIssue.textContent = [...new Set(issueNames)].map(formatIssueKey).join(', ');
+                    // Issues = union of issue names across maintenance log entries. The
+                    // ones that ground the bus are named first and marked, so a
+                    // dispatcher can see at a glance whether this needs a reassignment.
+                    const critical = [...new Set(d.maintenanceLogs.flatMap(l => l.criticalIssues ?? []))];
+                    const others = [...new Set(d.maintenanceLogs.flatMap(l => l.issueDetails ?? []))]
+                        .filter(i => !critical.includes(i));
+
+                    const rendered = [
+                        ...critical.map(i => formatIssueKey(i) + ' (critical)'),
+                        ...others.map(formatIssueKey)
+                    ];
+                    if (rendered.length > 0) {
+                        inspIssue.textContent = rendered.join(', ');
                         inspIssueRow.style.display = 'flex';
                     }
                     d.maintenanceLogs.forEach(l => { if (l.remarks) remarks.push(l.remarks); });

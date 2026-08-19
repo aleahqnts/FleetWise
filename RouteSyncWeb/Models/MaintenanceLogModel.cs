@@ -46,11 +46,28 @@ public class MaintenanceLog : BaseModel
     public string VerifiedBy { get; set; }
 }
 
-// Shape of the `issue_details` jsonb column: { "issues": ["Tires", "Air Conditioning", ...] }
+// Shape of the `issue_details` jsonb column:
+//   { "issues": [...], "severity": "Critical" | "Minor", "critical_issues": [...] }
 // Newtonsoft ignores any other/unexpected keys in the jsonb by default, so this stays
 // resilient even if more fields get added to issue_details later.
 public class MaintenanceIssueDetails
 {
     [JsonProperty("issues")]
     public List<string> Issues { get; set; } = new();
+
+    // Absent on every incident raised before inspections told critical items apart.
+    // Those were all defects, which is what IsCritical reports for them.
+    [JsonProperty("severity")]
+    public string Severity { get; set; }
+
+    [JsonProperty("critical_issues")]
+    public List<string> CriticalIssues { get; set; } = new();
+
+    /// <summary>Whether this fault is one that grounds the bus.</summary>
+    public bool IsCritical =>
+        string.Equals(Severity, "Critical", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The critical faults, or all of them when none were singled out.</summary>
+    public string CriticalSummary =>
+        CriticalIssues is { Count: > 0 } ? string.Join(", ", CriticalIssues) : string.Join(", ", Issues);
 }

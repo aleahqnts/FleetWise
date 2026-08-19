@@ -54,6 +54,12 @@ namespace FleetWise.ViewModels
     {
         public int LogId { get; set; }
         public List<string> IssueDetails { get; set; } = new();
+
+        // Whether this fault grounds the bus, so a dispatcher can tell a trip that
+        // needs reassigning from one that merely needs looking at.
+        public bool IsCritical { get; set; }
+        public List<string> CriticalIssues { get; set; } = new();
+
         public string MaintenanceStatus { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? ResolvedAt { get; set; }

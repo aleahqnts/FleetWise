@@ -9,21 +9,62 @@
 {
     <div class="cl-loading">Loading...</div>
 }
+else if (loadFailed)
+{
+    <div class="cl-confirm">
+        <h2>Checklist unavailable</h2>
+        <p class="confirm-sub">
+            The inspection list could not be loaded. Check your connection and try again.
+        </p>
+        <button class="btn-teal" @onclick="RetryLoad">Try Again</button>
+        <button class="btn-plain" @onclick="@(() => Nav.NavigateTo("/home"))">Back to Home</button>
+    </div>
+}
 else if (submitted)
 {
     <div class="cl-confirm">
-        <div class="confirm-check">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#3aaf5d" stroke-width="2.5"><circle cx="12" cy="12" r="10" /><path d="M7 12.5l3 3 6-7" /></svg>
-        </div>
-        <h2>Bus Checklist Submitted!</h2>
+        @if (blocked)
+        {
+            <div class="confirm-check bad">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#d0494b" stroke-width="2.5"><circle cx="12" cy="12" r="10" /><path d="M12 7v6" /><path d="M12 16.5v.5" /></svg>
+            </div>
+            <h2>Trip Blocked</h2>
+            <p class="confirm-sub">
+                A critical item failed, so this bus has been taken out of service and the
+                trip cannot start. Your operator has been notified and will reassign a bus
+                or cancel the trip. Wait for an update on your home screen.
+            </p>
+        }
+        else if (hasDefects)
+        {
+            <div class="confirm-check warn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#d99b1a" stroke-width="2.5"><circle cx="12" cy="12" r="10" /><path d="M12 7v6" /><path d="M12 16.5v.5" /></svg>
+            </div>
+            <h2>Checklist Submitted</h2>
+            <p class="confirm-sub">
+                Defects were reported and your operator will review them. Nothing critical
+                failed, so you can start your trip.
+            </p>
+        }
+        else
+        {
+            <div class="confirm-check">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#3aaf5d" stroke-width="2.5"><circle cx="12" cy="12" r="10" /><path d="M7 12.5l3 3 6-7" /></svg>
+            </div>
+            <h2>Bus Checklist Submitted!</h2>
+        }
+
         <div class="confirm-card">
-            <p class="confirm-sub">Completed @sections.Count out of @sections.Count sections</p>
-            @for (int i = 0; i < sections.Count; i++)
+            @foreach (var label in reportedIssues)
             {
                 <div class="confirm-row">
-                    <span>@(i + 1). @sections[i].Title</span>
-                    <span class="ok">&#10003;</span>
+                    <span>@label</span>
+                    <span class="bad">&#10005;</span>
                 </div>
+            }
+            @if (reportedIssues.Count == 0)
+            {
+                <p class="confirm-sub">All @sections.Sum(x => x.Items.Count) items passed.</p>
             }
         </div>
         <button class="btn-teal" @onclick="@(() => Nav.NavigateTo("/home"))">Back to Home</button>
@@ -62,7 +103,13 @@ else
                 var item = CurrentSection.Items[idx];
                 <div class="item">
                     <span class="num">@(idx + 1).</span>
-                    <span class="label">@item.Label</span>
+                    <span class="label">
+                        @item.Label
+                        @if (item.IsCritical)
+                        {
+                            <span class="crit" title="Blocks the trip if it fails">Critical</span>
+                        }
+                    </span>
                     <div class="marks">
                         <button class="mark check @(item.Status == "Pass" ? "on" : "")" @onclick="@(() => SetStatus(idx, "Pass"))">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4 4 10-11" /></svg>
@@ -90,8 +137,13 @@ else
     [Parameter] public string TripId { get; set; } = "";
 
     private bool loading = true;
+    private bool loadFailed;
     private bool busy;
     private bool submitted;
+    private bool blocked;
+    private bool hasDefects;
+    // What failed, shown back to the driver so they know what was reported.
+    private List<string> reportedIssues = new();
     private string? message;
     private int currentSection;
     private string busLabel = "";
@@ -100,29 +152,7 @@ else
     private Section CurrentSection => sections[currentSection];
     private bool IsLast => currentSection == sections.Count - 1;
 
-    // Limited to what a driver can check on a walk-around before a trip.
-    //
-    // The section titles must match the names the dashboard expects in
-    // VehiclesController.DeriveInspectionIssue and DeriveInspectionSections.
-    private readonly List<Section> sections = new()
-    {
-        new("Exterior Inspection", "exterior_inspection", new[]
-        {
-            "Tires & wheels","Lights & signals","Mirrors & windshield","Wipers","No visible damage or leaks"
-        }),
-        new("Engine Compartment", "engine_compartment", new[]
-        {
-            "Engine oil level","Coolant level","Brake fluid level","Battery condition"
-        }),
-        new("Interior Inspection", "interior_inspection", new[]
-        {
-            "Driver seat & seatbelt","Horn & dashboard gauges","Fuel level","Passenger seats, handrails & doors"
-        }),
-        new("Brake & Safety Systems", "brake_safety", new[]
-        {
-            "Service brakes","Parking brake","Fire extinguisher & first aid kit","Early warning device / reflectors"
-        }),
-    };
+    private List<Section> sections = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -135,6 +165,46 @@ else
             var v = await Data.GetVehicleAsync(trip.VehicleId);
             busLabel = v is not null ? $"{v.VehicleId} ({v.PlateNumber})" : trip.VehicleId;
         }
+        await LoadItemsAsync();
+        loading = false;
+    }
+
+    /// <summary>
+    /// Builds the form from the configured items.
+    /// </summary>
+    /// <remarks>
+    /// There is deliberately no built-in fallback list. Which items are critical is
+    /// the whole point of this screen, and inspecting against a stale copy of the
+    /// rules could pass a bus that the current rules would have grounded. A driver
+    /// who cannot reach the server is asked to retry instead.
+    /// </remarks>
+    private async Task LoadItemsAsync()
+    {
+        try
+        {
+            var items = await Data.GetChecklistItemsAsync();
+            sections = items
+                .GroupBy(i => i.SectionKey)
+                .OrderBy(g => g.Min(i => i.SortOrder))
+                .Select(g => new Section(
+                    g.First().SectionTitle,
+                    g.Key,
+                    g.OrderBy(i => i.SortOrder).ToList()))
+                .ToList();
+            loadFailed = sections.Count == 0;
+        }
+        catch (Exception ex)
+        {
+            loadFailed = true;
+            System.Diagnostics.Debug.WriteLine($"[Checklist.LoadItems] {ex}");
+        }
+    }
+
+    private async Task RetryLoad()
+    {
+        loadFailed = false;
+        loading = true;
+        await LoadItemsAsync();
         loading = false;
     }
 
@@ -187,8 +257,20 @@ else
         busy = true;
         try
         {
-            var allPass = sections.All(s => s.Items.All(i => i.Status == "Pass"));
-            var status = allPass ? "Passed" : "Failed";
+            // Three outcomes, not two. A critical failure stops the trip; anything
+            // else is a defect the driver may still work with, reported either way.
+            var failedItems = sections.SelectMany(s => s.Items).Where(i => i.Status != "Pass").ToList();
+            var criticalItems = failedItems.Where(i => i.IsCritical).ToList();
+
+            var allPass = failedItems.Count == 0;
+            blocked = criticalItems.Count > 0;
+            hasDefects = !allPass && !blocked;
+            reportedIssues = failedItems
+                .Select(i => i.IsCritical ? $"{i.Label} (critical)" : i.Label)
+                .ToList();
+            var status = blocked ? "Failed"
+                       : allPass ? "Passed"
+                       : "Passed with Defects";
 
             var checklist = new BusChecklist
             {
@@ -212,13 +294,19 @@ else
             // incident lists the exact items that failed.
             if (!allPass && inserted is not null)
             {
-                var issues = sections
-                    .SelectMany(s => s.Items.Where(i => i.Status != "Pass").Select(i => i.Label))
-                    .ToList();
-                await Data.OpenInspectionIncidentAsync(inserted.ChecklistId, trip!.VehicleId, TripId, issues);
+                await Data.OpenInspectionIncidentAsync(
+                    inserted.ChecklistId, trip!.VehicleId, TripId,
+                    failedItems.Select(i => i.Label).ToList(),
+                    criticalItems.Select(i => i.Label).ToList());
             }
 
-            await Data.UpdateVehicleStatusAsync(trip!.VehicleId, allPass ? "Ready to Deploy" : "Flagged");
+            // Grounding is what actually blocks the trip: the home screen refuses to
+            // start on a bus that is out of service, and only the vehicles tab can
+            // lift it. A defect leaves the bus deployable and merely flagged.
+            if (blocked)
+                await Data.GroundVehicleAsync(trip!.VehicleId);
+            else
+                await Data.UpdateVehicleStatusAsync(trip!.VehicleId, allPass ? "Ready to Deploy" : "Flagged");
 
             submitted = true;
         }
@@ -242,18 +330,24 @@ else
         public string Key { get; }
         public List<CItem> Items { get; }
 
-        public Section(string title, string key, string[] items)
+        public Section(string title, string key, List<ChecklistItem> items)
         {
             Title = title;
             Key = key;
-            Items = items.Select(l => new CItem(l)).ToList();
+            Items = items.Select(i => new CItem(i.Label, i.IsCritical)).ToList();
         }
     }
 
     public class CItem
     {
         public string Label { get; }
+        public bool IsCritical { get; }
         public string? Status { get; set; }
-        public CItem(string label) => Label = label;
+
+        public CItem(string label, bool isCritical)
+        {
+            Label = label;
+            IsCritical = isCritical;
+        }
     }
 }

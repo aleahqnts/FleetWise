@@ -325,17 +325,47 @@ public class DriverDataService
     /// vehicle_status alone would not, because that value is overwritten. The checklist
     /// identifier links the incident back to the inspection that raised it.
     /// </remarks>
-    public async Task OpenInspectionIncidentAsync(int checklistId, string vehicleId, string tripId, List<string> issues)
+    /// <summary>The inspection items to show, in the order the dashboard set.</summary>
+    public async Task<List<ChecklistItem>> GetChecklistItemsAsync()
     {
+        var r = await _supabase.From<ChecklistItem>()
+            .Filter("active", Operator.Equals, "true")
+            .Order("sort_order", Postgrest.Constants.Ordering.Ascending)
+            .Get();
+        return r.Models;
+    }
+
+    public async Task OpenInspectionIncidentAsync(int checklistId, string vehicleId, string tripId,
+        List<string> issues, List<string> criticalIssues)
+    {
+        var critical = criticalIssues.Count > 0;
         await PostAsync("maintenance_logs", new
         {
             checklist_id = checklistId,
             vehicle_id = vehicleId,
             trip_id = tripId,
-            issue_details = new { issues },
-            maintenance_status = "Needs Attention",
+            // severity and critical_issues are extra keys inside the same json column.
+            // Older rows simply lack them, and the reader treats a missing severity as
+            // a defect, which is what every incident before this change was.
+            issue_details = new { issues, severity = critical ? "Critical" : "Minor", critical_issues = criticalIssues },
+            maintenance_status = critical ? "Out of Service" : "Needs Attention",
             created_at = PhTime.Now
         });
+    }
+
+    /// <summary>
+    /// Grounds a bus that failed a critical item, which is what stops the trip.
+    /// </summary>
+    /// <remarks>
+    /// out_of_service is the one gate the whole system already honours: the home
+    /// screen refuses to start a trip on a grounded bus and the dispatch board reads
+    /// the assignment as an issue. Setting it here means the block needs no separate
+    /// mechanism, and only the vehicles tab can lift it.
+    /// </remarks>
+    public async Task GroundVehicleAsync(string vehicleId)
+    {
+        await PatchAsync($"vehicles?vehicle_id=eq.{Uri.EscapeDataString(vehicleId)}",
+            new { vehicle_status = "Out of Service", out_of_service = true, updated_at = PhTime.Now });
     }
 
     public async Task UpdateVehicleStatusAsync(string vehicleId, string status)

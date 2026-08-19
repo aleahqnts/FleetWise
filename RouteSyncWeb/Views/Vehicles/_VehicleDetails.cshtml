@@ -138,8 +138,40 @@
         <div class="vh-section-body">
             @if (Model.OutOfService)
             {
-                <div class="vh-oos-banner">This bus is <strong>Out of Service</strong>. Dispatch cannot assign it.</div>
+                @if (Model.OpenIncidentCritical)
+                {
+                    <div class="vh-oos-banner">
+                        Grounded by a failed inspection: <strong>@Model.OpenIncidentSummary</strong>.
+                        Any trip on this bus is blocked until it returns to service. Reassign the
+                        trip to another bus from Dispatch, or cancel it, if the repair will not be
+                        done in time.
+                    </div>
+                }
+                else
+                {
+                    <div class="vh-oos-banner">This bus is <strong>Out of Service</strong>. Dispatch cannot assign it.</div>
+                }
             }
+
+            <p class="vh-action-hint">
+                @if (Model.OutOfService)
+                {
+                    <text>
+                        <strong>Resolve</strong> closes the fault and returns the bus to ready.
+                        <strong>Return to Service</strong> un-grounds it while leaving the fault
+                        open, for a bus that is usable but still being watched. The driver must
+                        submit a fresh inspection either way before the trip can start.
+                    </text>
+                }
+                else
+                {
+                    <text>
+                        <strong>Resolve</strong> closes the fault and clears the flag.
+                        <strong>Mark Out of Service</strong> grounds the bus, which blocks
+                        every trip assigned to it.
+                    </text>
+                }
+            </p>
 
             <div class="vh-review-actions">
                 @if (Model.OpenLogId.HasValue)

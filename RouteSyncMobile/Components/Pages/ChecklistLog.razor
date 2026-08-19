@@ -45,7 +45,7 @@ else
 
         <div class="summary">
             <div>
-                <p class="sum-status @(checklist.ChecklistStatus == "Passed" ? "ok" : "bad")">@checklist.ChecklistStatus</p>
+                <p class="sum-status @StatusClass(checklist.ChecklistStatus)">@checklist.ChecklistStatus</p>
                 <p class="sum-time">Submitted @checklist.SubmittedAt.ToString("MMM d, yyyy h:mm tt")</p>
             </div>
         </div>
@@ -77,6 +77,15 @@ else
 }
 
 @code {
+    // Three outcomes: a clean pass, defects that still allowed the trip, and a
+    // critical failure that did not.
+    private static string StatusClass(string? status) => status switch
+    {
+        "Passed" => "ok",
+        "Passed with Defects" => "warn",
+        _ => "bad"
+    };
+
     [Parameter] public string TripId { get; set; } = "";
 
     private bool loading = true;
