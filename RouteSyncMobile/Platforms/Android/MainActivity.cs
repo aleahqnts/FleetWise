@@ -7,7 +7,10 @@ using FleetWiseMobile.Services;
 
 namespace FleetWiseMobile;
 
-[Activity(Theme = "@style/Maui.SplashTheme", MainLauncher = true, ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.Density)]
+// Portrait only. The counter and the checklist are both built as a single column, and
+// a phone rotating in a moving bus reflows them for no benefit.
+[Activity(Theme = "@style/Maui.SplashTheme", MainLauncher = true,
+    ScreenOrientation = ScreenOrientation.Portrait, ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.Density)]
 public class MainActivity : MauiAppCompatActivity
 {
     private ConfirmExitCallback? _backCallback;
