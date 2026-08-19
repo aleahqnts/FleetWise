@@ -12,6 +12,7 @@ import {
   verifyAspNetHash,
   verifyJwt,
 } from "../_shared/auth.ts";
+import { passwordProblem } from "../_shared/password.ts";
 import { audit } from "../_shared/audit.ts";
 
 const service = createClient(
@@ -41,7 +42,8 @@ Deno.serve(async (req) => {
   } catch {
     return json(400, { error: "Invalid JSON body" });
   }
-  if (newPwd.length < 6) return json(400, { error: "New password too short (min 6)." });
+  const problem = passwordProblem(newPwd);
+  if (problem) return json(400, { error: problem });
 
   const { data: rows, error } = await service
     .from("users")
