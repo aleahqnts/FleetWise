@@ -110,7 +110,7 @@ namespace FleetWise.Controllers
             var r = await _reset.RequestAsync(model.Email.Trim());
             if (r.Outcome == PasswordResetApi.Outcome.Unreachable)
             {
-                ModelState.AddModelError("", "Couldn't reach the server. Try again in a moment.");
+                ModelState.AddModelError("", "Could not reach the server. Try again in a moment.");
                 return View(model);
             }
             // A rejection is a rate limit, never "no such account": the function answers
@@ -122,8 +122,11 @@ namespace FleetWise.Controllers
                 return View(model);
             }
 
-            return View(nameof(VerifyResetCode),
-                new VerifyResetCodeViewModel { Email = model.Email.Trim() });
+            return View(nameof(VerifyResetCode), new VerifyResetCodeViewModel
+            {
+                Email = model.Email.Trim(),
+                SentAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            });
         }
 
         [HttpPost]
@@ -137,7 +140,7 @@ namespace FleetWise.Controllers
             var r = await _reset.VerifyAsync(model.Email, model.Code.Trim());
             if (r.Outcome == PasswordResetApi.Outcome.Unreachable)
             {
-                ModelState.AddModelError("", "Couldn't reach the server. Try again in a moment.");
+                ModelState.AddModelError("", "Could not reach the server. Try again in a moment.");
                 return View(model);
             }
             if (r.Outcome == PasswordResetApi.Outcome.Denied)
@@ -164,7 +167,7 @@ namespace FleetWise.Controllers
             var r = await _reset.CompleteAsync(model.ResetToken, model.NewPassword);
             if (r.Outcome == PasswordResetApi.Outcome.Unreachable)
             {
-                ModelState.AddModelError("", "Couldn't reach the server. Try again in a moment.");
+                ModelState.AddModelError("", "Could not reach the server. Try again in a moment.");
                 return View(model);
             }
             if (r.Outcome == PasswordResetApi.Outcome.Denied)

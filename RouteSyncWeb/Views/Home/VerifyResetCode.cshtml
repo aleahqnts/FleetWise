@@ -20,10 +20,10 @@
 
         @* Right Panel *@
         <div class="right-panel">
-            <h1 class="sign-in-title">Enter Code</h1>
-            <p class="brand-sub" style="margin-bottom:18px;">
-                If @Model.Email has an account, a 6-digit code is on its way. It expires in 10 minutes.
-            </p>
+            <h1 class="step-title">Enter Code</h1>
+            @* Phrased as an instruction rather than a confirmation: saying a code WAS sent
+               would reveal whether the address has an account. *@
+            <p class="step-hint">Check @Model.Email. The code expires in 10 minutes.</p>
 
             <form asp-action="VerifyResetCode" asp-controller="Home" method="post">
                 @Html.AntiForgeryToken()
@@ -35,32 +35,117 @@
                 }
 
                 <input type="hidden" asp-for="Email" />
+                <input type="hidden" asp-for="SentAtUnix" />
+                <input type="hidden" asp-for="Code" id="Code" />
 
-                <div class="input-group">
-                    <span class="input-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                        </svg>
-                    </span>
-                    <input asp-for="Code" class="input-field" placeholder="6-digit code"
-                           inputmode="numeric" maxlength="6" autocomplete="one-time-code"
-                           style="letter-spacing:6px;font-weight:600;" />
+                <div class="code-boxes">
+                    @for (var i = 0; i < 6; i++)
+                    {
+                        <input type="text" class="code-box" inputmode="numeric" maxlength="1"
+                               autocomplete="@(i == 0 ? "one-time-code" : "off")" aria-label="Digit @(i + 1)" />
+                    }
                 </div>
                 <span asp-validation-for="Code" class="field-error"></span>
 
-                <button type="submit" class="sign-in-btn">Verify Code</button>
+                <button type="submit" class="sign-in-btn" id="verifyBtn" disabled>Verify Code</button>
             </form>
 
             <div class="forgot-password" style="display:flex;justify-content:space-between;margin-top:16px;">
                 <form asp-action="ForgotPassword" asp-controller="Home" method="post" style="display:inline;">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="Email" value="@Model.Email" />
-                    <button type="submit" class="link-button">Send a new code</button>
+                    <button type="submit" class="link-button" id="resendBtn"
+                            data-sent="@Model.SentAtUnix" data-cooldown="60">Send a new code</button>
                 </form>
-                <a asp-action="ForgotPassword" asp-controller="Home">Wrong email?</a>
+                <a asp-action="ForgotPassword" asp-controller="Home">Change email</a>
             </div>
         </div>
 
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        // The six boxes are presentation only. They keep the hidden Code field in step,
+        // which is what the model binds and what the server validates, so the rules do
+        // not change just because the input looks different.
+        (function () {
+            var boxes = Array.prototype.slice.call(document.querySelectorAll('.code-box'));
+            var hidden = document.getElementById('Code');
+            var button = document.getElementById('verifyBtn');
+            if (!boxes.length || !hidden || !button) return;
+
+            function sync() {
+                var value = boxes.map(function (b) { return b.value; }).join('');
+                hidden.value = value;
+                // Submitting a short code would only earn a round trip to be told so.
+                button.disabled = value.length !== boxes.length;
+            }
+
+            boxes.forEach(function (box, i) {
+                box.addEventListener('input', function () {
+                    // Keep the newest digit when typing over a filled box.
+                    box.value = box.value.replace(/\D/g, '').slice(-1);
+                    sync();
+                    if (box.value && i < boxes.length - 1) boxes[i + 1].focus();
+                });
+
+                box.addEventListener('keydown', function (e) {
+                    if (e.key === 'Backspace' && !box.value && i > 0) {
+                        e.preventDefault();
+                        boxes[i - 1].value = '';
+                        boxes[i - 1].focus();
+                        sync();
+                    } else if (e.key === 'ArrowLeft' && i > 0) {
+                        boxes[i - 1].focus();
+                    } else if (e.key === 'ArrowRight' && i < boxes.length - 1) {
+                        boxes[i + 1].focus();
+                    }
+                });
+
+                // Pasting the whole code from the email should fill the row, not one box.
+                box.addEventListener('paste', function (e) {
+                    var text = (e.clipboardData || window.clipboardData).getData('text') || '';
+                    var digits = text.replace(/\D/g, '').slice(0, boxes.length);
+                    if (!digits) return;
+                    e.preventDefault();
+                    for (var n = 0; n < digits.length; n++) boxes[n].value = digits[n];
+                    sync();
+                    boxes[Math.min(digits.length, boxes.length) - 1].focus();
+                });
+            });
+
+            sync();
+            boxes[0].focus();
+        })();
+
+        // Holds the resend link shut for a minute after a code goes out, so a
+        // frustrated user does not burn the server's three-per-quarter-hour limit in
+        // as many clicks. That server limit is the real guard; this is a courtesy,
+        // and the timestamp it reads comes from a hidden field the user could edit.
+        (function () {
+            var btn = document.getElementById('resendBtn');
+            if (!btn) return;
+
+            var sentAt = parseInt(btn.getAttribute('data-sent'), 10) || 0;
+            var cooldown = parseInt(btn.getAttribute('data-cooldown'), 10) || 60;
+            var label = btn.textContent;
+
+            function tick() {
+                // The stamp is server time and Date.now() is the browser's, so a skewed
+                // clock is capped rather than trusted into a long wait.
+                var left = Math.min(cooldown, cooldown - (Math.floor(Date.now() / 1000) - sentAt));
+                if (left > 0) {
+                    btn.disabled = true;
+                    btn.textContent = 'New code in ' + left + 's';
+                    setTimeout(tick, 1000);
+                } else {
+                    btn.disabled = false;
+                    btn.textContent = label;
+                }
+            }
+
+            tick();
+        })();
+    </script>
+}

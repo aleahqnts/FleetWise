@@ -9,13 +9,13 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { CORS_HEADERS, hashAspNetV3, json, verifyJwt } from "../_shared/auth.ts";
+import { passwordProblem } from "../_shared/password.ts";
 import { audit } from "../_shared/audit.ts";
 
 // Mirrors FleetWise.Services.PasswordPolicy.TemporaryPassword. Landing on this
 // value would send the driver straight back to the forced-change screen on the
 // next sign-in, so it is refused here rather than becoming a loop.
 const TEMPORARY_PASSWORD = "@Temp123";
-const MIN_LENGTH = 6;
 
 const service = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -47,9 +47,8 @@ Deno.serve(async (req) => {
   const userId = claims.user_id as number;
   const rid = claims.rid as number;
 
-  if (newPwd.length < MIN_LENGTH) {
-    return json(400, { error: `New password too short (min ${MIN_LENGTH}).` });
-  }
+  const problem = passwordProblem(newPwd);
+  if (problem) return json(400, { error: problem });
   if (newPwd === TEMPORARY_PASSWORD) {
     return json(400, { error: "Choose a password different from the temporary one." });
   }

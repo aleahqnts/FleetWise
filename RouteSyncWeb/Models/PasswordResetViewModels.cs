@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using FleetWise.Services;
 
 namespace FleetWise.Models
 {
@@ -21,6 +22,11 @@ namespace FleetWise.Models
         [Required(ErrorMessage = "Enter the 6-digit code from your email.")]
         [RegularExpression(@"^\d{6}$", ErrorMessage = "The code is 6 digits.")]
         public string Code { get; set; } = string.Empty;
+
+        // When the last code was sent, so the page can hold the resend link shut for a
+        // minute. It rides in a hidden field and is therefore only a courtesy: the
+        // server's three-per-quarter-hour limit is what actually stops a flood.
+        public long SentAtUnix { get; set; }
     }
 
     // Step three: the new password, authorised by the token the code was traded for.
@@ -31,12 +37,15 @@ namespace FleetWise.Models
 
         [Required(ErrorMessage = "Enter a new password.")]
         [DataType(DataType.Password)]
-        [StringLength(100, MinimumLength = 6, ErrorMessage = "Password must be at least 6 characters.")]
+        [StringLength(PasswordPolicy.MaxLength, MinimumLength = PasswordPolicy.MinLength,
+            ErrorMessage = PasswordPolicy.LengthMessage)]
+        [RegularExpression(PasswordPolicy.ComplexityPattern,
+            ErrorMessage = PasswordPolicy.ComplexityMessage)]
         public string NewPassword { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Confirm your new password.")]
         [DataType(DataType.Password)]
-        [Compare(nameof(NewPassword), ErrorMessage = "Passwords don't match.")]
+        [Compare(nameof(NewPassword), ErrorMessage = "Passwords do not match.")]
         public string ConfirmPassword { get; set; } = string.Empty;
     }
 }

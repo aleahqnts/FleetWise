@@ -19,7 +19,7 @@
 }
 else if (user is null)
 {
-    <div class="profile"><p class="muted">Couldn't load profile.</p></div>
+    <div class="profile"><p class="muted">Could not load profile.</p></div>
 }
 else
 {
@@ -124,9 +124,51 @@ else
         @if (showPwdForm)
         {
             <div class="pform expanded">
-                <input type="password" @bind="curPwd" placeholder="Current password" />
-                <input type="password" @bind="newPwd" placeholder="New password" />
-                <input type="password" @bind="confirmPwd" placeholder="Confirm new password" />
+                <div class="pw-row">
+                    <input type="@(showCur ? "text" : "password")" @bind="curPwd" placeholder="Current password" />
+                    <button type="button" class="eye" @onclick="@(() => showCur = !showCur)">
+                        @if (showCur)
+                        {
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7c2 0 3.8.6 5.3 1.5M22 12s-3.5 7-10 7c-2 0-3.8-.6-5.3-1.5" /><path d="M3 3l18 18" /><circle cx="12" cy="12" r="3" /></svg>
+                        }
+                        else
+                        {
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
+                        }
+                    </button>
+                </div>
+                <div class="pw-row">
+                    <input type="@(showNew ? "text" : "password")" @bind="newPwd" placeholder="New password" />
+                    <button type="button" class="eye" @onclick="@(() => showNew = !showNew)">
+                        @if (showNew)
+                        {
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7c2 0 3.8.6 5.3 1.5M22 12s-3.5 7-10 7c-2 0-3.8-.6-5.3-1.5" /><path d="M3 3l18 18" /><circle cx="12" cy="12" r="3" /></svg>
+                        }
+                        else
+                        {
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
+                        }
+                    </button>
+                </div>
+                <ul class="pw-rules">
+                    <li class="@(Met(p => p.Length >= PasswordPolicy.MinLength))"><span class="dot"></span>@(PasswordPolicy.MinLength)+ characters</li>
+                    <li class="@(Met(p => p.Any(char.IsDigit)))"><span class="dot"></span>A number</li>
+                    <li class="@(Met(p => p.Any(char.IsUpper)))"><span class="dot"></span>Uppercase</li>
+                    <li class="@(Met(p => p.Any(char.IsLower)))"><span class="dot"></span>Lowercase</li>
+                </ul>
+                <div class="pw-row">
+                    <input type="@(showConfirm ? "text" : "password")" @bind="confirmPwd" placeholder="Confirm new password" />
+                    <button type="button" class="eye" @onclick="@(() => showConfirm = !showConfirm)">
+                        @if (showConfirm)
+                        {
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7c2 0 3.8.6 5.3 1.5M22 12s-3.5 7-10 7c-2 0-3.8-.6-5.3-1.5" /><path d="M3 3l18 18" /><circle cx="12" cy="12" r="3" /></svg>
+                        }
+                        else
+                        {
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
+                        }
+                    </button>
+                </div>
 
                 @if (!string.IsNullOrEmpty(pwdMsg))
                 {
@@ -171,6 +213,11 @@ else
     private string? profileMsg;
 
     private string curPwd = "", newPwd = "", confirmPwd = "";
+    private bool showCur, showNew, showConfirm;
+
+    // Drives the rule checklist. Purely on-screen guidance; the edge function is
+    // what actually decides whether a password is acceptable.
+    private string Met(Func<string, bool> rule) => rule(newPwd) ? "met" : "";
     private bool savingPwd, pwdOk;
     private bool showPwdForm, showInfoForm, showLogoutConfirm;
     private string? pwdMsg;
@@ -262,8 +309,9 @@ else
     private async Task ChangePassword()
     {
         pwdMsg = null;
-        if (newPwd.Length < 6) { pwdMsg = "New password too short (min 6)."; pwdOk = false; return; }
-        if (newPwd != confirmPwd) { pwdMsg = "New passwords don't match."; pwdOk = false; return; }
+        var problem = PasswordPolicy.Problem(newPwd);
+        if (problem is not null) { pwdMsg = problem; pwdOk = false; return; }
+        if (newPwd != confirmPwd) { pwdMsg = "New passwords do not match."; pwdOk = false; return; }
 
         savingPwd = true;
         try
@@ -277,7 +325,7 @@ else
             }
             if (r.Outcome == AuthApi.Outcome.Unreachable)
             {
-                pwdMsg = "Can't reach the server. Check your connection and try again."; pwdOk = false; return;
+                pwdMsg = "Cannot reach the server. Check your connection and try again."; pwdOk = false; return;
             }
             curPwd = newPwd = confirmPwd = "";
             pwdMsg = "Password updated."; pwdOk = true;
