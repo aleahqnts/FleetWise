@@ -11,7 +11,7 @@ namespace FleetWise.Controllers
     [RequirePermission("users")]
     public class UsersController : Controller
     {
-        // Keys match the stored web_permissions / mobile_permissions JSON exactly (lowercase).
+        // These keys match the stored permission JSON exactly, including their casing.
         private static readonly string[] WebPermissionKeys =
             { "dashboard", "routes", "vehicles", "reports", "users", "audit" };
 
@@ -84,13 +84,15 @@ namespace FleetWise.Controllers
                 CreatedAt = PhClock.Now,
             };
             var hasher = new PasswordHasher<UserModel>();
-            // Every new account starts on the shared temp password. First login forces a change.
+            // Every new account starts on the shared temporary password, and the first
+            // sign-in with it forces a change.
             user.PasswordHash = hasher.HashPassword(user, PasswordPolicy.TemporaryPassword);
 
             var created = (await _supabase.From<UserModel>().Insert(user)).Models.FirstOrDefault();
 
-            // A new account is a new way into the system: always worth a permanent record.
-            // The temp password is public policy, not a secret, but it still never goes in.
+            // A new account is a new way into the system, so it is always recorded. The
+            // temporary password is documented policy rather than a secret, and is still
+            // never written to the audit trail.
             await _audit.WriteAsync("user_created",
                 $"created the account {model.FirstName} {model.LastName} ({model.Email.Trim()})",
                 "users", created?.UserId);
@@ -131,8 +133,8 @@ namespace FleetWise.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // Kept for the audit line: a deactivation or a role swap is the part of an
-            // edit that changes what this account can do.
+            // Captured before the update. A deactivation or a role change is the part of an
+            // edit that alters what the account can do.
             var wasStatus = user.AccountStatus;
             var wasRole = user.RoleId;
 
@@ -176,15 +178,17 @@ namespace FleetWise.Controllers
             }
 
             var hasher = new PasswordHasher<UserModel>();
-            // Back onto the shared temp password — same as a brand-new account, so the
-            // next login with it forces a password change without any flag column.
+            // Reset to the shared temporary password, which puts the account in the same
+            // state as a new one. The next sign-in with it forces a change, so no separate
+            // flag column is needed.
             user.PasswordHash = hasher.HashPassword(user, PasswordPolicy.TemporaryPassword);
             user.UpdatedAt = PhClock.Now;
 
             await _supabase.From<UserModel>().Update(user);
 
-            // One admin can now sign in as this person until they change it. The DB trigger
-            // logs that the hash moved; this row is the one that names who did it.
+            // Until the driver changes it, an administrator knows a working password for
+            // this account. The database trigger records that the hash changed; this entry
+            // records who caused it.
             await _audit.WriteAsync("password_reset",
                 $"reset the password for {user.FirstName} {user.LastName}",
                 "users", userId);
@@ -226,8 +230,8 @@ namespace FleetWise.Controllers
 
             var newRole = (await _supabase.From<Role>().Insert(role)).Models.FirstOrDefault();
 
-            // A role IS the permission system. Editing one silently widens what a whole
-            // group of accounts can reach, so both create and update are logged.
+            // Roles are the permission system, and editing one changes what every account
+            // holding it can reach, so creating and updating are both recorded.
             await _audit.WriteAsync("role_created",
                 $"created the role {role.RoleName}, dashboard access: {DescribeAccess(role.WebPermissions)}",
                 "roles", newRole?.RoleId);
@@ -320,8 +324,8 @@ namespace FleetWise.Controllers
                     (u.EmailAddress?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false));
             }
 
-            // Deterministic, grouped order: by role (Admin, Dispatcher, Driver…), then
-            // alphabetically by name. Case-insensitive so casing/nulls don't scramble it.
+            // Ordered by role, then by name, case-insensitively so that casing and missing
+            // values do not disturb the grouping.
             var items = users
                 .OrderBy(u => roleNames.TryGetValue(u.RoleId, out var rn) ? rn : "￿", StringComparer.OrdinalIgnoreCase)
                 .ThenBy(u => u.LastName ?? "", StringComparer.OrdinalIgnoreCase)
@@ -359,7 +363,7 @@ namespace FleetWise.Controllers
             return View("Index", new List<UserListItemViewModel>());
         }
 
-        // Granted sections as a readable list, for the audit line.
+        /// <summary>The granted sections as a readable list, for an audit entry.</summary>
         private static string DescribeAccess(Dictionary<string, bool>? permissions)
         {
             var granted = permissions?.Where(kv => kv.Value).Select(kv => kv.Key).ToList() ?? new();
@@ -374,8 +378,10 @@ namespace FleetWise.Controllers
             return result;
         }
 
-        // The role the Manage Roles modal shows by default: the first role, with its stored
-        // permissions, so the toggles open pre-filled instead of blank.
+        /// <summary>
+        /// The role the manage-roles modal opens on: the first one, with its stored
+        /// permissions, so the toggles are populated rather than empty.
+        /// </summary>
         private static RoleFormViewModel DefaultRoleForm(List<Role> roles)
         {
             var first = roles.FirstOrDefault();

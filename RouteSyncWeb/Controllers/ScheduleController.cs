@@ -19,7 +19,7 @@ namespace FleetWise.Controllers
             _audit = audit;
         }
 
-        // Fixed shift windows (mirrors the Add Trip modal's SHIFT_TIMES).
+        // Fixed shift windows, matching the times the add trip modal offers.
         private static readonly Dictionary<string, (TimeSpan start, TimeSpan end)> ShiftTimes = new()
         {
             ["Morning"] = (new(6, 0, 0), new(14, 0, 0)),
@@ -28,10 +28,10 @@ namespace FleetWise.Controllers
         };
         private static readonly string[] ShiftOrder = { "Morning", "Afternoon", "Evening" };
 
-        // ── GET weekly planner ────────────────────────────────────────
+        // GET weekly planner.
         public async Task<IActionResult> Index(string start)
         {
-            // Week = picked start date .. start+6. Default = today.
+            // Seven days from the selected start date, defaulting to today.
             var weekStart = (DateTime.TryParse(start, out var s) ? s : PhClock.Today).Date;
             var weekEnd = weekStart.AddDays(6);
 
@@ -58,8 +58,8 @@ namespace FleetWise.Controllers
                 Routes = routesTask.Result.Models.OrderBy(r => r.RouteId)
                     .Select(r => new RouteOption { RouteId = r.RouteId, RouteName = r.RouteName }).ToList(),
                 Vehicles = vehiclesTask.Result.Models
-                    // Flagged buses stay schedulable (advisory) — only grounded
-                    // (out-of-service) buses are withheld.
+                    // A flag is advisory and the bus stays schedulable. Only a grounded bus
+                    // is withheld.
                     .Where(v => !v.OutOfService)
                     .OrderBy(v => v.VehicleId)
                     .Select(v => new VehicleOption { VehicleId = v.VehicleId, PlateNumber = v.PlateNumber }).ToList(),
@@ -84,7 +84,7 @@ namespace FleetWise.Controllers
             return View(vm);
         }
 
-        // ── POST bulk save ────────────────────────────────────────────
+        // POST bulk save.
         [HttpPost]
         public async Task<IActionResult> Save([FromBody] SaveScheduleRequest req)
         {
@@ -95,8 +95,8 @@ namespace FleetWise.Controllers
 
             var cells = req.Cells ?? new();
 
-            // Existing trips in the range (also needed to validate against locked trips the
-            // grid may not resend).
+            // Existing trips in the range. Also needed to validate against locked trips,
+            // which the grid does not always resend.
             var existingResp = await _supabase.From<Trip>()
                 .Filter("date", Operator.GreaterThanOrEqual, weekStart.ToString("yyyy-MM-dd"))
                 .Filter("date", Operator.LessThanOrEqual, weekEnd.ToString("yyyy-MM-dd"))
@@ -104,17 +104,17 @@ namespace FleetWise.Controllers
             var existing = existingResp.Models;
             var existingById = existing.ToDictionary(t => t.TripId);
 
-            // ── Conflict validation across the EFFECTIVE schedule ─────
-            // Submitted (editable) cells PLUS any existing locked (Active/Completed) trip the
-            // grid didn't resend — those still occupy that driver/vehicle/shift, so a NEW cell
-            // colliding with them is a real double-booking. But a clash between two LOCKED
-            // trips is immutable history the dispatcher can't fix, so it must never block the
-            // save (that was the false flag). A conflict is reported only when at least one
-            // side is editable, and only the editable cells are returned for highlighting.
-            // A resent cell that matches its stored trip exactly (same bus + driver) is
-            // UNCHANGED this save — already-accepted history, not a fresh decision. Treat it
-            // as locked so it can't, on its own, re-raise a conflict the dispatcher already
-            // overrode. Only a genuinely changed/new cell counts as editable.
+            // Conflicts are validated against the schedule as it will be after this save:
+            // the submitted cells, plus any locked trip the grid did not resend, since those
+            // still occupy their driver, vehicle and shift.
+            //
+            // A clash between two locked trips is history the dispatcher cannot change, so
+            // it never blocks a save. A conflict is reported only when at least one side is
+            // editable, and only the editable cells come back for highlighting.
+            //
+            // A resent cell identical to its stored trip is unchanged by this save, so it
+            // counts as locked. Otherwise it could re-raise a conflict the dispatcher has
+            // already overridden. Only a genuinely new or changed cell is editable.
             var submittedIds = cells.Where(c => !string.IsNullOrEmpty(c.TripId)).Select(c => c.TripId).ToHashSet();
             var effective = cells.Select(c =>
             {
@@ -136,12 +136,12 @@ namespace FleetWise.Controllers
                     Date = t.Date.ToString("yyyy-MM-dd"),
                 }, locked: true)));
 
-            // Conflicts are advisory: the dispatcher can override them via the confirmation
-            // modal (req.Override). Only block when they have NOT acknowledged the override.
+            // Conflicts are advisory and can be overridden from the confirmation modal, so
+            // the save is blocked only until that acknowledgement arrives.
             var conflicts = FindConflicts(effective);
             if (!req.Override && conflicts.Count > 0) return BadRequest(new { conflicts });
 
-            // Trip ids that survive this save (existing rows kept/updated).
+            // Trips that survive this save, whether kept as they are or updated.
             var keptIds = new HashSet<string>();
             int added = 0, changed = 0, deleted = 0;   // counted for the audit line
 
@@ -155,7 +155,7 @@ namespace FleetWise.Controllers
                 if (!string.IsNullOrEmpty(c.TripId) && existingById.TryGetValue(c.TripId, out var trip))
                 {
                     keptIds.Add(trip.TripId);
-                    // Locked once the trip has started — never touch it.
+                    // A trip that has started is locked and never modified.
                     if (trip.TripStatus == "Active" || trip.TripStatus == "Completed") continue;
                     if (trip.VehicleId == c.VehicleId && trip.DriverId == c.DriverId) continue; // unchanged
 
@@ -168,7 +168,7 @@ namespace FleetWise.Controllers
                 }
                 else
                 {
-                    // New bus on this route/shift/day.
+                    // A new bus for this route, shift and day.
                     await _supabase.From<Trip>().Insert(new Trip
                     {
                         Date = DateTime.SpecifyKind(date, DateTimeKind.Utc),
@@ -185,7 +185,7 @@ namespace FleetWise.Controllers
                 }
             }
 
-            // Removed lanes -> delete trips no longer present (skip started ones)
+            // Trips no longer present in the grid are deleted, except those already started.
             foreach (var t in existing)
             {
                 if (keptIds.Contains(t.TripId)) continue;
@@ -197,8 +197,8 @@ namespace FleetWise.Controllers
                 deleted++;
             }
 
-            // A planner save is one click that can rewrite a whole week, so the counts go
-            // in the line. Nothing changed means nothing to log.
+            // One planner save can rewrite a whole week, so the audit entry carries the
+            // counts. A save that changed nothing is not recorded.
             if (added + changed + deleted > 0)
             {
                 await _audit.WriteAsync("schedule_saved",
@@ -211,10 +211,15 @@ namespace FleetWise.Controllers
             return Ok();
         }
 
-        // Conflicts in the effective schedule. A conflict is reported ONLY when at least one
-        // participating cell is editable (locked == false); two locked trips clashing is
-        // immutable history and must never block the save. Each conflict carries the editable
-        // cells involved so the UI can highlight exactly what the dispatcher must fix.
+        /// <summary>
+        /// Finds conflicts in the schedule as it will be after the save.
+        /// </summary>
+        /// <remarks>
+        /// A conflict is reported only when at least one cell involved is editable. Two
+        /// locked trips clashing is history that cannot be fixed, so it never blocks a
+        /// save. Each conflict carries the editable cells so the planner can highlight
+        /// exactly what needs changing.
+        /// </remarks>
         private static List<ConflictDto> FindConflicts(List<(ScheduleCellInput cell, bool locked)> all)
         {
             var results = new List<ConflictDto>();
@@ -226,7 +231,7 @@ namespace FleetWise.Controllers
             static CellRef Ref((ScheduleCellInput cell, bool locked) x) =>
                 new() { RouteId = x.cell.RouteId, Shift = x.cell.Shift, Date = x.cell.Date };
 
-            // ── Per (day, shift): a driver or vehicle booked twice ──
+            // Within one day and shift: a driver or vehicle booked twice.
             foreach (var g in valid.GroupBy(x => new { x.cell.Date, x.cell.Shift }))
             {
                 foreach (var dup in g.GroupBy(x => x.cell.DriverId).Where(x => x.Count() > 1))
@@ -252,7 +257,8 @@ namespace FleetWise.Controllers
                 }
             }
 
-            // ── Per driver: no two CONSECUTIVE shifts (same-day adjacency or evening->next morning) ──
+            // Per driver: no two consecutive shifts, whether adjacent on the same day or an
+            // evening shift followed by the next morning.
             foreach (var g in valid.GroupBy(x => x.cell.DriverId))
             {
                 var byDayShift = g.GroupBy(x => (Day: DateTime.Parse(x.cell.Date).Date, x.cell.Shift))
