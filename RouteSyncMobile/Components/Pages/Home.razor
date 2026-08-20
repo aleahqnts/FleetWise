@@ -238,9 +238,8 @@ else
     // the bus is grounded and needs to be told what happens next, not to phone in.
     private string GroundedMessage =>
         checklistBlocked
-            ? "This bus failed a critical inspection item and is out of service. "
-              + "Your operator will reassign a bus or cancel the trip. Wait here for an update."
-            : "This bus is out of service. Contact your dispatcher for a reassignment before driving.";
+            ? "This bus is out of service after a failed inspection. Wait here for a reassignment."
+            : "This bus is out of service. Ask your dispatcher for a reassignment.";
 
     private string Greeting
     {

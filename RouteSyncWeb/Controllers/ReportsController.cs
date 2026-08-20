@@ -99,7 +99,7 @@ namespace FleetWise.Controllers
             int delayedTrips = filtered.Count(t => DeriveStatus(t) == "Missed");
 
             int totalPassengers = filtered.Sum(Passengers);
-            decimal totalRevenue = filtered.Sum(t => t.EstimatedRevenue);
+            decimal totalRevenue = filtered.Where(Earned).Sum(t => t.EstimatedRevenue);
 
             var prevDay = anchor.AddDays(-1);
             var prevDayTrips = allTrips.Where(t =>
@@ -107,7 +107,7 @@ namespace FleetWise.Controllers
                 t.Date.Date == prevDay).ToList();
 
             int prevPassengers = prevDayTrips.Sum(Passengers);
-            decimal prevRevenue = prevDayTrips.Sum(t => t.EstimatedRevenue);
+            decimal prevRevenue = prevDayTrips.Where(Earned).Sum(t => t.EstimatedRevenue);
 
             // Summary cards (passenger / revenue).
             var passengerSummary = BuildSummary(allTrips, Passengers, routeNames, routeId, anchor, passengerPeriod, isPassenger: true);
@@ -160,8 +160,8 @@ namespace FleetWise.Controllers
             var current = allTrips.Where(t => InRoute(t) && t.Date.Date >= start && t.Date.Date <= end).ToList();
             var previous = allTrips.Where(t => InRoute(t) && t.Date.Date >= prevStart && t.Date.Date <= prevEnd).ToList();
 
-            decimal total = isPassenger ? current.Sum(passengers) : current.Sum(t => t.EstimatedRevenue);
-            decimal prevTotal = isPassenger ? previous.Sum(passengers) : previous.Sum(t => t.EstimatedRevenue);
+            decimal total = isPassenger ? current.Sum(passengers) : current.Where(Earned).Sum(t => t.EstimatedRevenue);
+            decimal prevTotal = isPassenger ? previous.Sum(passengers) : previous.Where(Earned).Sum(t => t.EstimatedRevenue);
 
             double deltaPct = prevTotal == 0
                 ? (total == 0 ? 0 : 100)
@@ -176,7 +176,7 @@ namespace FleetWise.Controllers
             {
                 var day = weekStart.AddDays(i);
                 var dayTrips = allTrips.Where(t => InRoute(t) && t.Date.Date == day);
-                weekData[i] = isPassenger ? dayTrips.Sum(passengers) : dayTrips.Sum(t => t.EstimatedRevenue);
+                weekData[i] = isPassenger ? dayTrips.Sum(passengers) : dayTrips.Where(Earned).Sum(t => t.EstimatedRevenue);
             }
 
             // The three busiest routes in the selected period.
@@ -186,7 +186,7 @@ namespace FleetWise.Controllers
                 {
                     routeId = g.Key,
                     name = routeNames.TryGetValue(g.Key, out var rn) ? rn : $"Route {g.Key:00}",
-                    value = isPassenger ? (decimal)g.Sum(passengers) : g.Sum(t => t.EstimatedRevenue)
+                    value = isPassenger ? (decimal)g.Sum(passengers) : g.Where(Earned).Sum(t => t.EstimatedRevenue)
                 })
                 .OrderByDescending(r => r.value)
                 .Take(3)
@@ -444,7 +444,7 @@ namespace FleetWise.Controllers
             {
                 trips = filtered.Count,
                 passengers = filtered.Sum(Passengers),
-                revenue = filtered.Sum(t => t.EstimatedRevenue),
+                revenue = filtered.Where(Earned).Sum(t => t.EstimatedRevenue),
             };
 
             return Json(new { groups, totals });
@@ -905,6 +905,13 @@ namespace FleetWise.Controllers
         private static DateTime ShiftStartAt(Trip t) => t.Date.Date + t.ShiftStartTime;
         private static DateTime ShiftEndAt(Trip t) => t.Date.Date + t.ShiftEndTime
             + (IsOvernight(t) ? TimeSpan.FromDays(1) : TimeSpan.Zero);
+
+        /// <summary>Whether a trip has earned its revenue, which only a finished one has.</summary>
+        /// <remarks>
+        /// estimated_revenue is written when a trip completes, so summing every row trusts
+        /// the column over the trip's state.
+        /// </remarks>
+        private static bool Earned(Trip t) => t.TripStatus == "Completed";
 
         /// <summary>
         /// The trip's status, with missed derived rather than stored: a trip past its shift
