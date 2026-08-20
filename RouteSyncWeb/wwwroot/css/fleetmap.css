@@ -1,3 +1,12 @@
+/* This page opts out of the page transition. The map is a bare grey rectangle until
+   its tiles arrive, so crossing into it holds that emptiness on screen and crossing
+   out of it fades a map that is already drawn. A plain load reads better.
+
+   Loaded after site.css, and the last @view-transition rule in a document wins. */
+@view-transition {
+    navigation: none;
+}
+
 /* FleetMap/Index.cshtml */
     :root {
         --fm-teal: #4AADA8;
