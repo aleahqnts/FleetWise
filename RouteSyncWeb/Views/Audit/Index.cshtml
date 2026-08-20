@@ -13,6 +13,7 @@
         {
             ("login", "Signed in"),
             ("login_failed", "Sign in failed"),
+            ("login_throttled", "Sign in paused"),
             ("logout", "Signed out"),
             ("access_denied", "Blocked from a page"),
         }),
@@ -25,6 +26,13 @@
             ("password_hash_changed", "Password hash changed"),
             ("role_created", "Role created"),
             ("role_updated", "Role changed"),
+        }),
+        ("Forgotten password", new[]
+        {
+            ("password_reset_requested", "Reset code requested"),
+            ("password_reset_verified", "Reset code accepted"),
+            ("password_reset_completed", "Password set after a code"),
+            ("password_reset_failed", "Reset code refused"),
         }),
         ("Cameras", new[]
         {
@@ -85,7 +93,13 @@
             // Plain "Dashboard": an id with no privilege next to it says less than the
             // summary line already does, and invites being read as a rank.
             "admin" => "Dashboard",
-            "user" => e.ActorId is null ? "Driver" : $"Driver #{e.ActorId}",
+            // The driver app signs in under app_driver, so that role is what makes a
+            // row a driver's. A "user" row without it belongs to someone whose role
+            // was not recorded, and naming them a driver would be a guess: the
+            // password reset serves dashboard staff through the same endpoints.
+            "user" when role == "app_driver" => e.ActorId is null ? "Driver" : $"Driver #{e.ActorId}",
+            "user" when hasDashboardRole => $"{role} #{e.ActorId}",
+            "user" => e.ActorId is null ? "Someone" : $"User #{e.ActorId}",
             "device" => e.ActorId ?? "Camera",
             "anon" => "Not signed in",
             _ => "System",
@@ -249,7 +263,7 @@
                             "error" => "Error",
                             _ => "Allowed",
                         };
-                        var hasDetail = e.Changes is not null || e.Ip is not null || e.TargetTable is not null;
+                        var hasDetail = e.HasChanges || e.Ip is not null || e.TargetTable is not null;
 
                         <tr class="au-row @(hasDetail ? "au-row--clickable" : "")"
                             data-detail="@(hasDetail ? $"auDetail{e.Id}" : null)">
@@ -294,11 +308,32 @@
                                                 <div><span>IP address</span>@e.Ip</div>
                                             }
                                         </div>
-                                        @if (e.Changes is not null)
+                                        @if (e.FieldChanges.Count > 0)
                                         {
                                             <div class="au-detail-diff">
                                                 <div class="au-detail-diff-label">What changed</div>
-                                                <pre>@e.Changes</pre>
+                                                <table class="au-diff">
+                                                    <tbody>
+                                                        @foreach (var f in e.FieldChanges)
+                                                        {
+                                                            <tr>
+                                                                <th>@f.Field</th>
+                                                                <td class="au-diff-from">@(f.From ?? "empty")</td>
+                                                                <td class="au-diff-arrow">to</td>
+                                                                <td class="au-diff-to">@(f.To ?? "empty")</td>
+                                                            </tr>
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        }
+                                        else if (e.HasChanges)
+                                        {
+                                            @* A recorded edit whose columns all read the same, such as
+                                               a write that only restamped a timestamp. *@
+                                            <div class="au-detail-diff">
+                                                <div class="au-detail-diff-label">What changed</div>
+                                                <p class="au-diff-none">No column values differ.</p>
                                             </div>
                                         }
                                     </div>
@@ -728,21 +763,56 @@
         margin-bottom: 6px;
     }
 
-    .au-detail-diff pre {
-        margin: 0;
-        padding: 12px 14px;
-        background: var(--au-white);
-        border: 1px solid var(--au-border);
-        border-radius: 10px;
-        font-family: Consolas, 'Courier New', monospace;
-        font-size: 0.76rem;
-        line-height: 1.5;
-        color: #4A5568;
-        max-height: 320px;
-        overflow: auto;
-        white-space: pre-wrap;
-        word-break: break-word;
+
+    /* One row per column that differs. */
+    .au-diff {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
     }
+
+        .au-diff th {
+            text-align: left;
+            font-weight: 600;
+            color: var(--au-muted);
+            padding: 6px 12px 6px 0;
+            white-space: nowrap;
+            vertical-align: top;
+        }
+
+        .au-diff td {
+            padding: 6px 8px 6px 0;
+            color: #2D3748;
+            vertical-align: top;
+            word-break: break-word;
+        }
+
+        .au-diff tr + tr th,
+        .au-diff tr + tr td {
+            border-top: 1px solid var(--au-border);
+        }
+
+    .au-diff-from {
+        color: var(--au-muted);
+        text-decoration: line-through;
+    }
+
+    .au-diff-arrow {
+        color: var(--au-muted);
+        width: 1%;
+        white-space: nowrap;
+    }
+
+    .au-diff-to {
+        font-weight: 600;
+    }
+
+    .au-diff-none {
+        margin: 0;
+        font-size: 0.8rem;
+        color: var(--au-muted);
+    }
+
 
     /* Pager. */
     .au-pager {

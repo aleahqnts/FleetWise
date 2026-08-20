@@ -19,6 +19,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { CORS_HEADERS, hmacHex, json } from "../_shared/auth.ts";
 import { audit, clientIp } from "../_shared/audit.ts";
 import { sendMail } from "../_shared/email.ts";
+import { actorFor } from "../_shared/actor.ts";
 
 const DRIVER_ROLE_ID = 2;
 const CODE_TTL_MIN = 10;
@@ -152,29 +153,32 @@ Deno.serve(async (req) => {
   if (error) return json(500, { error: "Lookup failed" });
 
   const user = rows?.[0];
+  // Recorded from the account's role, since the endpoint serves both surfaces.
+  const actor = user ? await actorFor(service, user.role_id) : null;
 
   // Everything below answers 200. Only the audit row says what really happened.
   const quietly = async (reason: string) => {
     await audit(req, {
       action: "password_reset_requested",
-      actorType: user ? "user" : "anon",
+      actorType: actor?.actorType ?? "anon",
+      actorRole: actor?.actorRole ?? null,
       actorId: user?.user_id ?? null,
       targetTable: "users",
       targetId: user?.user_id ?? null,
       outcome: "denied",
-      summary: `No reset code sent for ${email} (${reason})`,
+      summary: `${reason}. No reset code sent for ${email}.`,
     });
     return ok();
   };
 
-  if (!user) return await quietly("no such account");
-  if (user.account_status !== "Activated") return await quietly(`account ${user.account_status}`);
-  if (!user.email_address) return await quietly("no address on file");
+  if (!user) return await quietly("No account uses this address");
+  if (user.account_status !== "Activated") return await quietly(`The account is ${user.account_status}`);
+  if (!user.email_address) return await quietly("The account has no email address on file");
 
   if (await countSince("user_id", user.user_id, PER_USER.minutes) >= PER_USER.max) {
     // Deliberately not a 429: this limit is per account, so answering it
     // differently from an unknown address would confirm the account exists.
-    return await quietly("per-account limit reached");
+    return await quietly("This account has asked for too many codes recently");
   }
 
   const code = generateCode();
@@ -188,7 +192,7 @@ Deno.serve(async (req) => {
     expires_at: expiresAt.toISOString(),
     ip,
   });
-  if (insErr) return await quietly("could not record the code");
+  if (insErr) return await quietly("The code could not be recorded");
 
   const mail = codeMail(code, user.first_name, user.role_id, expiresAt);
   const sent = await sendMail({
@@ -201,7 +205,8 @@ Deno.serve(async (req) => {
 
   await audit(req, {
     action: "password_reset_requested",
-    actorType: "user",
+    actorType: actor!.actorType,
+    actorRole: actor!.actorRole,
     actorId: user.user_id,
     targetTable: "users",
     targetId: user.user_id,

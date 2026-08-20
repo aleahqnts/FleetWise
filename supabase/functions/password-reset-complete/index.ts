@@ -11,6 +11,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { CORS_HEADERS, hashAspNetV3, json, verifyJwt } from "../_shared/auth.ts";
 import { passwordProblem } from "../_shared/password.ts";
 import { audit } from "../_shared/audit.ts";
+import { actorFor } from "../_shared/actor.ts";
 
 // Mirrors FleetWise.Services.PasswordPolicy.TemporaryPassword. Landing on this
 // value would send the driver straight back to the forced-change screen on the
@@ -67,6 +68,7 @@ Deno.serve(async (req) => {
     await audit(req, {
       action: "password_reset_failed",
       actorType: "user",
+      actorRole: null,
       actorId: userId,
       targetTable: "users",
       targetId: userId,
@@ -78,13 +80,17 @@ Deno.serve(async (req) => {
 
   const { data: userRows, error: userErr } = await service
     .from("users")
-    .select("user_id, account_status")
+    .select("user_id, role_id, account_status")
     .eq("user_id", userId)
     .limit(1);
   if (userErr) return json(500, { error: "Lookup failed" });
-  if (userRows?.[0]?.account_status !== "Activated") {
+  const user = userRows?.[0];
+  if (user?.account_status !== "Activated") {
     return json(401, { error: "Start the reset again." });
   }
+
+  // Recorded from the account's role, since the endpoint serves both surfaces.
+  const actor = await actorFor(service, user.role_id);
 
   const newHash = await hashAspNetV3(newPwd);
   const { error: pwErr } = await service
@@ -106,11 +112,12 @@ Deno.serve(async (req) => {
   // row adds who asked and by which route.
   await audit(req, {
     action: "password_reset_completed",
-    actorType: "user",
+    actorType: actor.actorType,
+    actorRole: actor.actorRole,
     actorId: userId,
     targetTable: "users",
     targetId: userId,
-    summary: `Driver ${userId} set a new password after an emailed code`,
+    summary: `User ${userId} set a new password after an emailed code`,
   });
 
   return json(200, { ok: true });

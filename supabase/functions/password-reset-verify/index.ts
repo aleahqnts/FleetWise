@@ -19,6 +19,7 @@ import {
   nowSec,
 } from "../_shared/auth.ts";
 import { audit } from "../_shared/audit.ts";
+import { actorFor } from "../_shared/actor.ts";
 
 const MAX_ATTEMPTS = 5;
 const TOKEN_TTL_MIN = 10;
@@ -46,10 +47,13 @@ Deno.serve(async (req) => {
   }
   if (!email || !otp) return json(400, { error: "email and otp required" });
 
+  let actor: { actorType: string; actorRole: string | null } | null = null;
+
   const refuse = async (reason: string, userId?: number) => {
     await audit(req, {
       action: "password_reset_failed",
-      actorType: userId ? "user" : "anon",
+      actorType: actor?.actorType ?? (userId ? "user" : "anon"),
+      actorRole: actor?.actorRole ?? null,
       actorId: userId ?? null,
       targetTable: "users",
       targetId: userId ?? null,
@@ -61,13 +65,14 @@ Deno.serve(async (req) => {
 
   const { data: userRows, error: userErr } = await service
     .from("users")
-    .select("user_id, first_name, last_name, account_status")
+    .select("user_id, first_name, last_name, role_id, account_status")
     .eq("email_address", email)
     .limit(1);
   if (userErr) return json(500, { error: "Lookup failed" });
 
   const user = userRows?.[0];
   if (!user) return await refuse("no such account");
+  actor = await actorFor(service, user.role_id);
   if (user.account_status !== "Activated") {
     return await refuse(`account ${user.account_status}`, user.user_id);
   }
@@ -123,7 +128,8 @@ Deno.serve(async (req) => {
 
   await audit(req, {
     action: "password_reset_verified",
-    actorType: "user",
+    actorType: actor.actorType,
+    actorRole: actor.actorRole,
     actorId: user.user_id,
     targetTable: "users",
     targetId: user.user_id,

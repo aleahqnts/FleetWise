@@ -64,6 +64,7 @@
         <table class="us-table">
             <thead>
                 <tr>
+                    <th>ID</th>
                     <th>Name</th>
                     <th>Email</th>
                     <th>Role</th>
@@ -73,7 +74,7 @@
             </thead>
             <tbody id="usersTableBody">
                 <tr>
-                    <td colspan="5" class="us-table-loading">
+                    <td colspan="6" class="us-table-loading">
                         <div class="us-spinner"></div>
                     </td>
                 </tr>
@@ -168,7 +169,7 @@
             .then(function (response) { return response.text(); })
             .then(function (html) { tbody.innerHTML = html; })
             .catch(function () {
-                tbody.innerHTML = '<tr><td colspan="5" class="us-empty">Failed to load users.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="us-empty">Failed to load users.</td></tr>';
             });
     }
 </script>
@@ -406,6 +407,15 @@
 
     .us-table tbody tr:last-child td {
         border-bottom: none;
+    }
+
+    /* The account number, written the way the audit log names an actor, so a row
+       there can be matched to a person here. */
+    .us-id {
+        font-variant-numeric: tabular-nums;
+        color: var(--us-muted);
+        white-space: nowrap;
+        width: 1%;
     }
 
     .us-table tbody tr:hover {
