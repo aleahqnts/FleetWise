@@ -394,13 +394,13 @@
                 const next = SHIFT_ADJ[r.shift];
                 if (next && map[r.date + '|' + next] && (r.dirty || map[r.date + '|' + next].dirty)) {
                     flag(r.el); flag(map[r.date + '|' + next].el);
-                    messages.push(`This driver is assigned to consecutive ${r.shift} and ${next} shifts on ${schFmtDate(r.date)}, with no rest between them.`);
+                    messages.push(`This driver is assigned to consecutive ${r.shift} and ${next} shifts on ${schFmtDate(r.date)}.`);
                 }
                 // Evening -> next-day Morning
                 if (r.shift === 'Evening') {
                     const tomo = new Date(r.date); tomo.setDate(tomo.getDate() + 1);
                     const tk = tomo.toISOString().slice(0, 10) + '|Morning';
-                    if (map[tk] && (r.dirty || map[tk].dirty)) { flag(r.el); flag(map[tk].el); messages.push(`This driver finishes the Evening shift on ${schFmtDate(r.date)} and starts the Morning shift the next day, with no rest between them.`); }
+                    if (map[tk] && (r.dirty || map[tk].dirty)) { flag(r.el); flag(map[tk].el); messages.push(`This driver finishes the Evening shift on ${schFmtDate(r.date)} and starts the Morning shift the next day.`); }
                 }
             });
         });
