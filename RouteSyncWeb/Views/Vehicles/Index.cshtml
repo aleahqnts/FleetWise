@@ -203,9 +203,6 @@
         <p id="vhActionDesc" class="vh-action-desc"></p>
         <p id="vhActionError" class="vh-action-error" style="display:none;"></p>
         <textarea id="vhActionNote" class="vh-form-input vh-action-note" rows="3" placeholder="Reason / details…"></textarea>
-        <label id="vhActionMaintWrap" class="vh-action-maint" style="display:none;">
-            <input type="checkbox" id="vhActionMaint" /> Send to maintenance (Under Repair)
-        </label>
         <div class="vh-action-btns">
             <button type="button" class="vh-btn vh-btn--outline" onclick="vhActionCancel()">Cancel</button>
             <button type="button" class="vh-btn vh-btn--primary" id="vhActionConfirm">Confirm</button>
@@ -334,17 +331,57 @@
 
     // History is rendered in full and trimmed here, so changing how much is shown costs
     // no round trip.
-    function vhHistoryShow(size) {
-        const list = document.getElementById('vhHistoryList');
+    // Pages a list that is already rendered: every row is in the DOM, so turning a page
+    // only changes which of them are visible. Used by the history and by past orders.
+    function vhPage(listId, pagerId, perPage, page) {
+        const list = document.getElementById(listId);
         if (!list) return;
 
         const rows = Array.from(list.children);
-        const limit = Number(size) || rows.length;
-        rows.forEach(function (row, i) { row.style.display = i < limit ? '' : 'none'; });
+        const pages = Math.max(1, Math.ceil(rows.length / perPage));
+        const current = Math.min(Math.max(1, page || 1), pages);
+        const from = (current - 1) * perPage;
 
-        const more = document.getElementById('vhHistoryMore');
-        const hidden = rows.length - Math.min(limit, rows.length);
-        if (more) more.textContent = hidden > 0 ? hidden + ' older entries hidden.' : '';
+        rows.forEach(function (row, i) {
+            row.style.display = (i >= from && i < from + perPage) ? '' : 'none';
+        });
+
+        const pager = document.getElementById(pagerId);
+        if (!pager) return;
+        pager.replaceChildren();
+        if (pages < 2) return;
+
+        function step(label, target) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'vh-page';
+            b.textContent = label;
+            if (target === null) b.disabled = true;
+            else b.onclick = function () { vhPage(listId, pagerId, perPage, target); };
+            return b;
+        }
+
+        // The first page, the last, and the ones either side of the current. Everything
+        // else collapses into a gap, so the control stays one line however long the list.
+        const wanted = new Set([1, pages, current, current - 1, current + 1]);
+        pager.appendChild(step('‹', current > 1 ? current - 1 : null));
+
+        let previous = 0;
+        for (let n = 1; n <= pages; n++) {
+            if (!wanted.has(n)) continue;
+            if (n - previous > 1) {
+                const gap = document.createElement('span');
+                gap.className = 'vh-page-gap';
+                gap.textContent = '…';
+                pager.appendChild(gap);
+            }
+            const b = step(String(n), n);
+            if (n === current) b.classList.add('vh-page--on');
+            pager.appendChild(b);
+            previous = n;
+        }
+
+        pager.appendChild(step('›', current < pages ? current + 1 : null));
     }
 
     function vhOpenChecklist() {
@@ -400,7 +437,8 @@
             .then(function (html) {
                 content.innerHTML = html;
                 // The panel arrives with every entry rendered; only the newest few show.
-                vhHistoryShow(5);
+                vhPage('vhHistoryList', 'vhHistoryPager', 6, 1);
+                vhPage('vhPastList', 'vhPastPager', 5, 1);
             })
             .catch(function () {
                 content.innerHTML = '<div class="vh-modal-loading vh-modal-error">Failed to load vehicle details.</div>';
@@ -464,8 +502,6 @@
         document.getElementById('vhActionTitle').textContent = opts.title;
         document.getElementById('vhActionDesc').textContent = opts.desc || '';
         const ta = document.getElementById('vhActionNote'); ta.value = '';
-        document.getElementById('vhActionMaintWrap').style.display = opts.showMaint ? 'flex' : 'none';
-        document.getElementById('vhActionMaint').checked = !!opts.maintDefault;
         vhActionError('');
         const btn = document.getElementById('vhActionConfirm');
         btn.textContent = opts.confirmLabel || 'Confirm';
@@ -478,8 +514,7 @@
             btn.disabled = true;
             try {
                 const note = ta.value.trim();
-                const maint = document.getElementById('vhActionMaint').checked;
-                await opts.onConfirm(note, maint);
+                await opts.onConfirm(note);
             } finally {
                 // On success the overlay is hidden by onConfirm; re-enable so a failed
                 // attempt can be retried.
@@ -601,13 +636,12 @@
     function vhMarkOutOfService(vehicleId, logId) {
         vhOpenAction({
             title: 'Take Out of Service',
-            desc: 'The bus stays flagged and cannot be deployed until it is returned to service or resolved.',
-            confirmLabel: 'Mark Out of Service', danger: true, showMaint: true,
-            onConfirm: async function (note, maint) {
+            desc: 'The bus is flagged and cannot be deployed until it is returned to service or resolved.',
+            confirmLabel: 'Mark Out of Service', danger: true,
+            onConfirm: async function (note) {
                 const params = { vehicleId: vehicleId, outOfService: true };
                 if (logId !== null && logId !== undefined) params.logId = logId;
                 if (note) params.note = note;
-                params.maintenanceStatus = maint ? 'Under Repair' : 'Needs Attention';
                 const r = await vhPostResult('@Url.Action("SetServiceState", "Vehicles")', params);
                 if (r.ok) { vhActionCancel(); vhReloadModal(); loadVehicleRows(); }
                 else { vhActionError(r.message || 'Could not update the service state.'); }
@@ -619,7 +653,7 @@
         vhOpenAction({
             title: outOfService ? 'Take Out of Service' : 'Return to Service',
             desc: outOfService
-                ? 'The bus stays flagged and cannot be deployed until it is returned to service or resolved.'
+                ? 'The bus is flagged and cannot be deployed until it is returned to service or resolved.'
                 : 'Return this bus to service so dispatch can assign it again. Add a note (optional).',
             confirmLabel: outOfService ? 'Mark Out of Service' : 'Return to Service',
             danger: outOfService,
@@ -893,28 +927,59 @@
         padding-left: 27px;
     }
 
-    .vh-hist-controls {
+    /* A whole section folded behind its own header. Closed on open, since the record
+       of a bus is worth reaching for rather than scrolling past. */
+    .vh-fold > summary.vh-section-header { cursor: pointer; list-style: none; }
+    .vh-fold > summary.vh-section-header::-webkit-details-marker { display: none; }
+    .vh-fold > summary.vh-section-header:hover { color: var(--vh-navy); }
+
+    /* The arrow rides with the title so the badge stays at the far edge. */
+    .vh-fold-title::before {
+        content: "›";
+        display: inline-block;
+        margin-right: 9px;
+        font-size: 1rem;
+        line-height: 1;
+        transition: transform .15s ease;
+    }
+
+    .vh-fold[open] > summary .vh-fold-title::before { transform: rotate(90deg); }
+
+    /* Pager, shared by the history and past orders. */
+    .vh-page-bar {
         display: flex;
         align-items: center;
-        gap: 7px;
-        font-size: 0.74rem;
-        font-weight: 400;
-        color: #9AA3B2;
-        text-transform: none;
-        letter-spacing: normal;
+        justify-content: center;
+        gap: 4px;
+        margin-top: 12px;
+        flex-wrap: wrap;
     }
 
-    .vh-hist-size {
-        width: auto;
-        padding: 3px 6px;
-        font-size: 0.74rem;
+    .vh-page {
+        min-width: 26px;
+        height: 26px;
+        padding: 0 6px;
+        border: 1px solid var(--vh-border);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 0.76rem;
+        line-height: 1;
+        cursor: pointer;
     }
 
-    .vh-hist-more {
-        margin-top: 8px;
-        font-size: 0.74rem;
-        color: #9AA3B2;
+    .vh-page:hover:not(:disabled) { background: var(--vh-bg); }
+    .vh-page:disabled { color: #C7CDD8; cursor: default; }
+
+    .vh-page--on {
+        background: var(--vh-navy);
+        border-color: var(--vh-navy);
+        color: #fff;
+        font-weight: 700;
     }
+
+    .vh-page-gap { color: #9AA3B2; font-size: 0.76rem; padding: 0 2px; }
 
     /* Everything recorded against a bus, newest first. */
     .vh-history {
@@ -1332,8 +1397,25 @@
     }
 
     .vh-modal-sm { max-width: 540px; }
+    .vh-modal-lg { max-width: 1120px; }
 
     .vh-modal-body { padding: 0; }
+
+    /* Two equal columns, starting at the top rather than stretching, since the two are
+       rarely the same height. Below 992px there is no room for a second column. */
+    .vh-cols {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-items: start;
+    }
+
+    .vh-col { min-width: 0; }
+    .vh-col + .vh-col { border-left: 1px solid var(--vh-border); }
+
+    @@media (max-width: 991.98px) {
+        .vh-cols { grid-template-columns: minmax(0, 1fr); }
+        .vh-col + .vh-col { border-left: 0; border-top: 1px solid var(--vh-border); }
+    }
 
     .vh-section-header {
         background: var(--vh-bg);
@@ -1548,6 +1630,53 @@
         color: var(--vh-muted);
     }
 
+    /* Past orders. Collapsed to one line each, since the panel above already carries
+       the work that still matters. Built on <details> so it opens without script. */
+    .vh-past { display: flex; flex-direction: column; gap: 6px; }
+
+    .vh-past-order {
+        border: 1px solid var(--vh-border);
+        border-radius: 8px;
+        background: #fff;
+    }
+
+    .vh-past-head {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 9px 12px;
+        cursor: pointer;
+        list-style: none;
+        font-size: 0.82rem;
+    }
+
+    .vh-past-head::-webkit-details-marker { display: none; }
+
+    /* The arrow is drawn rather than left to the browser, which renders the native
+       marker differently in each one. */
+    .vh-past-head::before {
+        content: "›";
+        color: var(--vh-muted);
+        font-size: 1rem;
+        line-height: 1;
+        transition: transform .15s ease;
+    }
+
+    .vh-past-order[open] > .vh-past-head::before { transform: rotate(90deg); }
+    .vh-past-order[open] > .vh-past-head { border-bottom: 1px solid var(--vh-border); }
+
+    .vh-past-head:hover { background: var(--vh-bg); }
+    .vh-past-when { color: var(--vh-muted); font-size: 0.72rem; white-space: nowrap; }
+
+    .vh-past-sum {
+        color: var(--vh-text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .vh-past-body { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+
     /* Modal footer / badge inside section header. */
     .vh-section-badge {
         display: inline-flex;
@@ -1607,7 +1736,6 @@
     }
 
     .vh-action-note { width: 100%; resize: vertical; }
-    .vh-action-maint { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: var(--vh-text); cursor: pointer; }
     .vh-action-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 
     .vh-oos-banner {

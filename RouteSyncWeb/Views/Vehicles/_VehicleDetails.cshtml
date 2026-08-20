@@ -28,275 +28,392 @@
 </div>
 <div class="modal-body vh-modal-body">
 
-    @* Vehicle Profile *@
-    <div class="vh-section-header">Vehicle Profile</div>
-    <div class="vh-section-body">
-        <div class="vh-detail-row"><strong>Plate Number:</strong> @Model.PlateNumber</div>
-        <div class="vh-detail-row"><strong>Route:</strong> @Model.RouteName</div>
-    </div>
-
-    @* Passenger counter camera, with remote calibration for any bus and no trip required. *@
-    <div class="vh-section-header">Passenger Counter</div>
-    <div class="vh-section-body">
-        @if (!string.IsNullOrEmpty(Model.CounterDeviceId))
-        {
-            <div class="vh-detail-row"><strong>Counter Phone:</strong> @Model.CounterDeviceId</div>
-            <div class="vh-review-actions" style="margin-top:8px;">
-                <button type="button" class="vh-btn vh-btn--primary" onclick="camOpen('@Model.VehicleId')">Calibrate Camera</button>
+    @* Two columns: what the bus is and how it was last found on the left, the
+       work outstanding and the record of it on the right. One column below 992px. *@
+    <div class="vh-cols">
+        <div class="vh-col">
+            @* Vehicle Profile *@
+            <div class="vh-section-header">Vehicle Profile</div>
+            <div class="vh-section-body">
+                <div class="vh-detail-row"><strong>Plate Number:</strong> @Model.PlateNumber</div>
+                <div class="vh-detail-row"><strong>Route:</strong> @Model.RouteName</div>
             </div>
-        }
-        else
-        {
-            <div class="vh-detail-row vh-detail-empty">No counter phone is bound to this bus.</div>
-        }
-    </div>
 
-    @* Inspection Log *@
-    <div class="vh-section-header">
-        <span>Inspection Log</span>
-        @if (Model.HasInspection)
-        {
-            <span class="vh-section-badge @InspectionClass(Model.InspectionBadge)">@Model.InspectionBadge</span>
-        }
-    </div>
-    <div class="vh-section-body">
-        @if (Model.HasInspection)
-        {
-            <div class="vh-detail-row"><strong>Reported By:</strong> @Model.ReportedBy</div>
-            <div class="vh-detail-row"><strong>Time of Report:</strong> @Model.TimeOfReport</div>
-            <div class="vh-detail-row"><strong>Issue:</strong> @Model.Issue</div>
-            @if (Model.InspectionChecklist.Count > 0)
-            {
-                <button type="button" class="vh-btn vh-btn--outline vh-btn--sm"
-                        onclick="vhOpenChecklist()">View inspection checklist</button>
-
-                @* Held here and moved into the checklist dialog on demand, so the
-                   markup is built once with the rest of the details. *@
-                <template id="vhChecklistSource">
-                    @{
-                        var allItems = Model.InspectionChecklist.SelectMany(g => g.Items).ToList();
-                        var failedCount = allItems.Count(i => !i.Passed);
-                    }
-                    <div class="vh-cl-summary @(failedCount == 0 ? "vh-cl-summary--pass" : "vh-cl-summary--fail")">
-                        @if (failedCount == 0)
-                        {
-                            <text>All @allItems.Count items passed.</text>
-                        }
-                        else
-                        {
-                            <text>@failedCount of @allItems.Count items failed.</text>
-                        }
-                        <span class="vh-cl-when">@Model.TimeOfReport &middot; @Model.ReportedBy</span>
+            @* Passenger counter camera, with remote calibration for any bus and no trip required. *@
+            <div class="vh-section-header">Passenger Counter</div>
+            <div class="vh-section-body">
+                @if (!string.IsNullOrEmpty(Model.CounterDeviceId))
+                {
+                    <div class="vh-detail-row"><strong>Counter Phone:</strong> @Model.CounterDeviceId</div>
+                    <div class="vh-review-actions" style="margin-top:8px;">
+                        <button type="button" class="vh-btn vh-btn--primary" onclick="camOpen('@Model.VehicleId')">Calibrate Camera</button>
                     </div>
+                }
+                else
+                {
+                    <div class="vh-detail-row vh-detail-empty">No counter phone is bound to this bus.</div>
+                }
+            </div>
 
-                    @foreach (var grp in Model.InspectionChecklist)
+            @* Inspection Log *@
+            <div class="vh-section-header">
+                <span>Inspection Log</span>
+                @if (Model.HasInspection)
+                {
+                    <span class="vh-section-badge @InspectionClass(Model.InspectionBadge)">@Model.InspectionBadge</span>
+                }
+            </div>
+            <div class="vh-section-body">
+                @if (Model.HasInspection)
+                {
+                    <div class="vh-detail-row"><strong>Reported By:</strong> @Model.ReportedBy</div>
+                    <div class="vh-detail-row"><strong>Time of Report:</strong> @Model.TimeOfReport</div>
+                    <div class="vh-detail-row"><strong>Issue:</strong> @Model.Issue</div>
+                    @if (Model.InspectionChecklist.Count > 0)
                     {
-                        <div class="vh-cl-group">
-                            <div class="vh-cl-group-label">@grp.Section</div>
-                            <ul class="vh-cl-list">
-                                @foreach (var item in grp.Items)
-                                {
-                                    <li class="@(item.Passed ? "vh-cl--pass" : "vh-cl--fail")">
-                                        <span class="vh-cl-mark">@(item.Passed ? "✓" : "✕")</span>
-                                        <span class="vh-cl-name">@item.Item</span>
-                                        @if (item.IsCritical)
-                                        {
-                                            <span class="vh-cl-crit" title="Blocks a trip if it fails">Critical</span>
-                                        }
-                                    </li>
-                                }
-                            </ul>
-                        </div>
-                    }
-                </template>
-            }
-        }
-        else
-        {
-            <div class="vh-detail-row vh-detail-empty">No inspection logged for this vehicle.</div>
-        }
-    </div>
+                        <button type="button" class="vh-btn vh-btn--outline vh-btn--sm"
+                                onclick="vhOpenChecklist()">View inspection checklist</button>
 
-    @* Maintenance Log *@
-    <div class="vh-section-header">
-        <span>Maintenance Log</span>
-        <span class="vh-maint-head-right">
-            <button type="button" class="vh-btn-mini" onclick="vhScheduleMaintenance('@Model.VehicleId')">+ Schedule Maintenance</button>
-            <span class="vh-section-badge @MaintClass(Model.CurrentStatus)">@Model.CurrentStatus</span>
-        </span>
-    </div>
-    <div class="vh-section-body">
-        @* Only what is wrong now. Anything closed has moved to the history below, and
-           the status is already on the header badge. *@
-        @if (Model.OpenIncident is not null)
-        {
-            @* The order is named by its date, not by one of its faults: the list below
-               is what it actually holds. *@
-            <div class="vh-tl-date">Opened @Model.OpenIncident.Date</div>
-
-            @* The faults being worked. Open ones lead, since they are the work left. *@
-            @if (Model.OpenOrderItems.Count > 0)
-            {
-                <ul class="vh-items">
-                    @foreach (var item in Model.OpenOrderItems)
-                    {
-                        <li class="@(item.IsOpen ? "vh-item--open" : "vh-item--closed")">
-                            <span class="vh-item-mark">@(item.IsOpen ? "○" : "✓")</span>
-                            <span class="vh-item-label">@item.Label</span>
-                            @if (item.IsCritical)
-                            {
-                                <span class="vh-item-crit" title="Grounds the bus until it is fixed">Critical</span>
+                        @* Held here and moved into the checklist dialog on demand, so the
+                           markup is built once with the rest of the details. *@
+                        <template id="vhChecklistSource">
+                            @{
+                                var allItems = Model.InspectionChecklist.SelectMany(g => g.Items).ToList();
+                                var failedCount = allItems.Count(i => !i.Passed);
                             }
-                            @if (!item.IsOpen)
-                            {
-                                <span class="vh-item-outcome">@item.Outcome</span>
-                            }
-                        </li>
-                        @if (!item.IsOpen && !string.IsNullOrWhiteSpace(item.Note))
-                        {
-                            <li class="vh-item-note">@item.Note</li>
-                        }
-                    }
-                </ul>
-                <div class="vh-item-summary">
-                    @if (Model.OpenItemCount == 0)
-                    {
-                        <text>Everything on this order is closed.</text>
-                    }
-                    else
-                    {
-                        <text>@Model.OpenItemCount of @Model.OpenOrderItems.Count still open.</text>
-                    }
-                </div>
-
-                <button type="button" class="vh-btn vh-btn--primary vh-btn--sm"
-                        onclick="vhOpenItems(@Model.OpenLogId)">Update Maintenance</button>
-
-                @* Rendered with the details and cloned into the update dialog, so both
-                   read from one list. *@
-                <template id="vhItemsSource">
-                    @foreach (var item in Model.OpenOrderItems)
-                    {
-                        var state = item.IsOpen ? "open" : item.Outcome == "Fixed" ? "fixed" : "dismissed";
-                        <div class="vh-item-edit" data-item-id="@item.ItemId" data-state="@state">
-                            <div class="vh-item-edit-top">
-                                <label class="vh-item-check">
-                                    <input type="checkbox" checked="@(state == "fixed")"
-                                           onchange="vhItemsTick(this.closest('.vh-item-edit'))" />
-                                    <span class="vh-item-label">@item.Label</span>
-                                </label>
-                                @if (item.IsCritical)
+                            <div class="vh-cl-summary @(failedCount == 0 ? "vh-cl-summary--pass" : "vh-cl-summary--fail")">
+                                @if (failedCount == 0)
                                 {
-                                    <span class="vh-item-crit" title="Can only be closed by fixing it">Critical</span>
+                                    <text>All @allItems.Count items passed.</text>
                                 }
                                 else
                                 {
-                                    <button type="button" class="vh-item-dismiss"
-                                            onclick="vhItemsDismiss(this.closest('.vh-item-edit'))">Not an issue</button>
+                                    <text>@failedCount of @allItems.Count items failed.</text>
                                 }
+                                <span class="vh-cl-when">@Model.TimeOfReport &middot; @Model.ReportedBy</span>
                             </div>
-                            <div class="vh-item-why" style="display:none;">
-                                <input type="text" class="vh-form-input" maxlength="200"
-                                       value="@item.Note" placeholder="Why was this not an issue?" />
-                            </div>
-                        </div>
+
+                            @foreach (var grp in Model.InspectionChecklist)
+                            {
+                                <div class="vh-cl-group">
+                                    <div class="vh-cl-group-label">@grp.Section</div>
+                                    <ul class="vh-cl-list">
+                                        @foreach (var item in grp.Items)
+                                        {
+                                            <li class="@(item.Passed ? "vh-cl--pass" : "vh-cl--fail")">
+                                                <span class="vh-cl-mark">@(item.Passed ? "✓" : "✕")</span>
+                                                <span class="vh-cl-name">@item.Item</span>
+                                                @if (item.IsCritical)
+                                                {
+                                                    <span class="vh-cl-crit" title="Blocks a trip if it fails">Critical</span>
+                                                }
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </template>
                     }
-                </template>
-            }
-
-            @if (Model.IncidentThreads.Count > 0)
-            {
-                @foreach (var thread in Model.IncidentThreads)
-                {
-                    <ul class="vh-thread">
-                        @foreach (var n in thread.Notes)
-                        {
-                            <li>
-                                <span class="vh-thread-action">@n.Action</span>
-                                @if (!string.IsNullOrWhiteSpace(n.Note))
-                                {
-                                    <span class="vh-thread-note">@n.Note</span>
-                                }
-                                <span class="vh-thread-meta">@n.AuthorName &middot; @n.When</span>
-                            </li>
-                        }
-                    </ul>
-                }
-            }
-
-        }
-        else
-        {
-            <div class="vh-detail-row vh-detail-empty">Nothing outstanding.</div>
-        }
-    </div>
-
-    @* Flag Review / Actions *@
-    @if (Model.OpenLogId.HasValue || Model.OutOfService || Model.IncidentThreads.Count > 0)
-    {
-        <div class="vh-section-header">
-            <span>Flag Review</span>
-            @if (Model.OutOfService)
-            {
-                <span class="vh-section-badge vh-badge--oos">Out of Service</span>
-            }
-            else if (Model.OpenLogId.HasValue)
-            {
-                <span class="vh-section-badge vh-badge--flagged">Flagged</span>
-            }
-        </div>
-        <div class="vh-section-body">
-            @if (Model.OutOfService)
-            {
-                @if (Model.OpenIncidentCritical)
-                {
-                    <div class="vh-oos-banner">
-                        Grounded by a failed inspection: <strong>@Model.OpenIncidentSummary</strong>.
-                        Any trip on this bus is blocked until it returns to service. Reassign the
-                        trip to another bus from Dispatch, or cancel it, if the repair will not be
-                        done in time.
-                    </div>
                 }
                 else
                 {
-                    <div class="vh-oos-banner">This bus is <strong>Out of Service</strong>. Dispatch cannot assign it.</div>
-                }
-            }
-
-            <p class="vh-action-hint">
-                @if (Model.OutOfService)
-                {
-                    <text>
-                        <strong>Return to Service</strong> un-grounds the bus while leaving its
-                        faults open, for one that is usable but still being watched. Work is
-                        closed under <strong>Update Maintenance</strong> above, which returns
-                        the bus once nothing is left. The driver submits a fresh inspection
-                        either way before a trip can start.
-                    </text>
-                }
-                else
-                {
-                    <text>
-                        <strong>Mark Out of Service</strong> grounds the bus, which blocks
-                        every trip assigned to it. Faults are closed under
-                        <strong>Update Maintenance</strong> above.
-                    </text>
-                }
-            </p>
-
-            <div class="vh-review-actions">
-                @if (Model.OutOfService)
-                {
-                    <button type="button" class="vh-btn vh-btn--outline" onclick="vhSetService('@Model.VehicleId', false, @(Model.OpenLogId?.ToString() ?? "null"))">Return to Service</button>
-                }
-                else
-                {
-                    <button type="button" class="vh-btn vh-btn--danger" onclick="vhMarkOutOfService('@Model.VehicleId', @(Model.OpenLogId?.ToString() ?? "null"))">Mark Out of Service</button>
+                    <div class="vh-detail-row vh-detail-empty">No inspection logged for this vehicle.</div>
                 }
             </div>
 
+            @* Service Status / Actions. Always shown, because a bus is grounded for reasons
+               that never involve a flag, and this is the only place that can be done. *@
+            <div class="vh-section-header">
+                <span>Service Status</span>
+                @if (Model.OutOfService)
+                {
+                    <span class="vh-section-badge vh-badge--oos">Out of Service</span>
+                }
+                else if (Model.OpenLogId.HasValue)
+                {
+                    <span class="vh-section-badge vh-badge--flagged">Flagged</span>
+                }
+                else
+                {
+                    <span class="vh-section-badge vh-badge--ok">In Service</span>
+                }
+            </div>
+            <div class="vh-section-body">
+                @if (Model.OutOfService)
+                {
+                    @if (Model.OpenIncidentCritical)
+                    {
+                        <div class="vh-oos-banner">
+                            Grounded by a failed inspection: <strong>@Model.OpenIncidentSummary</strong>.
+                            Any trip on this bus is blocked until it returns to service. Reassign the
+                            trip to another bus from Dispatch, or cancel it, if the repair will not be
+                            done in time.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="vh-oos-banner">This bus is <strong>Out of Service</strong>. Dispatch cannot assign it.</div>
+                    }
+                }
+
+                <p class="vh-action-hint">
+                    @if (Model.OutOfService)
+                    {
+                        <text>
+                            <strong>Return to Service</strong> un-grounds the bus while leaving its
+                            faults open, for one that is usable but still being watched. Work is
+                            closed under <strong>Update Maintenance</strong> above, which returns
+                            the bus once nothing is left. The driver submits a fresh inspection
+                            either way before a trip can start.
+                        </text>
+                    }
+                    else if (Model.OpenLogId.HasValue)
+                    {
+                        <text>
+                            <strong>Mark Out of Service</strong> grounds the bus, which blocks
+                            every trip assigned to it. Faults are closed under
+                            <strong>Update Maintenance</strong> above.
+                        </text>
+                    }
+                    else
+                    {
+                        <text>
+                            <strong>Mark Out of Service</strong> grounds the bus, which blocks every
+                            trip assigned to it. The reason given opens a maintenance order and
+                            becomes the first thing on it. To book the bus into the workshop
+                            instead, use <strong>Schedule Maintenance</strong> above.
+                        </text>
+                    }
+                </p>
+
+                <div class="vh-review-actions">
+                    @if (Model.OutOfService)
+                    {
+                        <button type="button" class="vh-btn vh-btn--outline" onclick="vhSetService('@Model.VehicleId', false, @(Model.OpenLogId?.ToString() ?? "null"))">Return to Service</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="vh-btn vh-btn--danger" onclick="vhMarkOutOfService('@Model.VehicleId', @(Model.OpenLogId?.ToString() ?? "null"))">Mark Out of Service</button>
+                    }
+                </div>
+            </div>
         </div>
-    }
+
+        <div class="vh-col">
+            @* Maintenance Log *@
+            <div class="vh-section-header">
+                <span>Maintenance Log</span>
+                <span class="vh-maint-head-right">
+                    <button type="button" class="vh-btn-mini" onclick="vhScheduleMaintenance('@Model.VehicleId')">+ Schedule Maintenance</button>
+                    <span class="vh-section-badge @MaintClass(Model.CurrentStatus)">@Model.CurrentStatus</span>
+                </span>
+            </div>
+            <div class="vh-section-body">
+                @* Only what is wrong now. Orders already closed are under Past Orders, and
+                   the status is already on the header badge. *@
+                @if (Model.OpenIncident is not null)
+                {
+                    @* The order is named by its date, not by one of its faults: the list below
+                       is what it actually holds. *@
+                    <div class="vh-tl-date">Opened @Model.OpenIncident.Date</div>
+
+                    @* The faults being worked. Open ones lead, since they are the work left. *@
+                    @if (Model.OpenOrderItems.Count > 0)
+                    {
+                        <ul class="vh-items">
+                            @foreach (var item in Model.OpenOrderItems)
+                            {
+                                <li class="@(item.IsOpen ? "vh-item--open" : "vh-item--closed")">
+                                    <span class="vh-item-mark">@(item.IsOpen ? "○" : "✓")</span>
+                                    <span class="vh-item-label">@item.Label</span>
+                                    @if (item.IsCritical)
+                                    {
+                                        <span class="vh-item-crit" title="Grounds the bus until it is fixed">Critical</span>
+                                    }
+                                    @if (!item.IsOpen)
+                                    {
+                                        <span class="vh-item-outcome">@item.Outcome</span>
+                                    }
+                                </li>
+                                @if (!item.IsOpen && !string.IsNullOrWhiteSpace(item.Note))
+                                {
+                                    <li class="vh-item-note">@item.Note</li>
+                                }
+                            }
+                        </ul>
+                        <div class="vh-item-summary">
+                            @if (Model.OpenItemCount == 0)
+                            {
+                                <text>Everything on this order is closed.</text>
+                            }
+                            else
+                            {
+                                <text>@Model.OpenItemCount of @Model.OpenOrderItems.Count still open.</text>
+                            }
+                        </div>
+
+                        <button type="button" class="vh-btn vh-btn--primary vh-btn--sm"
+                                onclick="vhOpenItems(@Model.OpenLogId)">Update Maintenance</button>
+
+                        @* Rendered with the details and cloned into the update dialog, so both
+                           read from one list. *@
+                        <template id="vhItemsSource">
+                            @foreach (var item in Model.OpenOrderItems)
+                            {
+                                var state = item.IsOpen ? "open" : item.Outcome == "Fixed" ? "fixed" : "dismissed";
+                                <div class="vh-item-edit" data-item-id="@item.ItemId" data-state="@state">
+                                    <div class="vh-item-edit-top">
+                                        <label class="vh-item-check">
+                                            <input type="checkbox" checked="@(state == "fixed")"
+                                                   onchange="vhItemsTick(this.closest('.vh-item-edit'))" />
+                                            <span class="vh-item-label">@item.Label</span>
+                                        </label>
+                                        @if (item.IsCritical)
+                                        {
+                                            <span class="vh-item-crit" title="Can only be closed by fixing it">Critical</span>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="vh-item-dismiss"
+                                                    onclick="vhItemsDismiss(this.closest('.vh-item-edit'))">Not an issue</button>
+                                        }
+                                    </div>
+                                    <div class="vh-item-why" style="display:none;">
+                                        <input type="text" class="vh-form-input" maxlength="200"
+                                               value="@item.Note" placeholder="Why was this not an issue?" />
+                                    </div>
+                                </div>
+                            }
+                        </template>
+                    }
+
+                    @* Only this order's thread. The ones belonging to closed orders are
+                       shown with the orders they belong to, under Past Orders. *@
+                    @if (Model.IncidentThreads.Any(t => t.LogId == Model.OpenLogId))
+                    {
+                        @foreach (var thread in Model.IncidentThreads.Where(t => t.LogId == Model.OpenLogId))
+                        {
+                            <ul class="vh-thread">
+                                @foreach (var n in thread.Notes)
+                                {
+                                    <li>
+                                        <span class="vh-thread-action">@n.Action</span>
+                                        @if (!string.IsNullOrWhiteSpace(n.Note))
+                                        {
+                                            <span class="vh-thread-note">@n.Note</span>
+                                        }
+                                        <span class="vh-thread-meta">@n.AuthorName &middot; @n.When</span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    }
+
+                }
+                else
+                {
+                    <div class="vh-detail-row vh-detail-empty">Nothing outstanding.</div>
+                }
+            </div>
+
+            @* Past Orders: the work already closed, folded away. Each row opens to the
+               faults it carried and what was said while it was open. *@
+            @if (Model.PastOrders.Count > 0)
+            {
+                <details class="vh-fold">
+                    <summary class="vh-section-header">
+                        <span class="vh-fold-title">Past Orders</span>
+                        <span class="vh-section-badge vh-badge--default">@Model.PastOrders.Count</span>
+                    </summary>
+                    <div class="vh-section-body">
+                    <div class="vh-past" id="vhPastList">
+                        @foreach (var order in Model.PastOrders)
+                        {
+                            <details class="vh-past-order">
+                                <summary class="vh-past-head">
+                                    <span class="vh-past-when">@order.Closed</span>
+                                    <span class="vh-past-sum">@order.Summary</span>
+                                </summary>
+                                <div class="vh-past-body">
+                                    <div class="vh-tl-date">Opened @order.Opened, closed @order.Closed</div>
+
+                                    @if (order.Items.Count > 0)
+                                    {
+                                        <ul class="vh-items">
+                                            @foreach (var item in order.Items)
+                                            {
+                                                <li class="vh-item--closed">
+                                                    <span class="vh-item-mark">✓</span>
+                                                    <span class="vh-item-label">@item.Label</span>
+                                                    @if (item.IsCritical)
+                                                    {
+                                                        <span class="vh-item-crit" title="Grounded the bus until it was fixed">Critical</span>
+                                                    }
+                                                    <span class="vh-item-outcome">@item.Outcome</span>
+                                                </li>
+                                                @if (!string.IsNullOrWhiteSpace(item.Note))
+                                                {
+                                                    <li class="vh-item-note">@item.Note</li>
+                                                }
+                                            }
+                                        </ul>
+                                    }
+
+                                    @if (order.Notes.Count > 0)
+                                    {
+                                        <ul class="vh-thread">
+                                            @foreach (var n in order.Notes)
+                                            {
+                                                <li>
+                                                    <span class="vh-thread-action">@n.Action</span>
+                                                    @if (!string.IsNullOrWhiteSpace(n.Note))
+                                                    {
+                                                        <span class="vh-thread-note">@n.Note</span>
+                                                    }
+                                                    <span class="vh-thread-meta">@n.AuthorName &middot; @n.When</span>
+                                                </li>
+                                            }
+                                        </ul>
+                                    }
+                                </div>
+                            </details>
+                        }
+                    </div>
+                    <div class="vh-page-bar" id="vhPastPager"></div>
+                    </div>
+                </details>
+            }
+
+            @* History: everything recorded against this bus, whether or not an incident was
+               involved, so retiring, grounding and returning it all appear in one place. *@
+            <details class="vh-fold">
+                <summary class="vh-section-header">
+                    <span class="vh-fold-title">History</span>
+                </summary>
+                <div class="vh-section-body">
+                @if (Model.History.Count > 0)
+                {
+                    @* Paged, since a long-serving bus carries more entries than anyone
+                       reads at once. *@
+                    <ul class="vh-history" id="vhHistoryList">
+                        @foreach (var h in Model.History)
+                        {
+                            <li class="@(h.Refused ? "vh-history--refused" : "")">
+                                <span class="vh-history-what">@h.What</span>
+                                <span class="vh-history-meta">@h.Who &middot; @h.When</span>
+                            </li>
+                        }
+                    </ul>
+                    <div class="vh-page-bar" id="vhHistoryPager"></div>
+                }
+                else
+                {
+                    <div class="vh-detail-row vh-detail-empty">Nothing recorded for this bus yet.</div>
+                }
+                </div>
+            </details>
+        </div>
+    </div>
 
     @* The work an administrator can book, cloned into the schedule dialog. *@
     <template id="vhCatalogueSource">
@@ -314,44 +431,5 @@
             </div>
         }
     </template>
-
-    @* History: everything recorded against this bus, whether or not an incident was
-       involved, so retiring, grounding and returning it all appear in one place. *@
-    <div class="vh-section-header">
-        <span>History</span>
-        @if (Model.History.Count > 5)
-        {
-            <span class="vh-hist-controls">
-                Show
-                <select id="vhHistSize" class="vh-form-input vh-hist-size" onchange="vhHistoryShow(this.value)">
-                    <option value="5">5</option>
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                    <option value="0">All</option>
-                </select>
-            </span>
-        }
-    </div>
-    <div class="vh-section-body">
-        @if (Model.History.Count > 0)
-        {
-            @* Only the most recent few are shown, since a long-serving bus carries more
-               entries than anyone reads at once. *@
-            <ul class="vh-history" id="vhHistoryList">
-                @foreach (var h in Model.History)
-                {
-                    <li class="@(h.Refused ? "vh-history--refused" : "")">
-                        <span class="vh-history-what">@h.What</span>
-                        <span class="vh-history-meta">@h.Who &middot; @h.When</span>
-                    </li>
-                }
-            </ul>
-            <div class="vh-hist-more" id="vhHistoryMore"></div>
-        }
-        else
-        {
-            <div class="vh-detail-row vh-detail-empty">Nothing recorded for this bus yet.</div>
-        }
-    </div>
 
 </div>

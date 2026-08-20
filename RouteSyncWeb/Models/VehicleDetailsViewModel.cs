@@ -46,6 +46,9 @@ namespace FleetWise.Models
         /// <summary>How many of those are still open, which is what decides whether the order can close.</summary>
         public int OpenItemCount => OpenOrderItems.Count(i => i.IsOpen);
 
+        /// <summary>Orders already closed on this bus, most recently closed first.</summary>
+        public List<PastOrderViewModel> PastOrders { get; set; } = new();
+
         /// <summary>
         /// Everything that has happened to this bus, newest first.
         /// </summary>
@@ -121,6 +124,20 @@ namespace FleetWise.Models
 
     /// <summary>One thing that happened to a bus, as recorded in the audit trail.</summary>
     public sealed record VehicleHistoryEntryViewModel(string When, string Who, string What, bool Refused);
+
+    /// <summary>
+    /// One closed maintenance order: what was on it and what was said while it was open.
+    /// </summary>
+    public class PastOrderViewModel
+    {
+        public int LogId { get; set; }
+        public string Opened { get; set; } = string.Empty;
+        public string Closed { get; set; } = string.Empty;
+        /// <summary>The faults it carried, for the collapsed row.</summary>
+        public string Summary { get; set; } = string.Empty;
+        public List<MaintenanceItemLineViewModel> Items { get; set; } = new();
+        public List<VehicleNoteViewModel> Notes { get; set; } = new();
+    }
 
     /// <summary>One entry in an incident's thread.</summary>
     public class VehicleNoteViewModel
