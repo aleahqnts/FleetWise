@@ -253,6 +253,99 @@ namespace FleetWise.Controllers
             }
         }
 
+        /// <summary>The trips behind one of the figures on a summary card.</summary>
+        /// <remarks>
+        /// A card states a number and nothing else, so an operator reading a bad one has to
+        /// go looking for the trips that made it. Each card answers for itself here, with
+        /// the same day and route the page is already showing.
+        /// </remarks>
+        [HttpGet]
+        public async Task<IActionResult> StatBreakdown(string kind, int? routeId, DateTime? date)
+        {
+            var anchor = (date ?? PhClock.OperationalDay).Date;
+
+            var routesResp = await _supabase.From<BusRoute>().Get();
+            var routeNames = routesResp.Models.ToDictionary(r => r.RouteId, r => r.RouteName);
+
+            var usersResp = await _supabase.From<UserModel>().Get();
+            var userNames = usersResp.Models.ToDictionary(u => u.UserId, u => $"{u.FirstName} {u.LastName}");
+
+            var vehiclesResp = await _supabase.From<Vehicle>().Get();
+            var plates = vehiclesResp.Models.ToDictionary(v => v.VehicleId, v => v.PlateNumber);
+
+            var tripsResp = await _supabase.From<Trip>().Get();
+
+            var day = tripsResp.Models
+                .Where(t => t.Date.Date == anchor)
+                .Where(t => !routeId.HasValue || routeId.Value == 0 || t.RouteId == routeId.Value)
+                .OrderBy(t => t.RouteId)
+                .ThenBy(t => t.ShiftStartTime)
+                .ToList();
+
+            // Each card counts a different thing, so each answers with the trips it counted.
+            var trips = kind switch
+            {
+                "missed" => day.Where(t => DeriveStatus(t) == "Missed").ToList(),
+                "passengers" => day.Where(t => t.TotalBoarded > 0).ToList(),
+                "revenue" => day.Where(Earned).Where(t => t.EstimatedRevenue > 0).ToList(),
+                _ => day.Where(Earned).ToList(),
+            };
+
+            string Route(Trip t) => routeNames.TryGetValue(t.RouteId, out var rn) ? rn : $"Route {t.RouteId}";
+            string Driver(Trip t) => userNames.TryGetValue(t.DriverId, out var dn) ? dn : "N/A";
+            string Bus(Trip t) => plates.TryGetValue(t.VehicleId, out var pn) ? $"{t.VehicleId} · {pn}" : t.VehicleId;
+
+            var (title, blurb, columns) = kind switch
+            {
+                "missed" => ("Missed Trips",
+                    "Shifts that passed without the trip being started or finished.",
+                    new[] { "Trip ID", "Route", "Driver", "Bus", "Shift", "Scheduled" }),
+                "passengers" => ("Passengers Carried",
+                    "Every trip that carried someone, and how many it carried.",
+                    new[] { "Trip ID", "Route", "Driver", "Bus", "Shift", "Status", "Passengers" }),
+                "revenue" => ("Revenue Earned",
+                    "Trips that finished and took a fare. Nothing else earns.",
+                    new[] { "Trip ID", "Route", "Driver", "Bus", "Shift", "Passengers", "Revenue" }),
+                _ => ("Completed Trips",
+                    "Trips that ran their shift through to the end.",
+                    new[] { "Trip ID", "Route", "Driver", "Bus", "Shift", "Passengers", "Revenue" }),
+            };
+
+            Func<Trip, string[]> row = kind switch
+            {
+                "missed" => t => new[] { t.TripId, Route(t), Driver(t), Bus(t), t.ShiftType ?? "", ShiftRange(t) },
+                "passengers" => t => new[] { t.TripId, Route(t), Driver(t), Bus(t), t.ShiftType ?? "", DeriveStatus(t), t.TotalBoarded.ToString("N0") },
+                _ => t => new[] { t.TripId, Route(t), Driver(t), Bus(t), t.ShiftType ?? "", t.TotalBoarded.ToString("N0"), Money(t) },
+            };
+
+            // A total per route, so a figure can be read as where it came from before the
+            // trips themselves are read.
+            var byRoute = trips
+                .GroupBy(Route)
+                .Select(g => new
+                {
+                    route = g.Key,
+                    value = kind switch
+                    {
+                        "passengers" => g.Sum(t => t.TotalBoarded).ToString("N0"),
+                        "revenue" => $"₱{g.Sum(EarnedAmount):N2}",
+                        _ => g.Count().ToString("N0"),
+                    }
+                })
+                .ToList();
+
+            return Json(new
+            {
+                title,
+                blurb,
+                date = anchor.ToString("MMMM d, yyyy"),
+                count = trips.Count,
+                byRoute,
+                columns,
+                rows = trips.Select(row).ToList(),
+            });
+        }
+
         /// <summary>Trip detail for the modal, requested when a row's view button is used.</summary>
         [HttpGet]
         public async Task<IActionResult> TripDetail(string tripId)

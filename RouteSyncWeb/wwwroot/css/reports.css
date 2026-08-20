@@ -652,6 +652,45 @@
     padding: 16px;
     }
 
+    /* A card that answers for its own figure. */
+    .rp-stat-card--click {
+    cursor: pointer;
+    transition: box-shadow .15s ease, transform .15s ease;
+    }
+
+    .rp-stat-card--click:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,.09);
+    transform: translateY(-1px);
+    }
+
+    .rp-stat-card--click:focus-visible {
+    outline: 2px solid var(--rp-teal);
+    outline-offset: 2px;
+    }
+
+    /* Wider than a single trip, since this one carries a table. */
+    .tr-modal--wide { max-width: 940px; }
+
+    .st-blurb {
+    font-size: 0.86rem;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    }
+
+    .st-count {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--rp-text);
+    white-space: nowrap;
+    }
+
+    .st-empty {
+    padding: 18px 0 4px;
+    font-size: 0.86rem;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    }
+
     .tr-modal {
     background: #fff;
     border-radius: 16px;

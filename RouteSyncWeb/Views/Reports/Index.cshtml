@@ -24,7 +24,7 @@
 @* STAT CARDS *@
 <div class="rp-stat-grid">
 
-    <div class="rp-stat-card">
+    <div class="rp-stat-card rp-stat-card--click" role="button" tabindex="0" data-stat="trips" title="Show the trips behind this figure">
         <div class="rp-stat-header">
             <span class="rp-stat-icon rp-stat-icon--green">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none"
@@ -41,7 +41,7 @@
         <div class="rp-stat-sub">Completed</div>
     </div>
 
-    <div class="rp-stat-card">
+    <div class="rp-stat-card rp-stat-card--click" role="button" tabindex="0" data-stat="missed" title="Show the trips behind this figure">
         <div class="rp-stat-header">
             <span class="rp-stat-icon rp-stat-icon--red">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none"
@@ -56,7 +56,7 @@
         <div class="rp-stat-sub">Delayed</div>
     </div>
 
-    <div class="rp-stat-card">
+    <div class="rp-stat-card rp-stat-card--click" role="button" tabindex="0" data-stat="passengers" title="Show the trips behind this figure">
         <div class="rp-stat-header">
             <span class="rp-stat-icon rp-stat-icon--blue">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none"
@@ -73,7 +73,7 @@
         <div class="rp-stat-delta" id="statPassengerDelta"></div>
     </div>
 
-    <div class="rp-stat-card">
+    <div class="rp-stat-card rp-stat-card--click" role="button" tabindex="0" data-stat="revenue" title="Show the trips behind this figure">
         <div class="rp-stat-header">
             <span class="rp-stat-icon rp-stat-icon--pink">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none"
@@ -422,6 +422,42 @@
 </div>
 
 @* Daily Trip Report Modal. *@
+@* A summary card's figure, opened out into the trips that made it. *@
+<div id="statModal" data-dialog-close="closeStatModal" class="tr-modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="statModalTitle">
+    <div class="tr-modal tr-modal--wide">
+        <div class="tr-modal-header">
+            <h3 class="tr-modal-title" id="statModalTitle">—</h3>
+            <button class="tr-modal-close" id="statModalClose" aria-label="Close">&times;</button>
+        </div>
+        <div class="tr-modal-body">
+            <div id="statModalLoading" class="tr-modal-loading">
+                <div class="tr-spinner"></div>
+                <span>Loading…</span>
+            </div>
+            <div id="statModalContent" style="display:none;">
+                <div class="tr-head">
+                    <span class="st-blurb" id="statModalBlurb"></span>
+                    <span class="st-count" id="statModalCount"></span>
+                </div>
+                <div class="tr-section" id="statModalRouteWrap">
+                    <div class="tr-section-title">By Route</div>
+                    <div class="tr-grid" id="statModalRoutes"></div>
+                </div>
+                <div class="tr-section tr-section--last">
+                    <div class="tr-section-title">Trips</div>
+                    <div class="rp-table-wrap">
+                        <table class="rp-table"><thead id="statModalHead"></thead><tbody id="statModalBody"></tbody></table>
+                    </div>
+                    <div class="st-empty" id="statModalEmpty" style="display:none;">Nothing to show for this day.</div>
+                </div>
+            </div>
+            <div id="statModalError" class="tr-modal-error" style="display:none;">
+                Unable to load this breakdown. Please try again.
+            </div>
+        </div>
+    </div>
+</div>
+
 <div id="tripModal" data-dialog-close="closeTripModal" class="tr-modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="tripModalTitle">
     <div class="tr-modal">
         <div class="tr-modal-header">
@@ -928,7 +964,7 @@
     /* Manual refresh button + silent 30s auto-refresh. */
     let rpBusy = false;
     function rpAnyModalOpen() {
-        return ['reportGenModal', 'tripModal'].some(id => {
+        return ['reportGenModal', 'tripModal', 'statModal'].some(id => {
             const e = document.getElementById(id);
             return e && getComputedStyle(e).display !== 'none';
         });
@@ -1357,7 +1393,104 @@
     }
     }
 
-    // Close on X button
+    // Escape reaches this through the dialog stack, which looks the handler up by name.
+    window.closeTripModal = closeModal;
+
+    // --- Summary card breakdown ------------------------------------------------
+    // A card states a figure; this is the trips that made it, for the day and route
+    // the page is already showing.
+    const statModal = document.getElementById('statModal');
+
+    function openStatModal() {
+        statModal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeStatModal() {
+        statModal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+    window.closeStatModal = closeStatModal;
+
+    function statState(which) {
+        document.getElementById('statModalLoading').style.display = which === 'loading' ? 'flex' : 'none';
+        document.getElementById('statModalContent').style.display = which === 'content' ? 'block' : 'none';
+        document.getElementById('statModalError').style.display   = which === 'error' ? 'block' : 'none';
+    }
+
+    async function loadStatBreakdown(kind) {
+        openStatModal();
+        statState('loading');
+        try {
+            const f = getFilters();
+            const qs = new URLSearchParams({ kind, routeId: f.routeId || 0, date: f.date || '' });
+            const res = await fetch(`/Reports/StatBreakdown?${qs}`);
+            if (!res.ok) throw new Error('Failed to fetch');
+            const d = await res.json();
+
+            document.getElementById('statModalTitle').textContent = d.title;
+            document.getElementById('statModalBlurb').textContent = d.blurb;
+            document.getElementById('statModalCount').textContent =
+                `${d.count} ${d.count === 1 ? 'trip' : 'trips'} · ${d.date}`;
+
+            // By route, hidden when there is only one and the split says nothing.
+            const routes = document.getElementById('statModalRoutes');
+            routes.replaceChildren();
+            (d.byRoute || []).forEach(r => {
+                const row = document.createElement('div');
+                row.className = 'tr-info-row';
+                const label = document.createElement('span');
+                label.className = 'tr-info-label';
+                label.textContent = r.route;
+                const value = document.createElement('span');
+                value.textContent = r.value;
+                row.append(label, value);
+                routes.appendChild(row);
+            });
+            document.getElementById('statModalRouteWrap').style.display =
+                (d.byRoute || []).length > 1 ? '' : 'none';
+
+            const head = document.getElementById('statModalHead');
+            head.replaceChildren();
+            const hr = document.createElement('tr');
+            (d.columns || []).forEach(c => {
+                const th = document.createElement('th');
+                th.textContent = c;      // a heading is data, never markup
+                hr.appendChild(th);
+            });
+            head.appendChild(hr);
+
+            const body = document.getElementById('statModalBody');
+            body.replaceChildren();
+            (d.rows || []).forEach(cells => {
+                const tr = document.createElement('tr');
+                cells.forEach(cell => {
+                    const td = document.createElement('td');
+                    td.textContent = cell;
+                    tr.appendChild(td);
+                });
+                body.appendChild(tr);
+            });
+
+            document.getElementById('statModalEmpty').style.display = (d.rows || []).length ? 'none' : 'block';
+            statState('content');
+        } catch (e) {
+            statState('error');
+        }
+    }
+
+    document.getElementById('statModalClose').addEventListener('click', closeStatModal);
+    statModal.addEventListener('click', e => { if (e.target === statModal) closeStatModal(); });
+
+    document.querySelectorAll('.rp-stat-card--click').forEach(card => {
+        const open = () => loadStatBreakdown(card.dataset.stat);
+        card.addEventListener('click', open);
+        card.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+        });
+    });
+
+    // Close on X button
     modalClose.addEventListener('click', closeModal);
 
     // Close on overlay click
