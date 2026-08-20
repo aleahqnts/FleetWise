@@ -133,6 +133,32 @@
 @await Html.PartialAsync("_EditVehicleModal")
 @await Html.PartialAsync("_CameraCalibrateModal")
 
+@* Booking a bus into the shop. The work is named from the inspection catalogue where
+   it matches one, so a fault raised here and by a driver stays one line. *@
+<div id="vhScheduleModal" class="vh-action-overlay" style="display:none;" data-dialog-close="vhScheduleCancel">
+    <div class="vh-action-box vh-action-box--wide">
+        <h3 class="vh-action-title">Schedule Maintenance</h3>
+        <p class="vh-action-desc">The bus goes out of service until this work is closed.</p>
+        <p id="vhScheduleError" class="vh-action-error" style="display:none;"></p>
+
+        <div class="vh-items-edit" id="vhScheduleList"></div>
+
+        <div class="vh-form-row">
+            <label for="vhScheduleOther">Anything else:</label>
+            <input type="text" id="vhScheduleOther" class="vh-form-input" maxlength="200"
+                   placeholder="Aircon service, repaint, annual inspection…" />
+        </div>
+
+        <textarea id="vhScheduleNote" class="vh-form-input vh-action-note" rows="2"
+                  placeholder="Note (optional): who is doing the work, when it is booked…"></textarea>
+
+        <div class="vh-action-btns">
+            <button type="button" class="vh-btn vh-btn--outline" onclick="vhScheduleCancel()">Cancel</button>
+            <button type="button" class="vh-btn vh-btn--primary" id="vhScheduleSave">Schedule</button>
+        </div>
+    </div>
+</div>
+
 @* The maintenance update dialog, opened from the vehicle details. Each open fault is
    given an outcome; saving with none left open closes the order and un-grounds the bus. *@
 <div id="vhItemsModal" class="vh-action-overlay" style="display:none;" data-dialog-close="vhItemsCancel">
@@ -431,18 +457,6 @@
 
     function vhReloadModal() { loadVehicleDetails(window.__vhCurrentVehicle); }
 
-    function vhResolve(logId) {
-        vhOpenAction({
-            title: 'Resolve & Return to Ready',
-            desc: 'Close every open issue on this bus and return it to Ready. Add a note (optional).',
-            confirmLabel: 'Resolve & Return to Ready',
-            onConfirm: async function (note) {
-                if (await vhPost('@Url.Action("ResolveIncident", "Vehicles")', { logId: logId, note: note })) {
-                    vhActionCancel(); vhReloadModal(); loadVehicleRows();
-                } else { alert('Failed to resolve.'); }
-            }
-        });
-    }
 
     // Reusable action overlay (schedule maintenance / take out of service). Custom overlay,
     // not Bootstrap, so it stacks cleanly above the View modal.
@@ -490,18 +504,62 @@
 
 
 
+    let vhScheduleVehicle = null;
+
     function vhScheduleMaintenance(vehicleId) {
-        vhOpenAction({
-            title: 'Schedule Maintenance',
-            desc: 'Send this bus to the shop. It will be taken out of service until the work is resolved.',
-            confirmLabel: 'Schedule Maintenance',
-            onConfirm: async function (note) {
-                if (await vhPost('@Url.Action("ScheduleMaintenance", "Vehicles")', { vehicleId: vehicleId, note: note })) {
-                    vhActionCancel(); vhReloadModal(); loadVehicleRows();
-                } else { alert('Failed to schedule maintenance.'); }
+        const source = document.getElementById('vhCatalogueSource');
+        if (!source) return;
+
+        vhScheduleVehicle = vehicleId;
+        vhScheduleError('');
+        document.getElementById('vhScheduleOther').value = '';
+        document.getElementById('vhScheduleNote').value = '';
+        document.getElementById('vhScheduleList').replaceChildren(source.content.cloneNode(true));
+        document.getElementById('vhScheduleModal').style.display = 'flex';
+    }
+
+    function vhScheduleCancel() {
+        document.getElementById('vhScheduleModal').style.display = 'none';
+        window.focusFrontDialog();
+    }
+
+    function vhScheduleError(message) {
+        const el = document.getElementById('vhScheduleError');
+        el.textContent = message;
+        el.style.display = message ? 'block' : 'none';
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const save = document.getElementById('vhScheduleSave');
+        if (!save) return;
+
+        save.addEventListener('click', async function () {
+            const picked = Array.from(
+                document.querySelectorAll('#vhScheduleList input[type=checkbox]:checked'))
+                .map(box => box.value);
+
+            const other = document.getElementById('vhScheduleOther').value.trim();
+            if (other) picked.push(other);
+
+            if (picked.length === 0) {
+                vhScheduleError('Pick what the bus is going in for, or say what else.');
+                return;
+            }
+
+            save.disabled = true;
+            try {
+                const r = await vhPostResult('@Url.Action("ScheduleMaintenance", "Vehicles")', {
+                    vehicleId: vhScheduleVehicle,
+                    items: JSON.stringify(picked),
+                    note: document.getElementById('vhScheduleNote').value.trim()
+                });
+                if (r.ok) { vhScheduleCancel(); vhReloadModal(); loadVehicleRows(); }
+                else { vhScheduleError(r.message || 'Could not schedule this work.'); }
+            } finally {
+                save.disabled = false;
             }
         });
-    }
+    });
 
     // Retiring and restoring go through the same overlay as the other vehicle
     // actions, and take their reason from its note field.
