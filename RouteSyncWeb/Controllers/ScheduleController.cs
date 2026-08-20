@@ -88,10 +88,13 @@ namespace FleetWise.Controllers
         [HttpPost]
         public async Task<IActionResult> Save([FromBody] SaveScheduleRequest req)
         {
-            if (!ModelState.IsValid) return BadRequest(ModelState.FirstError());
+            // Every failure answers with the same shape, { message } and optionally
+            // { conflicts }, so the planner can always say what went wrong rather than
+            // falling back to a sentence that names nothing.
+            if (!ModelState.IsValid) return BadRequest(new { message = ModelState.FirstError() });
             if (req == null || !DateTime.TryParse(req.WeekStart, out var weekStart)
                             || !DateTime.TryParse(req.WeekEnd, out var weekEnd))
-                return BadRequest("Invalid week range.");
+                return BadRequest(new { message = "That week could not be read. Reload the planner and try again." });
 
             var cells = req.Cells ?? new();
 
@@ -137,75 +140,97 @@ namespace FleetWise.Controllers
                 }, locked: true)));
 
             // Conflicts are advisory and can be overridden from the confirmation modal, so
-            // the save is blocked only until that acknowledgement arrives.
+            // the save is blocked only until that acknowledgement arrives. Answered with a
+            // 409 rather than a 400, the same way dispatch does, because the two mean
+            // different things to the planner: one it may force past, the other it may not.
             var conflicts = FindConflicts(effective);
-            if (!req.Override && conflicts.Count > 0) return BadRequest(new { conflicts });
+            if (!req.Override && conflicts.Count > 0)
+                return Conflict(new { message = "This schedule breaks a booking rule.", conflicts });
 
-            // Trips that survive this save, whether kept as they are or updated.
-            var keptIds = new HashSet<string>();
-            int added = 0, changed = 0, deleted = 0;   // counted for the audit line
-
-            foreach (var c in cells)
+            // A write that fails partway leaves the week half-rewritten, so the planner is
+            // told plainly rather than being handed a page it cannot read. The detail goes
+            // to the audit trail, where it can be looked up without being shown here.
+            try
             {
-                if (string.IsNullOrEmpty(c.VehicleId) || c.DriverId == 0
-                 || string.IsNullOrEmpty(c.Shift) || !DateTime.TryParse(c.Date, out var date))
-                    continue;
-                if (!ShiftTimes.TryGetValue(c.Shift, out var window)) continue;
+                // Trips that survive this save, whether kept as they are or updated.
+                var keptIds = new HashSet<string>();
+                int added = 0, changed = 0, deleted = 0;   // counted for the audit line
 
-                if (!string.IsNullOrEmpty(c.TripId) && existingById.TryGetValue(c.TripId, out var trip))
+                foreach (var c in cells)
                 {
-                    keptIds.Add(trip.TripId);
-                    // A trip that has started is locked and never modified.
-                    if (trip.TripStatus == "Active" || trip.TripStatus == "Completed") continue;
-                    if (trip.VehicleId == c.VehicleId && trip.DriverId == c.DriverId) continue; // unchanged
+                    if (string.IsNullOrEmpty(c.VehicleId) || c.DriverId == 0
+                     || string.IsNullOrEmpty(c.Shift) || !DateTime.TryParse(c.Date, out var date))
+                        continue;
+                    if (!ShiftTimes.TryGetValue(c.Shift, out var window)) continue;
+
+                    if (!string.IsNullOrEmpty(c.TripId) && existingById.TryGetValue(c.TripId, out var trip))
+                    {
+                        keptIds.Add(trip.TripId);
+                        // A trip that has started is locked and never modified.
+                        if (trip.TripStatus == "Active" || trip.TripStatus == "Completed") continue;
+                        if (trip.VehicleId == c.VehicleId && trip.DriverId == c.DriverId) continue; // unchanged
+
+                        await _supabase.From<Trip>()
+                            .Filter("trip_id", Operator.Equals, trip.TripId)
+                            .Set(t => t.VehicleId, c.VehicleId)
+                            .Set(t => t.DriverId, c.DriverId)
+                            .Update();
+                        changed++;
+                    }
+                    else
+                    {
+                        // A new bus for this route, shift and day.
+                        await _supabase.From<Trip>().Insert(new Trip
+                        {
+                            Date = DateTime.SpecifyKind(date, DateTimeKind.Utc),
+                            ShiftType = c.Shift,
+                            ShiftStartTime = window.start,
+                            ShiftEndTime = window.end,
+                            RouteId = c.RouteId,
+                            VehicleId = c.VehicleId,
+                            DriverId = c.DriverId,
+                            TripStatus = "Not Yet Started",
+                            EstimatedRevenue = 0
+                        });
+                        added++;
+                    }
+                }
+
+                // Trips no longer present in the grid are deleted, except those already started.
+                foreach (var t in existing)
+                {
+                    if (keptIds.Contains(t.TripId)) continue;
+                    if (t.TripStatus == "Active" || t.TripStatus == "Completed") continue;
 
                     await _supabase.From<Trip>()
-                        .Filter("trip_id", Operator.Equals, trip.TripId)
-                        .Set(t => t.VehicleId, c.VehicleId)
-                        .Set(t => t.DriverId, c.DriverId)
-                        .Update();
-                    changed++;
+                        .Filter("trip_id", Operator.Equals, t.TripId)
+                        .Delete();
+                    deleted++;
                 }
-                else
+
+                // One planner save can rewrite a whole week, so the audit entry carries the
+                // counts. A save that changed nothing is not recorded.
+                if (added + changed + deleted > 0)
                 {
-                    // A new bus for this route, shift and day.
-                    await _supabase.From<Trip>().Insert(new Trip
-                    {
-                        Date = DateTime.SpecifyKind(date, DateTimeKind.Utc),
-                        ShiftType = c.Shift,
-                        ShiftStartTime = window.start,
-                        ShiftEndTime = window.end,
-                        RouteId = c.RouteId,
-                        VehicleId = c.VehicleId,
-                        DriverId = c.DriverId,
-                        TripStatus = "Not Yet Started",
-                        EstimatedRevenue = 0
-                    });
-                    added++;
+                    await _audit.WriteAsync("schedule_saved",
+                        $"saved the schedule for {weekStart:MMM d} to {weekEnd:MMM d}: "
+                            + $"{added} added, {changed} changed, {deleted} removed"
+                            + (req.Override ? ", overriding a conflict warning" : ""),
+                        "trips");
                 }
+
             }
-
-            // Trips no longer present in the grid are deleted, except those already started.
-            foreach (var t in existing)
-            {
-                if (keptIds.Contains(t.TripId)) continue;
-                if (t.TripStatus == "Active" || t.TripStatus == "Completed") continue;
-
-                await _supabase.From<Trip>()
-                    .Filter("trip_id", Operator.Equals, t.TripId)
-                    .Delete();
-                deleted++;
-            }
-
-            // One planner save can rewrite a whole week, so the audit entry carries the
-            // counts. A save that changed nothing is not recorded.
-            if (added + changed + deleted > 0)
+            catch (Exception ex)
             {
                 await _audit.WriteAsync("schedule_saved",
-                    $"saved the schedule for {weekStart:MMM d} to {weekEnd:MMM d}: "
-                        + $"{added} added, {changed} changed, {deleted} removed"
-                        + (req.Override ? ", overriding a conflict warning" : ""),
-                    "trips");
+                    $"failed to save the schedule for {weekStart:MMM d} to {weekEnd:MMM d}: {ex.Message}",
+                    "trips", outcome: "error");
+
+                return StatusCode(500, new
+                {
+                    message = "The schedule could not be written. Reload the planner to see "
+                            + "what was saved before it stopped, then try the rest again."
+                });
             }
 
             return Ok();

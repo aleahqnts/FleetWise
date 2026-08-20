@@ -116,9 +116,9 @@
         <div class="sch-modal">
             <div class="sch-modal-head">
                 <span class="sch-modal-ico">&#9888;</span>
-                <h3>Schedule conflicts</h3>
+                <h3 id="sch-conflict-title">Schedule conflicts</h3>
             </div>
-            <p class="sch-modal-sub">Please fix the cells in red before saving.</p>
+            <p id="sch-conflict-sub" class="sch-modal-sub">Please fix the cells in red before saving.</p>
             <ul id="sch-conflict-list" class="sch-modal-list"></ul>
             <div class="sch-modal-actions">
                 <button class="sch-modal-btn" onclick="schCloseConflicts()">Go back &amp; fix</button>
@@ -241,8 +241,11 @@
 
     // allowOverride = soft scheduling rule (double-booking / back-to-back) the dispatcher
     // may force past. Partial slots (missing bus/driver) pass false -> no override offered.
-    function schShowConflicts(messages, allowOverride) {
+    function schShowConflicts(messages, allowOverride, title, sub) {
         schLastConflicts = messages;
+        document.getElementById('sch-conflict-title').textContent = title || 'Schedule conflicts';
+        document.getElementById('sch-conflict-sub').textContent =
+            sub || 'Please fix the cells in red before saving.';
         const ul = document.getElementById('sch-conflict-list');
         ul.replaceChildren();
         (messages || []).forEach(function (m) {
@@ -302,7 +305,9 @@
         });
         if (partial) {
             // Data integrity, not a scheduling rule -> never overridable.
-            schShowConflicts(['Each slot needs both a bus and a driver. Pick both or leave it blank.'], false);
+            schShowConflicts(['Each slot needs both a bus and a driver. Pick both or leave it blank.'],
+                             false, 'Incomplete slots',
+                             'Please fix the cells in red before saving.');
             return;
         }
 
@@ -355,11 +360,12 @@
             body: JSON.stringify({ cells, weekStart: SCH_WEEK_START, weekEnd: SCH_WEEK_END, override: !!force })
         }).then(async res => {
             if (!res.ok) {
-                // Server rejects with { conflicts: [{ message, cells:[{routeId,shift,date}] }] }.
-                // Highlight the offending (editable) cells in red and list the reasons.
+                // 409 carries { conflicts: [{ message, cells:[{routeId,shift,date}] }] } and
+                // may be forced past. Anything else is a refusal or a fault, and says why.
                 let data = null;
-                try { data = await res.json(); } catch { /* not JSON */ }
-                if (data && Array.isArray(data.conflicts)) {
+                try { data = await res.json(); } catch { /* an error page, not JSON */ }
+
+                if (res.status === 409 && data && Array.isArray(data.conflicts)) {
                     const msgs = [];
                     data.conflicts.forEach(cf => {
                         msgs.push(cf.message);
@@ -373,13 +379,21 @@
                     // resend) -> still overridable.
                     schShowConflicts([...new Set(msgs)], true);
                 } else {
-                    schShowConflicts([(data && data.message) || 'Save failed. Please review the schedule.'], false);
+                    // A bare string body is still a reason worth reading; a page that is not
+                    // JSON at all leaves only the status, which beats saying nothing.
+                    const reason = (data && data.message)
+                        || (typeof data === 'string' && data)
+                        || `The server answered ${res.status} ${res.statusText || ''}`.trim() + '.';
+                    schShowConflicts([reason], false, 'Could not save',
+                        'Nothing about this can be forced. Fix what it names, then save again.');
                 }
                 return;
             }
             sessionStorage.setItem('sch_saved', '1'); // survive the reload -> show toast
             window.location.reload();
-        }).catch(err => schShowConflicts(['Save failed: ' + err.message]))
+        }).catch(err => schShowConflicts(
+              ['The planner could not reach the server: ' + err.message], false,
+              'Could not save', 'Check the connection, then save again.'))
           .finally(() => { btn.disabled = false; btn.textContent = 'Save Schedule'; });
     }
 </script>
