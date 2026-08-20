@@ -62,36 +62,24 @@
             It is hidden from the registry and cannot be scheduled. Its trips and
             inspections are kept.
         </div>
-        <form asp-action="SetRetired" asp-controller="Vehicles" method="post">
-            @Html.AntiForgeryToken()
-            <input type="hidden" name="vehicleId" value="@Model.VehicleId" />
-            <input type="hidden" name="retired" value="false" />
-            <p class="vh-action-hint">
-                <strong>Restore</strong> brings the bus back to the registry. It returns out
-                of service, so its roadworthiness is decided separately.
-            </p>
-            <button type="submit" class="vh-btn vh-btn--outline">Restore to Fleet</button>
-        </form>
+        <p class="vh-action-hint">
+            <strong>Restore</strong> brings the bus back to the registry. It returns out
+            of service, so its roadworthiness is decided separately.
+        </p>
+        <button type="button" class="vh-btn vh-btn--outline"
+                onclick="vhRestore('@Model.VehicleId')">Restore to Fleet</button>
     }
     else
     {
-        <form asp-action="SetRetired" asp-controller="Vehicles" method="post"
-              onsubmit="return confirm('Retire @Model.VehicleId from the fleet? It will be hidden from the registry and cannot be scheduled. This can be undone.');">
-            @Html.AntiForgeryToken()
-            <input type="hidden" name="vehicleId" value="@Model.VehicleId" />
-            <input type="hidden" name="retired" value="true" />
-            <p class="vh-action-hint">
-                <strong>Retire</strong> is for a bus that is not coming back: sold, scrapped
-                or written off. It leaves the registry and every assignment list, and its
-                history is kept. Use <strong>Mark Out of Service</strong> instead for a bus
-                that is off the road today.
-            </p>
-            <div class="vh-form-row">
-                <label for="retiredReason">Reason:</label>
-                <input type="text" id="retiredReason" name="reason" class="vh-form-input"
-                       maxlength="200" placeholder="Sold, scrapped, written off…" />
-            </div>
-            <button type="submit" class="vh-btn vh-btn--danger">Retire Bus</button>
-        </form>
+        @* The reason is asked for in the confirmation overlay, alongside every other
+           vehicle action, rather than sitting in this form. *@
+        <p class="vh-action-hint">
+            <strong>Retire</strong> is for a bus that is not coming back: sold, scrapped
+            or written off. It leaves the registry and every assignment list, and its
+            history is kept. Use <strong>Mark Out of Service</strong> instead for a bus
+            that is off the road today.
+        </p>
+        <button type="button" class="vh-btn vh-btn--danger"
+                onclick="vhRetire('@Model.VehicleId')">Retire Bus</button>
     }
 </div>
