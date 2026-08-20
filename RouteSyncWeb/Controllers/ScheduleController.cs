@@ -275,8 +275,8 @@ namespace FleetWise.Controllers
 
                 return StatusCode(500, new
                 {
-                    message = "The schedule could not be written. Reload the planner to see "
-                            + "what was saved before it stopped, then try the rest again."
+                    message = "The schedule could not be saved. Reload the planner to see "
+                            + "what was written, then try again."
                 });
             }
 

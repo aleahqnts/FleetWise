@@ -118,9 +118,9 @@
         <div class="sch-modal">
             <div class="sch-modal-head">
                 <span class="sch-modal-ico">&#9888;</span>
-                <h3 id="sch-conflict-title">Schedule conflicts</h3>
+                <h3 id="sch-conflict-title">Schedule Conflicts</h3>
             </div>
-            <p id="sch-conflict-sub" class="sch-modal-sub">Please fix the cells in red before saving.</p>
+            <p id="sch-conflict-sub" class="sch-modal-sub">Review the highlighted cells before saving.</p>
             <ul id="sch-conflict-list" class="sch-modal-list"></ul>
             <div class="sch-modal-actions">
                 <button class="sch-modal-btn" onclick="schCloseConflicts()">Go back &amp; fix</button>
@@ -134,9 +134,9 @@
         <div class="sch-modal">
             <div class="sch-modal-head">
                 <span class="sch-modal-ico">&#9888;</span>
-                <h3>Override these conflicts?</h3>
+                <h3>Override These Conflicts?</h3>
             </div>
-            <p class="sch-modal-sub">You are saving a schedule that breaks the booking rules below. This is intentional. Confirm only if you mean to.</p>
+            <p class="sch-modal-sub">This schedule breaks the booking rules listed below. Confirm only if that is intended.</p>
             <ul id="sch-override-list" class="sch-modal-list"></ul>
             <div class="sch-modal-actions">
                 <button class="sch-modal-btn" onclick="schCancelOverride()">Cancel</button>
@@ -245,9 +245,9 @@
     // may force past. Partial slots (missing bus/driver) pass false -> no override offered.
     function schShowConflicts(messages, allowOverride, title, sub) {
         schLastConflicts = messages;
-        document.getElementById('sch-conflict-title').textContent = title || 'Schedule conflicts';
+        document.getElementById('sch-conflict-title').textContent = title || 'Schedule Conflicts';
         document.getElementById('sch-conflict-sub').textContent =
-            sub || 'Please fix the cells in red before saving.';
+            sub || 'Review the highlighted cells before saving.';
         const ul = document.getElementById('sch-conflict-list');
         ul.replaceChildren();
         (messages || []).forEach(function (m) {
@@ -308,8 +308,8 @@
         if (partial) {
             // Data integrity, not a scheduling rule -> never overridable.
             schShowConflicts(['Each slot needs both a bus and a driver. Pick both or leave it blank.'],
-                             false, 'Incomplete slots',
-                             'Please fix the cells in red before saving.');
+                             false, 'Incomplete Slots',
+                             'Review the highlighted cells before saving.');
             return;
         }
 
@@ -383,26 +383,26 @@
                     const overridable = res.status === 409;
                     schShowConflicts(
                         [...new Set(msgs)], overridable,
-                        overridable ? 'Schedule conflicts' : 'Cannot be booked',
+                        overridable ? 'Schedule Conflicts' : 'Cannot Be Booked',
                         overridable
-                            ? 'Please fix the cells in red before saving.'
-                            : 'The cells in red cannot be saved as they are, and this cannot be forced.');
+                            ? 'Review the highlighted cells before saving.'
+                            : 'These assignments are unavailable. Correct the highlighted cells to continue.');
                 } else {
                     // A bare string body is still a reason worth reading; a page that is not
                     // JSON at all leaves only the status, which beats saying nothing.
                     const reason = (data && data.message)
                         || (typeof data === 'string' && data)
                         || `The server answered ${res.status} ${res.statusText || ''}`.trim() + '.';
-                    schShowConflicts([reason], false, 'Could not save',
-                        'Nothing about this can be forced. Fix what it names, then save again.');
+                    schShowConflicts([reason], false, 'Could Not Save',
+                        'This cannot be overridden. Correct the issue below, then save again.');
                 }
                 return;
             }
             sessionStorage.setItem('sch_saved', '1'); // survive the reload -> show toast
             window.location.reload();
         }).catch(err => schShowConflicts(
-              ['The planner could not reach the server: ' + err.message], false,
-              'Could not save', 'Check the connection, then save again.'))
+              ['The server could not be reached: ' + err.message], false,
+              'Could Not Save', 'Check your connection, then save again.'))
           .finally(() => { btn.disabled = false; btn.textContent = 'Save Schedule'; });
     }
 </script>

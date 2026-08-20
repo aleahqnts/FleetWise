@@ -51,8 +51,12 @@ namespace FleetWise.ViewModels
     public class ScheduleCellInput
     {
         // Empty means "new trip", so this one allows blank but still bounds the shape.
+        //
+        // Nullable on purpose. Under an enabled nullable context a plain string is treated
+        // as required whether or not it is marked so, and a slot being filled for the first
+        // time has no trip to name yet.
         [RegularExpression(@"^([A-Za-z0-9_-]{1,64})?$", ErrorMessage = "That is not a trip ID.")]
-        public string TripId { get; set; }     // null/empty = new trip to insert
+        public string? TripId { get; set; }    // null/empty = new trip to insert
 
         [Range(1, int.MaxValue, ErrorMessage = "A route is required.")]
         public int RouteId { get; set; }
@@ -64,9 +68,9 @@ namespace FleetWise.ViewModels
         [Required, RegularExpression(@"^\d{4}-\d{2}-\d{2}$", ErrorMessage = "Date must be yyyy-MM-dd.")]
         public string Date { get; set; }       // yyyy-MM-dd
 
-        // Blank clears the slot.
+        // Blank clears the slot, and is nullable for the same reason as the trip.
         [RegularExpression(@"^([A-Za-z0-9-]{1,20})?$", ErrorMessage = "That is not a vehicle ID.")]
-        public string VehicleId { get; set; }
+        public string? VehicleId { get; set; }
 
         // 0 clears the slot, so no lower bound of 1 here.
         [Range(0, int.MaxValue, ErrorMessage = "That is not a driver.")]
