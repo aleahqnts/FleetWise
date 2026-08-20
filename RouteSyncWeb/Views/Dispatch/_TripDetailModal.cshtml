@@ -275,7 +275,7 @@
 
             // Driver
             document.getElementById('tdm-driver-name').textContent   = d.driverName ?? '—';
-            document.getElementById('tdm-driver-id').textContent     = `DRV${String(d.driverId).padStart(3, '0')}`;
+            document.getElementById('tdm-driver-id').textContent     = d.driverId;
             document.getElementById('tdm-driver-status').innerHTML   = statusDot(d.driverStatus);
 
             // Inspection Log card

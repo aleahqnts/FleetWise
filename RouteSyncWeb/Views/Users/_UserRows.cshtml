@@ -1,4 +1,4 @@
-@model List<UserListItemViewModel>
+﻿@model List<UserListItemViewModel>
 
 @functions {
     string RoleBadgeClass(string roleName)
@@ -23,7 +23,7 @@ else
     {
         var statusClass = user.AccountStatus == "Activated" ? "us-status--active" : "us-status--inactive";
         <tr>
-            <td class="us-id">#@user.UserId</td>
+            <td class="us-id">@user.UserId</td>
             <td>@user.FullName</td>
             <td>@user.Email</td>
             <td><span class="us-role-badge @RoleBadgeClass(user.RoleName)">@user.RoleName</span></td>

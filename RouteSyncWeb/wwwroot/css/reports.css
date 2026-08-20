@@ -652,11 +652,53 @@
     padding: 16px;
     }
 
+    /* A card that answers for its own figure. */
+    .rp-stat-card--click {
+    cursor: pointer;
+    transition: box-shadow .15s ease, transform .15s ease;
+    }
+
+    .rp-stat-card--click:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,.09);
+    transform: translateY(-1px);
+    }
+
+    .rp-stat-card--click:focus-visible {
+    outline: 2px solid var(--rp-teal);
+    outline-offset: 2px;
+    }
+
+    /* Wider than a single trip, since this one carries a table. */
+    .tr-modal--wide { max-width: 940px; }
+
+    /* The title and the day it covers, on one line. */
+    .st-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    min-width: 0;
+    }
+
+    .st-count {
+    font-size: 0.78rem;
+    color: var(--rp-muted);
+    white-space: nowrap;
+    font-family: 'Segoe UI', sans-serif;
+    }
+
+    .st-empty {
+    padding: 18px 0 4px;
+    font-size: 0.86rem;
+    color: var(--rp-muted);
+    font-family: 'Segoe UI', sans-serif;
+    }
+
     .tr-modal {
     background: #fff;
     border-radius: 16px;
     width: 100%;
-    max-width: 520px;
+    max-width: 700px;
     max-height: 90vh;
     overflow-y: auto;
     box-shadow: 0 8px 40px rgba(0,0,0,.18);
@@ -705,13 +747,13 @@
     }
 
     .tr-section {
-    padding: 18px 24px;
+    padding: 14px 24px;
     border-bottom: 1px solid var(--rp-border);
     }
 
     .tr-section--last {
     border-bottom: none;
-    padding-bottom: 24px;
+    padding-bottom: 18px;
     }
 
     .tr-section--id {
@@ -739,22 +781,50 @@
     }
 
     .tr-info-row {
-    font-size: 0.88rem;
+    font-size: 0.9rem;
     font-family: 'Segoe UI', sans-serif;
     color: var(--rp-text);
-    margin-bottom: 6px;
     display: flex;
-    gap: 6px;
-    }
-
-    .tr-info-row:last-child {
-    margin-bottom: 0;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
     }
 
     .tr-info-label {
-    font-weight: 600;
-    color: var(--rp-text);
-    white-space: nowrap;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--rp-muted);
+    }
+
+    /* The trip and how it ended, before any of the detail. */
+    .tr-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--rp-border);
+    }
+
+    /* Two facts to a line, folding to one where there is no width to share. */
+    .tr-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 24px;
+    }
+
+    /* Vehicle and driver side by side, each keeping its own heading. */
+    .tr-grid--split > div {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    }
+
+    @media (max-width: 640px) {
+        .tr-grid { grid-template-columns: minmax(0, 1fr); }
     }
 
     /* Loading spinner */

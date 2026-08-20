@@ -27,7 +27,9 @@
                 {
                     <div class="success-message">@resetDone</div>
                 }
-                @if (!ViewData.ModelState.IsValid)
+                @* Only a whole-form error belongs here. Field errors show under their own field,
+                   and asking for them here painted an empty panel. *@
+                @if (ViewData.ModelState[string.Empty]?.Errors.Count > 0)
                 {
                     <div class="error-message">
                         @Html.ValidationSummary(true)
