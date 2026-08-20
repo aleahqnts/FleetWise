@@ -30,5 +30,5 @@ runs the server locally does this once. In production, set `Supabase:Key` on the
 | Production web host | Set once (env var / host config) |
 
 The mobile apps (`RouteSyncMobile`, `CameraCountMobile`) never use the secret key —
-they use the publishable key + Supabase edge functions. See `supabase/phase7.sql` and
-the edge functions under `supabase/functions/`.
+they use the publishable key + Supabase edge functions. See `backend/schema/phase7.sql` and
+the edge functions under `backend/supabase/functions/`.
