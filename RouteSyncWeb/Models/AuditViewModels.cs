@@ -14,9 +14,19 @@ namespace FleetWise.Models
         public string Source { get; set; } = "";         // db | edge | web
         public string Outcome { get; set; } = "";        // ok | denied | error
         public string? Summary { get; set; }
-        public string? Changes { get; set; }             // pretty-printed jsonb, or null
         public string? Ip { get; set; }
+
+        /// <summary>Whether the entry recorded a row edit at all.</summary>
+        public bool HasChanges { get; set; }
+
+        /// <summary>The row edit read field by field, empty when it cannot be expressed that way.</summary>
+        public List<AuditFieldChange> FieldChanges { get; set; } = new();
     }
+
+    /// <summary>
+    /// One column of a row edit. From is null on an insert, To is null on a delete.
+    /// </summary>
+    public sealed record AuditFieldChange(string Field, string? From, string? To);
 
     public class AuditIndexViewModel
     {

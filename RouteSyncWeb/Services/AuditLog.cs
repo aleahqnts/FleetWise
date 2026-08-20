@@ -164,12 +164,78 @@ namespace FleetWise.Services
                 Outcome = Str(e, "outcome") ?? "",
                 Summary = Str(e, "summary"),
                 Ip = Str(e, "ip"),
-                // Pretty-printed so the expanded diff is readable without a JSON viewer.
-                Changes = e.TryGetProperty("changes", out var ch)
-                          && ch.ValueKind is JsonValueKind.Object or JsonValueKind.Array
-                    ? JsonSerializer.Serialize(ch, new JsonSerializerOptions { WriteIndented = true })
-                    : null,
+                // The stored record is read into fields and never carried further. It
+                // reads as machine output, and the column names in it are of no use to
+                // anyone reading the trail.
+                HasChanges = e.TryGetProperty("changes", out var ch)
+                             && ch.ValueKind is JsonValueKind.Object or JsonValueKind.Array,
+                FieldChanges = ch.ValueKind == JsonValueKind.Object ? FieldChangesOf(ch) : new(),
             };
+        }
+
+
+        /// <summary>
+        /// Reads a row edit as the columns that actually differ.
+        /// </summary>
+        /// <remarks>
+        /// The trigger stores the whole row twice, as `old` and `new`. Most columns are
+        /// identical between them and say nothing, so only the differences are kept, and
+        /// each value is written the way it reads on the rest of the dashboard.
+        /// </remarks>
+        private static List<AuditFieldChange> FieldChangesOf(JsonElement changes)
+        {
+            var result = new List<AuditFieldChange>();
+
+            var hasOld = changes.TryGetProperty("old", out var oldRow)
+                         && oldRow.ValueKind == JsonValueKind.Object;
+            var hasNew = changes.TryGetProperty("new", out var newRow)
+                         && newRow.ValueKind == JsonValueKind.Object;
+            if (!hasOld && !hasNew) return result;
+
+            var fields = new List<string>();
+            if (hasNew) foreach (var p in newRow.EnumerateObject()) fields.Add(p.Name);
+            if (hasOld)
+                foreach (var p in oldRow.EnumerateObject())
+                    if (!fields.Contains(p.Name)) fields.Add(p.Name);
+
+            foreach (var field in fields)
+            {
+                var before = hasOld && oldRow.TryGetProperty(field, out var o) ? Cell(o) : null;
+                var after = hasNew && newRow.TryGetProperty(field, out var n) ? Cell(n) : null;
+                if (before == after) continue;
+                result.Add(new AuditFieldChange(FieldLabel(field), before, after));
+            }
+
+            return result;
+        }
+
+        /// <summary>A column name as a heading: `email_address` reads "Email address".</summary>
+        private static string FieldLabel(string column)
+        {
+            var words = column.Replace('_', ' ').Trim();
+            return words.Length == 0 ? column : char.ToUpperInvariant(words[0]) + words[1..];
+        }
+
+        /// <summary>One stored value, written for a reader rather than a parser.</summary>
+        private static string? Cell(JsonElement value) => value.ValueKind switch
+        {
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            JsonValueKind.True => "Yes",
+            JsonValueKind.False => "No",
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.String => Text(value.GetString()),
+            _ => value.GetRawText(),
+        };
+
+        // Timestamps are stored as text, and an ISO string in the middle of a sentence
+        // is harder to read than the date it stands for.
+        private static string? Text(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            return DateTimeOffset.TryParse(raw, out var when)
+                   && raw.Contains('-') && raw.Contains(':')
+                ? when.ToString("MMM d, yyyy h:mm tt")
+                : raw;
         }
 
         // "0-49/1234" -> 1234. "*" (count unknown) and anything unexpected -> -1.
