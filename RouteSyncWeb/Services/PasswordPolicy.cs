@@ -4,20 +4,15 @@ namespace FleetWise.Services
     /// What counts as an acceptable password, and the temporary one issued to new accounts.
     /// </summary>
     /// <remarks>
-    /// A user is still on the temporary password when a successful sign-in used exactly
-    /// this value, since authentication has already proved the hash matches. That removes
-    /// the need for a column tracking whether the password has been changed.
+    /// A sign-in using exactly the temporary value proves the account is still on it, so
+    /// no column tracks whether the password has been changed. The change form rejects
+    /// that value, so it cannot be kept.
     ///
-    /// The change form rejects this value, so it cannot be kept.
+    /// These rules are the browser-side half. _shared/password.ts applies the same policy
+    /// server-side and is the half that holds. Keep the two in step.
     ///
-    /// The rules below are the browser-side half only. The edge functions apply the same
-    /// policy server-side in _shared/password.ts, which is the half that actually holds:
-    /// anything here can be skipped by a caller that does not use the form. Keep the two
-    /// in step.
-    ///
-    /// A special character is allowed but not required. Length carries most of the
-    /// strength, and demanding a symbol pushes people towards predictable endings while
-    /// being awkward on a phone keyboard.
+    /// Symbols are allowed, not required: length carries the strength, and demanding one
+    /// yields predictable endings and awkward phone typing.
     /// </remarks>
     public static class PasswordPolicy
     {

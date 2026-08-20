@@ -3,15 +3,12 @@
 // Body: { trip_id, results: { "<label>": "Pass" | "Fail", ... }, notes? }
 // Returns 200 { status, blocked, failed, critical } | 400 | 401.
 //
-// Which faults ground a bus is decided here, from checklist_items, rather than by the
-// phone. The app cannot be the judge of that: it would let a modified build report a
-// failed brake as an ordinary defect and drive away. It also cannot ground a bus of its
-// own accord, because app_driver holds no write on vehicles.out_of_service, which is the
-// gate dispatch honours.
+// Criticality is read from checklist_items here, not sent by the phone: a modified build
+// could otherwise report a failed brake as an ordinary defect. app_driver also holds no
+// write on vehicles.out_of_service, the gate dispatch honours, so grounding belongs here.
 //
-// Faults land on the vehicle's open work order, or on a new one when it has none. A fault
-// already listed is re-opened rather than duplicated, so a defect ticked off and reported
-// again reads as open once more.
+// Faults join the vehicle's open order, or start one. A fault already listed re-opens
+// rather than duplicating.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { CORS_HEADERS, json, verifyJwt } from "../_shared/auth.ts";

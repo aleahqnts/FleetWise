@@ -249,9 +249,14 @@ namespace FleetWise.Controllers
                 var vehicle = vResp.Models.FirstOrDefault();
                 if (vehicle != null)
                 {
-                    vehicle.OutOfService = false;
-                    if (string.Equals(vehicle.VehicleStatus?.Trim(), "Flagged", OIC))
-                        vehicle.VehicleStatus = "Ready to Deploy";
+                    // Closing this order does not speak for another. The bus returns only
+                    // when nothing anywhere still grounds it.
+                    if ((await OpenCriticalFaultsAsync(order.VehicleId)).Count == 0)
+                    {
+                        vehicle.OutOfService = false;
+                        if (string.Equals(vehicle.VehicleStatus?.Trim(), "Flagged", OIC))
+                            vehicle.VehicleStatus = "Ready to Deploy";
+                    }
                     vehicle.LastMaintenanceDate = PhClock.Today;
                     vehicle.UpdatedAt = PhClock.Now;
                     await _supabase.From<Vehicle>().Update(vehicle);
@@ -271,6 +276,33 @@ namespace FleetWise.Controllers
             return Ok();
         }
 
+
+
+        /// <summary>The bus's open faults that ground it, empty when nothing does.</summary>
+        /// <remarks>
+        /// Read across every open order rather than one, so no route back to service can
+        /// miss a fault sitting on another.
+        /// </remarks>
+        private async Task<List<string>> OpenCriticalFaultsAsync(string vehicleId)
+        {
+            var openOrders = (await _supabase.From<MaintenanceLog>()
+                    .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
+                    .Get()).Models
+                .Where(l => l.ResolvedAt == null)
+                .Select(l => l.LogId)
+                .ToList();
+
+            var faults = new List<string>();
+            foreach (var logId in openOrders)
+            {
+                faults.AddRange((await _supabase.From<MaintenanceItem>()
+                        .Filter("log_id", Postgrest.Constants.Operator.Equals, logId.ToString())
+                        .Get()).Models
+                    .Where(i => i.IsCritical && string.Equals(i.State, "open", OIC))
+                    .Select(i => i.Label ?? ""));
+            }
+            return faults;
+        }
 
         /// <summary>The bus's open order, opening one when it has none.</summary>
         /// <remarks>
@@ -741,6 +773,20 @@ namespace FleetWise.Controllers
             // The nature of the incident: under repair when sent to maintenance, otherwise
             // needs attention.
             var ms = string.Equals(maintenanceStatus?.Trim(), "Under Repair", OIC) ? "Under Repair" : "Needs Attention";
+
+            if (!outOfService)
+            {
+                // A fault that grounds the bus is what keeps it grounded. Returning it to
+                // service while one is open would put an unroadworthy bus back on the road
+                // by a route that never asked whether the fault was dealt with. Fixing it
+                // under Update Maintenance is what returns the bus.
+                var criticalOpen = await OpenCriticalFaultsAsync(vehicleId);
+
+                if (criticalOpen.Count > 0)
+                    return BadRequest(
+                        $"{vehicleId} still has faults that ground it: {string.Join(", ", criticalOpen)}. "
+                        + "Fix them under Update Maintenance to return it to service.");
+            }
 
             if (outOfService)
             {

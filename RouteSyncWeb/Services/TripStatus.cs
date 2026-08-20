@@ -14,18 +14,14 @@ namespace FleetWise.Services
     /// counters work out what a trip looks like.
     /// </summary>
     /// <remarks>
-    /// Statuses are derived per request rather than stored. The vehicle_status column
-    /// belongs to whichever shift wrote it last, so a stored value would show a missed
-    /// trip as ready and would contradict the inspection log.
+    /// Derived per request. vehicle_status belongs to whichever shift wrote it last, so a
+    /// stored value would show a missed trip as ready.
     ///
-    /// A vehicle is flagged when it has an unresolved maintenance incident, and by
-    /// nothing else. A failed inspection opens one of those incidents, so the fault
-    /// still surfaces, and the flag clears when someone resolves it in the vehicles
-    /// tab. The flag is deliberately not read from the checklist row, which no
-    /// action on the dashboard can rewrite.
+    /// Flagged means an unresolved maintenance incident, nothing else. Reading it from the
+    /// checklist row would leave a bus flagged for good, since nothing on the dashboard
+    /// rewrites an inspection.
     ///
-    /// A flag is advisory and the bus stays deployable. Only a grounded bus or an
-    /// unavailable driver is an assignment issue.
+    /// A flag is advisory. Only a grounded bus or an unavailable driver blocks assignment.
     /// </remarks>
     public static class TripStatus
     {
