@@ -1,0 +1,248 @@
+/* Shared/_Sidebar.cshtml */
+    /* Variables. */
+    :root {
+        --fw-sidebar-collapsed: 72px;
+        --fw-sidebar-expanded:  220px;
+        --fw-teal:              #4AADA8;
+        --fw-teal-light:        #E8F6F5;
+        --fw-text-dark:         #2D3748;
+        --fw-text-muted:        #9AA5B4;
+        --fw-bg:                #FFFFFF;
+        --fw-divider:           #E8ECF0;
+        --fw-transition:        220ms ease;
+    }
+
+    /* Sidebar shell. */
+    .fw-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: var(--fw-sidebar-collapsed);
+        background: var(--fw-bg);
+        box-shadow: 2px 0 12px rgba(0, 0, 0, .08);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        transition: width var(--fw-transition);
+        /* Above the fixed bars a page may pin to the bottom, which reserve room for the
+           collapsed width only and would otherwise be drawn over the profile block once
+           this expands. Still below every dialog. */
+        z-index: 500;
+    }
+
+    .fw-sidebar:hover {
+        width: var(--fw-sidebar-expanded);
+    }
+
+    /* Logo. */
+    .fw-sidebar__logo {
+        padding: 18px 14px 12px;
+        flex-shrink: 0;
+    }
+
+    .fw-sidebar__logo-link {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .fw-sidebar__logo-img {
+        width: 45px;
+        height: 45px;
+        object-fit: contain;
+        flex-shrink: 0;
+    }
+
+    .fw-sidebar__logo-text {
+        font-size: 1.15rem;
+        color: var(--fw-text-dark);
+        opacity: 0;
+        transform: translateX(-6px);
+        transition: opacity var(--fw-transition), transform var(--fw-transition);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .fw-sidebar__logo-text strong { color: var(--fw-teal); }
+
+    .fw-sidebar:hover .fw-sidebar__logo-text {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    /* Divider. */
+    .fw-sidebar__divider {
+        border: none;
+        border-top: 1px solid gray;
+        margin: 3px 14px 8px;
+        flex-shrink: 0;
+    }
+
+    /* Nav list. */
+    .fw-sidebar__nav {
+        flex: 1;
+        overflow: hidden;
+        padding: 4px 0;
+        margin-left:2px;
+        margin-top:20px;
+    }
+
+    .fw-sidebar__list {
+        list-style: none;
+        margin-left: 2px;
+        padding: 0;
+    }
+
+    .fw-sidebar__item { padding: 3px 10px; }
+
+    /* Link. */
+    .fw-sidebar__link {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 11px 10px;
+        border-radius: 10px;
+        text-decoration: none;
+        color: var(--fw-text-muted);
+        white-space: nowrap;
+        transition: background var(--fw-transition), color var(--fw-transition);
+    }
+
+    .fw-sidebar__link:hover {
+        background: var(--fw-teal-light);
+        color: var(--fw-teal);
+    }
+
+    .fw-sidebar__link--active {
+        background: var(--fw-teal) !important;
+        color: #ffffff !important;
+        
+    }
+
+    /* Icon wrapper. */
+    .fw-sidebar__icon {
+        width: 22px;
+        height: 22px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* SVG inherits currentColor from the <a> tag automatically */
+    .fw-sidebar__icon svg {
+        width: 22px;
+        height: 22px;
+    }
+
+    /* Labels (hidden when collapsed). */
+    .fw-sidebar__label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        font-family: 'Segoe UI', sans-serif;
+        opacity: 0;
+        transform: translateX(-6px);
+        transition: opacity var(--fw-transition), transform var(--fw-transition);
+        pointer-events: none;
+    }
+
+    .fw-sidebar:hover .fw-sidebar__label {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    /* Profile block. */
+    .fw-sidebar__profile {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 20px 12px 30px;
+        flex-shrink: 0;
+        border-top: 1px solid #d9d9d9;
+        white-space: nowrap;
+        overflow: hidden;
+        margin-left: 2px;
+    }
+
+    .fw-sidebar__avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex-shrink: 0;
+        margin-left: 3px;
+    }
+
+    .fw-sidebar__profile-info {
+        display: flex;
+        flex-direction: column;
+        opacity: 0;
+        transform: translateX(-6px);
+        transition: opacity var(--fw-transition), transform var(--fw-transition);
+        margin-left: 3px;
+    }
+
+    .fw-sidebar:hover .fw-sidebar__profile-info {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    .fw-sidebar__profile-name {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--fw-text-dark);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .fw-sidebar__profile-role {
+        font-size: 0.75rem;
+        color: var(--fw-text-muted);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    /* Logout button. */
+    .fw-sidebar__logout {
+        margin-left: auto;
+        opacity: 0;
+        transform: translateX(-6px);
+        transition: opacity var(--fw-transition), transform var(--fw-transition);
+    }
+
+    .fw-sidebar:hover .fw-sidebar__logout {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    .fw-sidebar__logout-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        padding: 6px;
+        border-radius: 8px;
+        color: var(--fw-text-muted);
+        cursor: pointer;
+        transition: background var(--fw-transition), color var(--fw-transition);
+    }
+
+    .fw-sidebar__logout-btn:hover {
+        background: var(--fw-teal-light);
+        color: var(--fw-teal);
+    }
+
+    /* Push page content away from the collapsed sidebar. */
+    .fw-main-content {
+        margin-left: var(--fw-sidebar-collapsed);
+        transition: margin-left var(--fw-transition);
+    }
+
+    /* Accessibility: respect reduced motion. */
+    @media (prefers-reduced-motion: reduce) {
+        .fw-sidebar,
+        .fw-sidebar__label,
+        .fw-sidebar__logo-text,
+        .fw-sidebar__profile-info { transition: none; }
+    }

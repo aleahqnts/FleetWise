@@ -1277,8 +1277,13 @@ namespace FleetWise.Controllers
         /// <summary>
         /// Rewrites a failed checklist item into the problem it describes.
         /// </summary>
-        /// <remarks>Some items are phrased negatively, where passing means the absence of
-        /// a fault. Listing those unchanged under failures inverts their meaning.</remarks>
+        /// <remarks>
+        /// Some items were phrased negatively, where passing meant the absence of a fault.
+        /// Listing those unchanged under failures inverts their meaning.
+        ///
+        /// The catalogue no longer holds any of them, but inspections recorded while it did
+        /// are kept as they were submitted, so the wording they used is still read back.
+        /// </remarks>
         private static readonly Dictionary<string, string> IssuePhrase = new(StringComparer.OrdinalIgnoreCase)
         {
             ["No Visible Body Damage"] = "Visible body damage",

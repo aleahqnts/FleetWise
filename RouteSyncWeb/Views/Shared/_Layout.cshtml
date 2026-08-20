@@ -9,6 +9,10 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/FleetWise.styles.css" asp-append-version="true" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
+    @* The sidebar is on every page, so its styles are loaded with the layout that draws it. *@
+    <link rel="stylesheet" href="~/css/sidebar.css" asp-append-version="true" />
+    @* Each page links its own stylesheet here, ahead of the markup that needs it. *@
+    @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
 

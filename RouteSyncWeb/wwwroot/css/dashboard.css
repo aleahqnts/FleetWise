@@ -1,0 +1,616 @@
+/* Dashboard/Index.cshtml */
+        /* Variables (inherit from sidebar). */
+        :root {
+        --db-teal: #4AADA8;
+        --db-teal-light: #E8F6F5;
+        --db-text: #2D3748;
+        --db-muted: #9AA5B4;
+        --db-border: #E8ECF0;
+        --db-bg: #F8F9FA;
+        --db-white: #FFFFFF;
+        --db-radius: 14px;
+        --db-shadow: 0 1px 4px rgba(0,0,0,.06);
+        }
+
+        /* Top bar. */
+        .db-topbar {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 28px;
+        }
+
+        .db-route-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        }
+
+        .db-route-label {
+        font-size: 0.9rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--db-text);
+        font-weight: 500;
+        }
+
+        .db-route-select-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+        }
+
+        .db-route-select {
+        width: 200px;
+        appearance: none;
+        padding: 7px 14px 7px 14px;
+        font-size: 0.82rem;
+        background: #f8f9fa;
+        border: 1.5px solid var(--db-border);
+        border-radius: 10px;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--db-text);
+        cursor: pointer;
+        outline: none;
+        font-weight: 500;
+        transition: border-color 180ms;
+        }
+
+        .db-route-select:focus {
+        border-color: var(--db-teal);
+        }
+
+        .db-select-arrow {
+        position: absolute;
+        right: 12px;
+        pointer-events: none;
+        color: var(--db-text);
+        }
+
+        /* Page title. */
+        .db-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--db-text);
+        font-family: 'Segoe UI', sans-serif;
+        margin-bottom: 20px;
+        }
+
+        /* Title row + refresh + date. */
+        .db-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 20px;
+        }
+
+        .db-title-row .db-title { margin-bottom: 0; }
+
+        .db-title-tools {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        }
+
+        .db-date-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-radius: 30px;
+        background: #EAF7F5;
+        color: #2e7d72;
+        font-size: .86rem;
+        font-weight: 700;
+        font-family: 'Segoe UI', sans-serif;
+        border: 1px solid #CDE9E4;
+        white-space: nowrap;
+        }
+
+        .db-btn-refresh {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 9px 16px;
+        border-radius: 8px;
+        background: #fff;
+        color: #2e7d72;
+        border: 1px solid #CDE9E4;
+        font-weight: 700;
+        font-size: .86rem;
+        font-family: 'Segoe UI', sans-serif;
+        cursor: pointer;
+        }
+
+        .db-btn-refresh:hover { background: #EAF7F5; }
+        .db-btn-refresh.spinning .db-refresh-ico { display:inline-block; animation: dbSpin .7s linear infinite; }
+        .db-refresh-ico { font-size: 1rem; line-height: 1; }
+        @keyframes dbSpin { to { transform: rotate(360deg); } }
+        .db-updated { font-size: .78rem; color: var(--db-muted); font-family: 'Segoe UI', sans-serif; }
+
+        /* Clickable Total Passengers card + breakdown. */
+        .db-stat-card--click { cursor: pointer; transition: box-shadow .15s, transform .15s; }
+        .db-stat-card--click:hover { box-shadow: 0 6px 18px rgba(59,130,246,.18); transform: translateY(-2px); }
+        .db-stat-chevron { margin-left: auto; color: var(--db-muted); font-size: .8rem; }
+
+        .db-modal-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 3000;
+        background: rgba(13,28,40,.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        }
+
+        .db-modal {
+        background: var(--db-white);
+        border-radius: 16px;
+        width: 100%;
+        max-width: 720px;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 14px 44px rgba(0,0,0,.28);
+        font-family: 'Segoe UI', sans-serif;
+        }
+
+        .db-modal-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--db-border);
+        }
+
+        .db-modal-title { font-size: 1.05rem; font-weight: 800; color: var(--db-text); }
+        .db-modal-sub { font-size: .8rem; color: var(--db-muted); margin-top: 3px; }
+
+        .db-modal-close {
+        border: none;
+        background: transparent;
+        font-size: 1.6rem;
+        line-height: 1;
+        color: var(--db-muted);
+        cursor: pointer;
+        padding: 0 4px;
+        }
+        .db-modal-close:hover { color: var(--db-text); }
+
+        .db-modal-body { padding: 14px 22px 20px; overflow-y: auto; }
+
+        .db-breakdown-empty { font-size: .85rem; color: var(--db-muted); font-family: 'Segoe UI', sans-serif; }
+
+        .db-breakdown-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: .84rem;
+        }
+
+        .db-breakdown-table th {
+        text-align: left;
+        color: var(--db-muted);
+        font-weight: 600;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--db-border);
+        }
+
+        .db-breakdown-table td {
+        color: var(--db-text);
+        padding: 8px 10px;
+        border-bottom: 1px solid #F2F4F7;
+        }
+
+        .db-breakdown-table .db-num { text-align: right; }
+
+        /* Stat grid. */
+        .db-stat-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 20px;
+        }
+
+        .db-stat-card {
+        background: var(--db-white);
+        border: 1px solid var(--db-border);
+        border-radius: var(--db-radius);
+        padding: 20px 22px;
+        box-shadow: var(--db-shadow);
+        }
+
+        .db-stat-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+        }
+
+        .db-stat-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        }
+
+        .db-stat-icon--green {
+        background: #E8F8EE;
+        color: #27AE60;
+        }
+
+        .db-stat-icon--red {
+        background: #FEECEC;
+        color: #E74C3C;
+        }
+
+        .db-stat-icon--blue {
+        background: #EAF3FF;
+        color: #3B82F6;
+        }
+
+        .db-stat-icon--pink {
+        background: #FDF0F8;
+        color: #D63384;
+        }
+
+        .db-stat-label {
+        font-size: 0.85rem;
+        font-family: 'Segoe UI', sans-serif;
+        color: var(--db-muted);
+        font-weight: 500;
+        }
+
+        .db-stat-value {
+        font-size: 1.85rem;
+        font-weight: 700;
+        color: var(--db-text);
+        font-family: 'Segoe UI', sans-serif;
+        line-height: 1.1;
+        text-align: center;
+        }
+
+        .db-stat-delta {
+        font-size: 0.78rem;
+        font-family: 'Segoe UI', sans-serif;
+        margin-top: 6px;
+        text-align: center;
+        }
+
+        .db-stat-delta--up {
+        color: #27AE60;
+        }
+
+        .db-stat-delta--down {
+        color: #E74C3C;
+        }
+
+        /* Middle row. */
+        .db-mid-grid {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: 16px;
+        margin-bottom: 20px;
+        }
+
+        /* Shared card. */
+        .db-card {
+        background: var(--db-white);
+        border: 1px solid var(--db-border);
+        border-radius: var(--db-radius);
+        padding: 20px 22px;
+        box-shadow: var(--db-shadow);
+        }
+
+        .db-card-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+        }
+
+        .db-card-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        }
+
+        .db-card-icon--teal {
+        background: var(--db-teal-light);
+        color: var(--db-teal);
+        }
+
+        .db-card-icon--green {
+        background: #E8F8EE;
+        color: #27AE60;
+        }
+
+        .db-card-icon--red {
+        background: #FEECEC;
+        color: #E74C3C;
+        }
+
+        .db-card-icon--orange {
+        background: #FEF3E8;
+        color: #F4723B;
+        }
+
+        .db-card-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--db-text);
+        font-family: 'Segoe UI', sans-serif;
+        }
+
+        .db-badge {
+        font-size: 0.72rem;
+        font-weight: 600;
+        font-family: 'Segoe UI', sans-serif;
+        padding: 3px 10px;
+        border-radius: 20px;
+        }
+
+        .db-badge--teal {
+        background: var(--db-teal-light);
+        color: var(--db-teal);
+        }
+
+        .db-chart-legend {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
+        }
+
+        .db-legend-swatch {
+        width: 26px;
+        height: 12px;
+        border-radius: 3px;
+        display: inline-block;
+        }
+
+        .db-legend-text {
+        font-size: 0.78rem;
+        color: var(--db-muted);
+        font-family: 'Segoe UI', sans-serif;
+        }
+
+        /* Chart canvas. */
+        .db-chart-canvas {
+        height: 260px !important;
+        width: 100% !important;
+        }
+
+        /* Map. */
+        .db-card--map {
+        display: flex;
+        flex-direction: column;
+        }
+
+        .db-map-body {
+        flex: 1;
+        }
+
+        /* Live Leaflet preview + hover "Show more" overlay */
+        .db-map-link {
+        position: relative;
+        display: block;
+        height: 280px;
+        border-radius: 10px;
+        overflow: hidden;
+        text-decoration: none;
+        }
+
+        .db-map-leaflet {
+        position: absolute;
+        inset: 0;
+        background: #E8EFF7;
+        }
+
+        .db-card--map .db-map-legend {
+        z-index: 600;
+        }
+
+        .db-map-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(45, 55, 72, 0);
+        opacity: 0;
+        transition: opacity 160ms, background 160ms;
+        /* Always the click target (sits over the non-interactive map) so the whole
+           card reliably navigates to the Fleet Map. */
+        pointer-events: auto;
+        cursor: pointer;
+        }
+
+        .db-map-link:hover .db-map-overlay {
+        opacity: 1;
+        background: rgba(45, 55, 72, 0.18);
+        }
+
+        .db-map-more {
+        background: var(--db-white);
+        color: var(--db-teal);
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 9px 18px;
+        border-radius: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .2);
+        }
+
+        /* Bus pill markers (same look as the Fleet Map page) */
+        .fm-bus-marker {
+        background: transparent !important;
+        border: none !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        }
+
+        .fm-bus-marker span {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 14px;
+        color: #fff;
+        font-size: 0.7rem;
+        font-weight: 700;
+        font-family: 'Segoe UI', sans-serif;
+        letter-spacing: 0.03em;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+        white-space: nowrap;
+        }
+
+        .db-map-placeholder {
+        position: relative;
+        height: 280px;
+        background: #E8EFF7;
+        border-radius: 10px;
+        overflow: hidden;
+        }
+
+        .db-map-grid {
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(rgba(255,255,255,.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.35) 1px, transparent 1px);
+        background-size: 40px 40px;
+        }
+
+        .db-bus-marker {
+        position: absolute;
+        padding: 5px 10px;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        font-family: 'Segoe UI', sans-serif;
+        color: #fff;
+        white-space: nowrap;
+        transform: translate(-50%, -50%);
+        }
+
+        .db-bus--orange {
+        background: #F4723B;
+        }
+
+        .db-bus--teal {
+        background: #4AADA8;
+        }
+
+        .db-bus-dot {
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 3px solid #fff;
+        transform: translate(-50%, -50%);
+        box-shadow: 0 0 0 3px rgba(74,173,168,.3);
+        }
+
+        .db-map-legend {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: #fff;
+        border-radius: 8px;
+        padding: 10px 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.1);
+        font-family: 'Segoe UI', sans-serif;
+        }
+
+        .db-map-legend-title {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--db-text);
+        margin-bottom: 6px;
+        }
+
+        .db-map-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 0.78rem;
+        color: var(--db-text);
+        margin-bottom: 4px;
+        }
+
+        .db-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+        }
+
+        /* Bottom row. */
+        .db-bottom-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        }
+
+        .db-card--bottom {
+        padding: 18px 20px;
+        }
+
+        .db-card-icon-wrap {
+        width: 30px;
+        height: 30px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 4px;
+        }
+
+        .db-card-body-text {
+        font-size: 0.85rem;
+        color: var(--db-muted);
+        font-family: 'Segoe UI', sans-serif;
+        margin: 0;
+        line-height: 1.5;
+        }
+
+        .db-card-body-text strong {
+        color: var(--db-text);
+        }
+
+        /* Responsive. */
+        @media (max-width: 1100px) {
+        .db-stat-grid {
+        grid-template-columns: repeat(2, 1fr);
+        }
+
+        .db-mid-grid {
+        grid-template-columns: 1fr;
+        }
+        }
+
+        @media (max-width: 640px) {
+        .db-stat-grid {
+        grid-template-columns: 1fr;
+        }
+
+        .db-bottom-grid {
+        grid-template-columns: 1fr;
+        }
+
+        .db-topbar {
+        flex-direction: column;
+        align-items: stretch;
+        }
+        }

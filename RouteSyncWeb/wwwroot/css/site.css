@@ -47,3 +47,94 @@
     background: #f8f9fa;
     overflow-y: auto;
 }
+
+/* ---------------------------------------------------------------------------
+   Page transitions.
+
+   The browser holds the page it is leaving on screen until the next one is ready
+   to paint, then crosses between them. Nothing waits on the animation: it runs
+   over a navigation that was happening anyway, and a browser without support
+   navigates exactly as it did before.
+   --------------------------------------------------------------------------- */
+
+@view-transition {
+    navigation: auto;
+}
+
+/* The page being left goes first and quickly; the one arriving fades up over it and
+   settles. Named elements are captured on their own, so root here is the content
+   between the sidebar and the topbar, and only that moves. */
+@keyframes vt-leave {
+    to { opacity: 0; }
+}
+
+@keyframes vt-arrive {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+}
+
+::view-transition-old(root) {
+    animation: vt-leave 120ms ease both;
+}
+
+::view-transition-new(root) {
+    animation: vt-arrive 260ms ease both;
+}
+
+/* The shell is the same on every page, so it is named and held still while the
+   content inside it changes. Without this the sidebar would fade with the rest and
+   the whole window would appear to blink. */
+.fw-sidebar {
+    view-transition-name: app-sidebar;
+}
+
+.topbar {
+    view-transition-name: app-topbar;
+}
+
+/* The sidebar takes no part in the animation. Naming it above kept it out of the page
+   snapshot; this drops the cross-fade between its own two as well.
+
+   Clearing the animation is not enough on its own. The two snapshots are blended
+   together, and that blending is what the eye reads as a fade, so the isolation and the
+   blend mode have to go too. The old snapshot is then not drawn at all and the new one
+   is simply shown, which is how the sidebar behaved before any of this existed. */
+::view-transition-group(app-sidebar) {
+    animation: none;
+}
+
+::view-transition-image-pair(app-sidebar) {
+    isolation: auto;
+}
+
+::view-transition-old(app-sidebar),
+::view-transition-new(app-sidebar) {
+    animation: none;
+    mix-blend-mode: normal;
+    display: block;
+}
+
+::view-transition-old(app-sidebar) {
+    display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+        animation: none !important;
+    }
+}
+
+/* Where the browser cannot cross between documents, the arriving page fades its own
+   content in instead. Only one of the two ever runs. */
+@supports not (view-transition-name: none) {
+    @keyframes page-enter {
+        from { opacity: 0; transform: translateY(4px); }
+        to   { opacity: 1; transform: none; }
+    }
+
+    .main-content {
+        animation: page-enter 260ms ease both;
+    }
+}
