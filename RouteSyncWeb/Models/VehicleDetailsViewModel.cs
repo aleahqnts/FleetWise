@@ -62,6 +62,9 @@ namespace FleetWise.Models
         // Flag review / actions.
         /// <summary>Whether the bus is grounded, which prevents dispatch assigning it.</summary>
         public bool OutOfService { get; set; }
+
+        /// <summary>Whether the bus has left the fleet, which no service action can undo.</summary>
+        public bool Retired { get; set; }
         /// <summary>The unresolved incident to act on, or null when none is open.</summary>
         public int? OpenLogId { get; set; }
 

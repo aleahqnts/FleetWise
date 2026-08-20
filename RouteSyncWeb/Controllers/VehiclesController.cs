@@ -645,6 +645,7 @@ namespace FleetWise.Controllers
             // thread of comments and actions. The thread follows the open incident, or the
             // most recent one when nothing is open.
             vm.OutOfService = vehicle.OutOfService;
+            vm.Retired = vehicle.RetiredAt != null;
             var openLog = logs.FirstOrDefault(l => l.ResolvedAt == null);
             vm.OpenLogId = openLog?.LogId;
             vm.OpenIncidentCritical = openLog?.IssueDetails?.IsCritical == true;
@@ -867,6 +868,14 @@ namespace FleetWise.Controllers
 
             if (!outOfService)
             {
+                // A retired bus is out of the fleet, and being roadworthy does not put it
+                // back. Returning one to service would leave it off the fleet yet free to
+                // be dispatched, so restoring it comes first.
+                if (vehicle.RetiredAt != null)
+                    return BadRequest(
+                        $"{vehicleId} is retired. Restore it to the fleet under Edit before "
+                        + "returning it to service.");
+
                 // A fault that grounds the bus is what keeps it grounded. Returning it to
                 // service while one is open would put an unroadworthy bus back on the road
                 // by a route that never asked whether the fault was dealt with. Fixing it
