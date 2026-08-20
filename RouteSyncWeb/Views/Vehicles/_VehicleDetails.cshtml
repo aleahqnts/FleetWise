@@ -35,8 +35,10 @@
             @* Vehicle Profile *@
             <div class="vh-section-header">Vehicle Profile</div>
             <div class="vh-section-body">
-                <div class="vh-detail-row"><strong>Plate Number:</strong> @Model.PlateNumber</div>
-                <div class="vh-detail-row"><strong>Route:</strong> @Model.RouteName</div>
+                <div class="vh-detail-pair">
+                    <div class="vh-detail-row"><strong>Plate Number:</strong> @Model.PlateNumber</div>
+                    <div class="vh-detail-row"><strong>Route:</strong> @Model.RouteName</div>
+                </div>
             </div>
 
             @* Passenger counter camera, with remote calibration for any bus and no trip required. *@
@@ -44,9 +46,9 @@
             <div class="vh-section-body">
                 @if (!string.IsNullOrEmpty(Model.CounterDeviceId))
                 {
-                    <div class="vh-detail-row"><strong>Counter Phone:</strong> @Model.CounterDeviceId</div>
-                    <div class="vh-review-actions" style="margin-top:8px;">
-                        <button type="button" class="vh-btn vh-btn--primary" onclick="camOpen('@Model.VehicleId')">Calibrate Camera</button>
+                    <div class="vh-detail-inline">
+                        <div class="vh-detail-row"><strong>Counter Phone:</strong> @Model.CounterDeviceId</div>
+                        <button type="button" class="vh-btn vh-btn--primary vh-btn--sm" onclick="camOpen('@Model.VehicleId')">Calibrate Camera</button>
                     </div>
                 }
                 else
@@ -66,13 +68,20 @@
             <div class="vh-section-body">
                 @if (Model.HasInspection)
                 {
-                    <div class="vh-detail-row"><strong>Reported By:</strong> @Model.ReportedBy</div>
-                    <div class="vh-detail-row"><strong>Time of Report:</strong> @Model.TimeOfReport</div>
-                    <div class="vh-detail-row"><strong>Issue:</strong> @Model.Issue</div>
+                    <div class="vh-detail-pair">
+                        <div class="vh-detail-row"><strong>Reported By:</strong> @Model.ReportedBy</div>
+                        <div class="vh-detail-row"><strong>Time of Report:</strong> @Model.TimeOfReport</div>
+                    </div>
+                    <div class="vh-detail-inline">
+                        <div class="vh-detail-row"><strong>Issue:</strong> @Model.Issue</div>
+                        @if (Model.InspectionChecklist.Count > 0)
+                        {
+                            <button type="button" class="vh-btn vh-btn--outline vh-btn--sm"
+                                    onclick="vhOpenChecklist()">View inspection checklist</button>
+                        }
+                    </div>
                     @if (Model.InspectionChecklist.Count > 0)
                     {
-                        <button type="button" class="vh-btn vh-btn--outline vh-btn--sm"
-                                onclick="vhOpenChecklist()">View inspection checklist</button>
 
                         @* Held here and moved into the checklist dialog on demand, so the
                            markup is built once with the rest of the details. *@
@@ -144,10 +153,8 @@
                     @if (Model.OpenIncidentCritical)
                     {
                         <div class="vh-oos-banner">
-                            Grounded by a failed inspection: <strong>@Model.OpenIncidentSummary</strong>.
-                            Any trip on this bus is blocked until it returns to service. Reassign the
-                            trip to another bus from Dispatch, or cancel it, if the repair will not be
-                            done in time.
+                            Failed inspection: <strong>@Model.OpenIncidentSummary</strong>. Its
+                            trips are blocked. Move them to another bus in Dispatch, or cancel them.
                         </div>
                     }
                     else
@@ -160,28 +167,26 @@
                     @if (Model.OutOfService)
                     {
                         <text>
-                            <strong>Return to Service</strong> un-grounds the bus while leaving its
-                            faults open, for one that is usable but still being watched. Work is
-                            closed under <strong>Update Maintenance</strong> above, which returns
-                            the bus once nothing is left. The driver submits a fresh inspection
-                            either way before a trip can start.
+                            <strong>Return to Service</strong> puts the bus back on the road
+                            with its faults still listed. Fixing them all under
+                            <strong>Update Maintenance</strong> does the same. Either way, the
+                            driver must pass a new inspection first.
                         </text>
                     }
                     else if (Model.OpenLogId.HasValue)
                     {
                         <text>
-                            <strong>Mark Out of Service</strong> grounds the bus, which blocks
-                            every trip assigned to it. Faults are closed under
-                            <strong>Update Maintenance</strong> above.
+                            <strong>Mark Out of Service</strong> takes the bus off the road and blocks
+                            its trips. Close its faults under <strong>Update Maintenance</strong>
+                            above.
                         </text>
                     }
                     else
                     {
                         <text>
-                            <strong>Mark Out of Service</strong> grounds the bus, which blocks every
-                            trip assigned to it. The reason given opens a maintenance order and
-                            becomes the first thing on it. To book the bus into the workshop
-                            instead, use <strong>Schedule Maintenance</strong> above.
+                            <strong>Mark Out of Service</strong> takes the bus off the road and blocks
+                            its trips. Your reason starts a maintenance order. For planned work,
+                            use <strong>Schedule Maintenance</strong> above.
                         </text>
                     }
                 </p>

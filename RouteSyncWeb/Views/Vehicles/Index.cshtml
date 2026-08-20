@@ -1489,6 +1489,33 @@
 
     .vh-detail-row:last-child { margin-bottom: 0; }
 
+    /* Two facts to a line where each is short, so a section costs one row instead of two.
+       They stack again in the single-column layout, where there is no width to share. */
+    .vh-detail-pair {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px 18px;
+    }
+
+    .vh-detail-pair > .vh-detail-row { margin-bottom: 0; }
+
+    /* A fact and the button that acts on it, on one line. */
+    .vh-detail-inline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .vh-detail-inline > .vh-detail-row { margin-bottom: 0; }
+
+    .vh-detail-pair + .vh-detail-inline { margin-top: 8px; }
+
+    @@media (max-width: 991.98px) {
+        .vh-detail-pair { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    }
+
     .vh-detail-row strong { font-weight: 600; }
 
     .vh-detail-empty { color: var(--vh-muted); }
