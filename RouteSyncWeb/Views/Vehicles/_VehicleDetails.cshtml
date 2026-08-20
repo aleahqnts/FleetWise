@@ -209,7 +209,7 @@
                 </span>
             </div>
             <div class="vh-section-body">
-                @* Only what is wrong now. Anything closed has moved to the history below, and
+                @* Only what is wrong now. Orders already closed are under Past Orders, and
                    the status is already on the header badge. *@
                 @if (Model.OpenIncident is not null)
                 {
@@ -287,9 +287,11 @@
                         </template>
                     }
 
-                    @if (Model.IncidentThreads.Count > 0)
+                    @* Only this order's thread. The ones belonging to closed orders are
+                       shown with the orders they belong to, under Past Orders. *@
+                    @if (Model.IncidentThreads.Any(t => t.LogId == Model.OpenLogId))
                     {
-                        @foreach (var thread in Model.IncidentThreads)
+                        @foreach (var thread in Model.IncidentThreads.Where(t => t.LogId == Model.OpenLogId))
                         {
                             <ul class="vh-thread">
                                 @foreach (var n in thread.Notes)
@@ -313,6 +315,69 @@
                     <div class="vh-detail-row vh-detail-empty">Nothing outstanding.</div>
                 }
             </div>
+
+            @* Past Orders: the work already closed, folded away. Each row opens to the
+               faults it carried and what was said while it was open. *@
+            @if (Model.PastOrders.Count > 0)
+            {
+                <div class="vh-section-header">
+                    <span>Past Orders</span>
+                    <span class="vh-section-badge vh-badge--default">@Model.PastOrders.Count</span>
+                </div>
+                <div class="vh-section-body vh-past">
+                    @foreach (var order in Model.PastOrders)
+                    {
+                        <details class="vh-past-order">
+                            <summary class="vh-past-head">
+                                <span class="vh-past-when">@order.Closed</span>
+                                <span class="vh-past-sum">@order.Summary</span>
+                            </summary>
+                            <div class="vh-past-body">
+                                <div class="vh-tl-date">Opened @order.Opened, closed @order.Closed</div>
+
+                                @if (order.Items.Count > 0)
+                                {
+                                    <ul class="vh-items">
+                                        @foreach (var item in order.Items)
+                                        {
+                                            <li class="vh-item--closed">
+                                                <span class="vh-item-mark">✓</span>
+                                                <span class="vh-item-label">@item.Label</span>
+                                                @if (item.IsCritical)
+                                                {
+                                                    <span class="vh-item-crit" title="Grounded the bus until it was fixed">Critical</span>
+                                                }
+                                                <span class="vh-item-outcome">@item.Outcome</span>
+                                            </li>
+                                            @if (!string.IsNullOrWhiteSpace(item.Note))
+                                            {
+                                                <li class="vh-item-note">@item.Note</li>
+                                            }
+                                        }
+                                    </ul>
+                                }
+
+                                @if (order.Notes.Count > 0)
+                                {
+                                    <ul class="vh-thread">
+                                        @foreach (var n in order.Notes)
+                                        {
+                                            <li>
+                                                <span class="vh-thread-action">@n.Action</span>
+                                                @if (!string.IsNullOrWhiteSpace(n.Note))
+                                                {
+                                                    <span class="vh-thread-note">@n.Note</span>
+                                                }
+                                                <span class="vh-thread-meta">@n.AuthorName &middot; @n.When</span>
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                        </details>
+                    }
+                </div>
+            }
 
             @* History: everything recorded against this bus, whether or not an incident was
                involved, so retiring, grounding and returning it all appear in one place. *@

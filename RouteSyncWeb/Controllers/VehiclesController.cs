@@ -400,27 +400,47 @@ namespace FleetWise.Controllers
         /// </remarks>
         private async Task<List<MaintenanceItemLineViewModel>> LoadOrderItemsAsync(int logId)
         {
+            var byOrder = await LoadOrderItemsAsync(new[] { logId });
+            return byOrder.TryGetValue(logId, out var items) ? items : new();
+        }
+
+        /// <summary>The faults on several orders, keyed by order.</summary>
+        /// <remarks>
+        /// Read in one request rather than one per order, so a bus with a long service
+        /// record does not cost a round trip for each order it has been through.
+        /// </remarks>
+        private async Task<Dictionary<int, List<MaintenanceItemLineViewModel>>> LoadOrderItemsAsync(
+            IEnumerable<int> logIds)
+        {
+            var ids = logIds.Distinct().ToList();
+            if (ids.Count == 0) return new();
+
             var response = await _supabase.From<MaintenanceItem>()
-                .Filter("log_id", Postgrest.Constants.Operator.Equals, logId.ToString())
+                .Filter("log_id", Postgrest.Constants.Operator.In, ids.Cast<object>().ToList())
                 .Get();
 
             return response.Models
-                .Select(i =>
-                {
-                    var open = string.Equals(i.State, "open", OIC);
-                    return new MaintenanceItemLineViewModel(
-                        i.ItemId,
-                        i.Label ?? "",
-                        i.IsCritical,
-                        open,
-                        open ? "" : string.Equals(i.State, "fixed", OIC) ? "Fixed" : "Not an issue",
-                        i.ClosedBy ?? "",
-                        i.Note ?? "");
-                })
-                .OrderByDescending(i => i.IsOpen)
-                .ThenByDescending(i => i.IsCritical)
-                .ThenBy(i => i.Label, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+                .GroupBy(i => i.LogId)
+                .ToDictionary(g => g.Key, g => g
+                    .Select(FormatOrderItem)
+                    .OrderByDescending(i => i.IsOpen)
+                    .ThenByDescending(i => i.IsCritical)
+                    .ThenBy(i => i.Label, StringComparer.OrdinalIgnoreCase)
+                    .ToList());
+        }
+
+        /// <summary>One fault as it reads in the panel, with its outcome in words.</summary>
+        private static MaintenanceItemLineViewModel FormatOrderItem(MaintenanceItem item)
+        {
+            var open = string.Equals(item.State, "open", OIC);
+            return new MaintenanceItemLineViewModel(
+                item.ItemId,
+                item.Label ?? "",
+                item.IsCritical,
+                open,
+                open ? "" : string.Equals(item.State, "fixed", OIC) ? "Fixed" : "Not an issue",
+                item.ClosedBy ?? "",
+                item.Note ?? "");
         }
 
         /// <summary>Everything recorded against one bus, newest first.</summary>
@@ -621,6 +641,42 @@ namespace FleetWise.Controllers
                                 When = n.CreatedAt.ToUniversalTime().ToString("MM/dd/yy hh:mm tt"),
                             }).ToList()
                     }).ToList();
+            }
+
+            // Orders already closed. The panel above says what is wrong now; this says what
+            // has been wrong before, and what was done about it.
+            var closedOrders = logs
+                .Where(l => l.ResolvedAt != null)
+                .OrderByDescending(l => l.ResolvedAt)
+                .ToList();
+
+            if (closedOrders.Count > 0)
+            {
+                var itemsByOrder = await LoadOrderItemsAsync(closedOrders.Select(l => l.LogId));
+                var notesByOrder = vm.IncidentThreads.ToDictionary(t => t.LogId, t => t.Notes);
+
+                vm.PastOrders = closedOrders
+                    .Select(l =>
+                    {
+                        var items = itemsByOrder.TryGetValue(l.LogId, out var found) ? found : new();
+
+                        // An order raised before faults were tracked as rows has none, so the
+                        // issue it recorded stands in for them.
+                        var summary = items.Count > 0
+                            ? string.Join(", ", items.Select(i => i.Label))
+                            : FormatMaintenanceEntry(l).Summary;
+
+                        return new PastOrderViewModel
+                        {
+                            LogId = l.LogId,
+                            Opened = l.CreatedAt.ToString("MM/dd/yy"),
+                            Closed = l.ResolvedAt!.Value.ToString("MM/dd/yy"),
+                            Summary = summary,
+                            Items = items,
+                            Notes = notesByOrder.TryGetValue(l.LogId, out var notes) ? notes : new(),
+                        };
+                    })
+                    .ToList();
             }
 
             return PartialView("_VehicleDetails", vm);

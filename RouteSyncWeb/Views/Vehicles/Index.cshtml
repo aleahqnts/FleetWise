@@ -1329,12 +1329,11 @@
 
     .vh-modal-body { padding: 0; }
 
-    /* Two columns. The right one carries the long lists so it takes the extra width,
-       and they start at the top rather than stretching, since the two are rarely the
-       same height. Below 992px there is no room for a second column. */
+    /* Two equal columns, starting at the top rather than stretching, since the two are
+       rarely the same height. Below 992px there is no room for a second column. */
     .vh-cols {
         display: grid;
-        grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         align-items: start;
     }
 
@@ -1558,6 +1557,53 @@
         font-size: 0.72rem;
         color: var(--vh-muted);
     }
+
+    /* Past orders. Collapsed to one line each, since the panel above already carries
+       the work that still matters. Built on <details> so it opens without script. */
+    .vh-past { display: flex; flex-direction: column; gap: 6px; }
+
+    .vh-past-order {
+        border: 1px solid var(--vh-border);
+        border-radius: 8px;
+        background: #fff;
+    }
+
+    .vh-past-head {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 9px 12px;
+        cursor: pointer;
+        list-style: none;
+        font-size: 0.82rem;
+    }
+
+    .vh-past-head::-webkit-details-marker { display: none; }
+
+    /* The arrow is drawn rather than left to the browser, which renders the native
+       marker differently in each one. */
+    .vh-past-head::before {
+        content: "›";
+        color: var(--vh-muted);
+        font-size: 1rem;
+        line-height: 1;
+        transition: transform .15s ease;
+    }
+
+    .vh-past-order[open] > .vh-past-head::before { transform: rotate(90deg); }
+    .vh-past-order[open] > .vh-past-head { border-bottom: 1px solid var(--vh-border); }
+
+    .vh-past-head:hover { background: var(--vh-bg); }
+    .vh-past-when { color: var(--vh-muted); font-size: 0.72rem; white-space: nowrap; }
+
+    .vh-past-sum {
+        color: var(--vh-text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .vh-past-body { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
 
     /* Modal footer / badge inside section header. */
     .vh-section-badge {
