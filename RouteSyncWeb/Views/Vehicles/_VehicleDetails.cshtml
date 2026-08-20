@@ -134,7 +134,11 @@
                that never involve a flag, and this is the only place that can be done. *@
             <div class="vh-section-header">
                 <span>Service Status</span>
-                @if (Model.OutOfService)
+                @if (Model.Retired)
+                {
+                    <span class="vh-section-badge vh-badge--oos">Retired</span>
+                }
+                else if (Model.OutOfService)
                 {
                     <span class="vh-section-badge vh-badge--oos">Out of Service</span>
                 }
@@ -148,59 +152,69 @@
                 }
             </div>
             <div class="vh-section-body">
-                @if (Model.OutOfService)
+                @if (Model.Retired)
                 {
-                    @if (Model.OpenIncidentCritical)
-                    {
-                        <div class="vh-oos-banner">
-                            Failed inspection: <strong>@Model.OpenIncidentSummary</strong>. Its
-                            trips are blocked. Move them to another bus in Dispatch, or cancel them.
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="vh-oos-banner">This bus is <strong>Out of Service</strong>. Dispatch cannot assign it.</div>
-                    }
+                    <div class="vh-oos-banner">
+                        This bus has left the fleet. Dispatch cannot assign it and no service
+                        action applies. Restore it under <strong>Edit</strong> to bring it back.
+                    </div>
                 }
-
-                <p class="vh-action-hint">
+                else
+                {
                     @if (Model.OutOfService)
                     {
-                        <text>
-                            <strong>Return to Service</strong> puts the bus back on the road
-                            with its faults still listed. Fixing them all under
-                            <strong>Update Maintenance</strong> does the same. Either way, the
-                            driver must pass a new inspection first.
-                        </text>
+                        @if (Model.OpenIncidentCritical)
+                        {
+                            <div class="vh-oos-banner">
+                                Failed inspection: <strong>@Model.OpenIncidentSummary</strong>. Its
+                                trips are blocked. Move them to another bus in Dispatch, or cancel them.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="vh-oos-banner">This bus is <strong>Out of Service</strong>. Dispatch cannot assign it.</div>
+                        }
                     }
-                    else if (Model.OpenLogId.HasValue)
-                    {
-                        <text>
-                            <strong>Mark Out of Service</strong> takes the bus off the road and blocks
-                            its trips. Close its faults under <strong>Update Maintenance</strong>
-                            above.
-                        </text>
-                    }
-                    else
-                    {
-                        <text>
-                            <strong>Mark Out of Service</strong> takes the bus off the road and blocks
-                            its trips. Your reason starts a maintenance order. For planned work,
-                            use <strong>Schedule Maintenance</strong> above.
-                        </text>
-                    }
-                </p>
 
-                <div class="vh-review-actions">
-                    @if (Model.OutOfService)
-                    {
-                        <button type="button" class="vh-btn vh-btn--outline" onclick="vhSetService('@Model.VehicleId', false, @(Model.OpenLogId?.ToString() ?? "null"))">Return to Service</button>
-                    }
-                    else
-                    {
-                        <button type="button" class="vh-btn vh-btn--danger" onclick="vhMarkOutOfService('@Model.VehicleId', @(Model.OpenLogId?.ToString() ?? "null"))">Mark Out of Service</button>
-                    }
-                </div>
+                    <p class="vh-action-hint">
+                        @if (Model.OutOfService)
+                        {
+                            <text>
+                                <strong>Return to Service</strong> puts the bus back on the road
+                                with its faults still listed. Fixing them all under
+                                <strong>Update Maintenance</strong> does the same. Either way, the
+                                driver must pass a new inspection first.
+                            </text>
+                        }
+                        else if (Model.OpenLogId.HasValue)
+                        {
+                            <text>
+                                <strong>Mark Out of Service</strong> takes the bus off the road and blocks
+                                its trips. Close its faults under <strong>Update Maintenance</strong>
+                                above.
+                            </text>
+                        }
+                        else
+                        {
+                            <text>
+                                <strong>Mark Out of Service</strong> takes the bus off the road and blocks
+                                its trips. Your reason starts a maintenance order. For planned work,
+                                use <strong>Schedule Maintenance</strong> above.
+                            </text>
+                        }
+                    </p>
+
+                    <div class="vh-review-actions">
+                        @if (Model.OutOfService)
+                        {
+                            <button type="button" class="vh-btn vh-btn--outline" onclick="vhSetService('@Model.VehicleId', false, @(Model.OpenLogId?.ToString() ?? "null"))">Return to Service</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="vh-btn vh-btn--danger" onclick="vhMarkOutOfService('@Model.VehicleId', @(Model.OpenLogId?.ToString() ?? "null"))">Mark Out of Service</button>
+                        }
+                    </div>
+                }
             </div>
         </div>
 
@@ -422,18 +436,24 @@
 
     @* The work an administrator can book, cloned into the schedule dialog. *@
     <template id="vhCatalogueSource">
-        @foreach (var item in Model.Catalogue)
+        @foreach (var group in Model.Catalogue)
         {
-            <div class="vh-item-edit">
-                <label class="vh-item-check">
-                    <input type="checkbox" value="@item.Item" />
-                    <span class="vh-item-label">@item.Item</span>
-                </label>
-                @if (item.IsCritical)
-                {
-                    <span class="vh-item-crit" title="Grounds the bus until it is fixed">Critical</span>
-                }
-            </div>
+            <div class="vh-item-group">@group.Section</div>
+            @foreach (var item in group.Items)
+            {
+                @* The tag sits inside the label so it shares the line with the item it
+                   describes rather than wrapping under it. *@
+                <div class="vh-item-edit">
+                    <label class="vh-item-check">
+                        <input type="checkbox" value="@item.Item" />
+                        <span class="vh-item-label">@item.Item</span>
+                        @if (item.IsCritical)
+                        {
+                            <span class="vh-item-crit" title="Keeps the bus off the road until it is fixed">Critical</span>
+                        }
+                    </label>
+                </div>
+            }
         }
     </template>
 
