@@ -129,6 +129,13 @@ namespace FleetWise.Controllers
             });
         }
 
+        /// <summary>
+        /// A step of the reset reached without its form, such as by stepping back to
+        /// it, restarts the flow rather than answering with an error.
+        /// </summary>
+        [HttpGet]
+        public IActionResult VerifyResetCode() => RedirectToAction(nameof(ForgotPassword));
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         [EnableRateLimiting("login")]
@@ -152,6 +159,10 @@ namespace FleetWise.Controllers
             return View(nameof(ResetPassword),
                 new ResetPasswordViewModel { ResetToken = r.Token! });
         }
+
+        /// <inheritdoc cref="VerifyResetCode()"/>
+        [HttpGet]
+        public IActionResult ResetPassword() => RedirectToAction(nameof(ForgotPassword));
 
         [HttpPost]
         [ValidateAntiForgeryToken]

@@ -68,6 +68,25 @@
             <span class="vh-card-value">@Model.ScheduledMaintenance</span>
         </div>
     </a>
+
+    @* Shown only once a bus has left the fleet, since an empty card teaches nothing. *@
+    @if (Model.RetiredVehicles > 0)
+    {
+        <a href="@Url.Action("Index", new { status = "Retired" })"
+           class="vh-card vh-card--click @(Model.SelectedStatus == "Retired" ? "vh-card--active" : "")"
+           title="Show buses that have left the fleet">
+            <div class="vh-card-icon vh-card-icon--slate">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 8v13H3V8" /><path d="M1 3h22v5H1z" /><path d="M10 12h4" />
+                </svg>
+            </div>
+            <div class="vh-card-text">
+                <span class="vh-card-label">Retired</span>
+                <span class="vh-card-value">@Model.RetiredVehicles</span>
+            </div>
+        </a>
+    }
 </div>
 
 @* TOOLBAR *@
@@ -132,6 +151,21 @@
 @await Html.PartialAsync("_EditVehicleModal")
 @await Html.PartialAsync("_CameraCalibrateModal")
 
+@* The inspection checklist, opened from the vehicle details. It sits beside that
+   dialog rather than inside it, so closing one never disturbs the other. *@
+<div class="modal fade vh-modal" id="inspectionChecklistModal" tabindex="-1"
+     aria-labelledby="inspectionChecklistLabel" aria-hidden="true">
+    <div class="modal-dialog vh-modal-sm modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title vh-modal-title" id="inspectionChecklistLabel">Inspection Checklist</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body vh-modal-body" id="vhChecklistBody"></div>
+        </div>
+    </div>
+</div>
+
 @* Antiforgery token for the View-modal fetch POSTs (add note / resolve / out-of-service). *@
 @Html.AntiForgeryToken()
 
@@ -163,6 +197,36 @@
     };
 </script>
 <script src="~/js/camera-calib.js"></script>
+
+<script>
+    // Copies the checklist built with the vehicle details into its own dialog. The
+    // markup is cloned rather than rebuilt, so the two always agree.
+    document.addEventListener('DOMContentLoaded', function () {
+        const details = document.getElementById('viewVehicleModal');
+        if (details) {
+            details.addEventListener('shown.bs.modal', function () { details.focus(); });
+        }
+    });
+
+    function vhOpenChecklist() {
+        const source = document.getElementById('vhChecklistSource');
+        const body = document.getElementById('vhChecklistBody');
+        const dialog = document.getElementById('inspectionChecklistModal');
+        if (!source || !body || !dialog) return;
+
+        body.replaceChildren(source.content.cloneNode(true));
+
+        if (!dialog.dataset.returnsFocus) {
+            dialog.dataset.returnsFocus = '1';
+            dialog.addEventListener('hidden.bs.modal', function () {
+                const details = document.getElementById('viewVehicleModal');
+                if (details && details.classList.contains('show')) details.focus();
+            });
+        }
+
+        bootstrap.Modal.getOrCreateInstance(dialog).show();
+    }
+</script>
 
 <script>
     // Load the vehicle table rows in the background so the page itself renders instantly
@@ -459,12 +523,127 @@
 
     .vh-card-icon--green { background: #E8F8EE; color: #27AE60; }
     .vh-card-icon--red   { background: #FDECEC; color: #E53E3E; }
+    .vh-card-icon--slate { background: #EEF1F5; color: #64748B; }
+
+    .vh-form-input--fixed {
+        background: #F4F6F8;
+        color: #6B7280;
+        cursor: default;
+    }
+
+    .vh-field-note {
+        font-size: 0.72rem;
+        color: #9AA3B2;
+        margin-top: 2px;
+    }
+
+    .vh-btn--sm {
+        padding: 5px 10px;
+        font-size: 0.78rem;
+        margin-top: 6px;
+    }
+
+    #vhChecklistBody {
+        padding: 18px 24px 24px;
+    }
+
+    /* Sits above the vehicle details, so it carries a heavier shadow to read as a
+       separate sheet rather than part of the dialog underneath. */
+    #inspectionChecklistModal .modal-content {
+        box-shadow: 0 24px 60px rgba(15, 30, 60, 0.28);
+    }
+
+    /* Inspection checklist, one line per item with how it was marked. */
+    .vh-cl-summary {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-bottom: 16px;
+    }
+
+    .vh-cl-summary--pass { background: #E8F8EE; color: #1E8449; }
+    .vh-cl-summary--fail { background: #FDECEC; color: #9B2C2C; }
+
+    .vh-cl-when {
+        font-size: 0.75rem;
+        font-weight: 400;
+        opacity: 0.75;
+    }
+
+    .vh-cl-group + .vh-cl-group { margin-top: 16px; }
+
+    .vh-cl-group-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #9AA3B2;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #EEF1F5;
+        margin-bottom: 2px;
+    }
+
+    .vh-cl-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+        .vh-cl-list li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 2px;
+            font-size: 0.86rem;
+            color: #2D3748;
+        }
+
+            .vh-cl-list li + li { border-top: 1px solid #F4F6F8; }
+
+    .vh-cl-name { flex: 1; }
+
+    .vh-cl-mark {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 700;
+        flex: none;
+    }
+
+    .vh-cl--pass .vh-cl-mark { background: #E8F8EE; color: #27AE60; }
+
+    .vh-cl--fail {
+        color: #9B2C2C;
+        font-weight: 600;
+    }
+
+        .vh-cl--fail .vh-cl-mark { background: #FDECEC; color: #C0392B; }
+
+    /* Marks an item that grounds the bus when it fails. */
+    .vh-cl-crit {
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: #FDF3E3;
+        color: #B87A15;
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        flex: none;
+    }
     .vh-card-icon--amber { background: #FEF6E0; color: #D69E2E; }
 
     /* Clickable flagged KPI -> filters the table to flagged vehicles. */
     .vh-card--click { cursor: pointer; text-decoration: none; transition: box-shadow .15s, transform .15s; }
     .vh-card--click:hover { box-shadow: 0 6px 18px rgba(229,62,62,.18); transform: translateY(-2px); }
-    .vh-card--active { border-color: #E53E3E; box-shadow: 0 0 0 2px rgba(229,62,62,.18); }
+    .vh-card--active { border-color: #3AB5A4; box-shadow: 0 0 0 2px rgba(58,181,164,.18); }
 
     .vh-card-text {
         display: flex;

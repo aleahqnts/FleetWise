@@ -37,6 +37,15 @@ public class Vehicle : BaseModel
     [Column("counter_device_id")]
     public string CounterDeviceId { get; set; }
 
+    // A bus that has left the fleet for good. Null means it is still in service.
+    // Kept apart from vehicle_status, which the next shift overwrites, and from
+    // out_of_service, which means grounded today and expected back.
+    [Column("retired_at")]
+    public DateTime? RetiredAt { get; set; }
+
+    [Column("retired_reason")]
+    public string RetiredReason { get; set; }
+
     [Column("last_maintenance_date")]
     public DateTime? LastMaintenanceDate { get; set; }
 

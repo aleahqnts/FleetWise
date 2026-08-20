@@ -65,23 +65,50 @@
             <div class="vh-detail-row"><strong>Reported By:</strong> @Model.ReportedBy</div>
             <div class="vh-detail-row"><strong>Time of Report:</strong> @Model.TimeOfReport</div>
             <div class="vh-detail-row"><strong>Issue:</strong> @Model.Issue</div>
-            @if (Model.InspectionSections.Count > 0)
+            @if (Model.InspectionChecklist.Count > 0)
             {
-                <details class="vh-flag-details">
-                    <summary>Flagged items (@Model.InspectionSections.Sum(s => s.Items.Count))</summary>
-                    @foreach (var grp in Model.InspectionSections)
+                <button type="button" class="vh-btn vh-btn--outline vh-btn--sm"
+                        onclick="vhOpenChecklist()">View inspection checklist</button>
+
+                @* Held here and moved into the checklist dialog on demand, so the
+                   markup is built once with the rest of the details. *@
+                <template id="vhChecklistSource">
+                    @{
+                        var allItems = Model.InspectionChecklist.SelectMany(g => g.Items).ToList();
+                        var failedCount = allItems.Count(i => !i.Passed);
+                    }
+                    <div class="vh-cl-summary @(failedCount == 0 ? "vh-cl-summary--pass" : "vh-cl-summary--fail")">
+                        @if (failedCount == 0)
+                        {
+                            <text>All @allItems.Count items passed.</text>
+                        }
+                        else
+                        {
+                            <text>@failedCount of @allItems.Count items failed.</text>
+                        }
+                        <span class="vh-cl-when">@Model.TimeOfReport &middot; @Model.ReportedBy</span>
+                    </div>
+
+                    @foreach (var grp in Model.InspectionChecklist)
                     {
-                        <div class="vh-flag-group">
-                            <div class="vh-flag-group-label">@grp.Section</div>
-                            <ul class="vh-flag-list">
+                        <div class="vh-cl-group">
+                            <div class="vh-cl-group-label">@grp.Section</div>
+                            <ul class="vh-cl-list">
                                 @foreach (var item in grp.Items)
                                 {
-                                    <li>@item</li>
+                                    <li class="@(item.Passed ? "vh-cl--pass" : "vh-cl--fail")">
+                                        <span class="vh-cl-mark">@(item.Passed ? "✓" : "✕")</span>
+                                        <span class="vh-cl-name">@item.Item</span>
+                                        @if (item.IsCritical)
+                                        {
+                                            <span class="vh-cl-crit" title="Blocks a trip if it fails">Critical</span>
+                                        }
+                                    </li>
                                 }
                             </ul>
                         </div>
                     }
-                </details>
+                </template>
             }
         }
         else

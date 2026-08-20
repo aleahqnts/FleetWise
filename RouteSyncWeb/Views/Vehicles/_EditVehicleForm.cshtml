@@ -45,3 +45,53 @@
         <button type="submit" class="vh-btn vh-btn--primary">Save Changes</button>
     </div>
 </form>
+
+@* Fleet membership is its own decision, so it posts separately from the profile. *@
+<div class="vh-section-header">
+    <span>Fleet Membership</span>
+    @if (Model.Retired)
+    {
+        <span class="vh-section-badge vh-badge--oos">Retired</span>
+    }
+</div>
+<div class="vh-section-body">
+    @if (Model.Retired)
+    {
+        <div class="vh-oos-banner">
+            This bus has left the fleet@(string.IsNullOrWhiteSpace(Model.RetiredReason) ? "" : $": {Model.RetiredReason}").
+            It is hidden from the registry and cannot be scheduled. Its trips and
+            inspections are kept.
+        </div>
+        <form asp-action="SetRetired" asp-controller="Vehicles" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="vehicleId" value="@Model.VehicleId" />
+            <input type="hidden" name="retired" value="false" />
+            <p class="vh-action-hint">
+                <strong>Restore</strong> brings the bus back to the registry. It returns out
+                of service, so its roadworthiness is decided separately.
+            </p>
+            <button type="submit" class="vh-btn vh-btn--outline">Restore to Fleet</button>
+        </form>
+    }
+    else
+    {
+        <form asp-action="SetRetired" asp-controller="Vehicles" method="post"
+              onsubmit="return confirm('Retire @Model.VehicleId from the fleet? It will be hidden from the registry and cannot be scheduled. This can be undone.');">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="vehicleId" value="@Model.VehicleId" />
+            <input type="hidden" name="retired" value="true" />
+            <p class="vh-action-hint">
+                <strong>Retire</strong> is for a bus that is not coming back: sold, scrapped
+                or written off. It leaves the registry and every assignment list, and its
+                history is kept. Use <strong>Mark Out of Service</strong> instead for a bus
+                that is off the road today.
+            </p>
+            <div class="vh-form-row">
+                <label for="retiredReason">Reason:</label>
+                <input type="text" id="retiredReason" name="reason" class="vh-form-input"
+                       maxlength="200" placeholder="Sold, scrapped, written off…" />
+            </div>
+            <button type="submit" class="vh-btn vh-btn--danger">Retire Bus</button>
+        </form>
+    }
+</div>
