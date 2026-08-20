@@ -215,6 +215,10 @@ namespace FleetWise.Controllers
             var changedNothing = summary.Count == 0;
             if (changedNothing && remark is null) return BadRequest("Nothing to update.");
 
+            // An order raised before faults were tracked separately has nothing to tick,
+            // so the remark is what ends it.
+            var itemless = items.Count == 0;
+
             // A save that only carries a remark is progress on work still under way, and
             // reads as a comment. One that closes faults reports what it closed.
             await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
@@ -222,7 +226,7 @@ namespace FleetWise.Controllers
                 LogId = logId,
                 AuthorId = uid,
                 AuthorName = uname,
-                Action = changedNothing ? "Comment"
+                Action = changedNothing && !itemless ? "Comment"
                        : remaining == 0 ? "Maintenance Complete"
                        : "Maintenance Update",
                 Note = string.Join(" ", new[] { string.Join(". ", summary), remark }
@@ -230,8 +234,9 @@ namespace FleetWise.Controllers
                 CreatedAt = PhClock.NowForDb,
             });
 
-            // A remark on its own leaves the order exactly as it was.
-            if (remaining == 0 && !changedNothing)
+            // A remark on its own leaves the order exactly as it was, unless there was
+            // never anything on it to close.
+            if (remaining == 0 && (!changedNothing || itemless))
             {
                 order.ResolvedAt = PhClock.Now;
                 order.MaintenanceStatus = "No Issues";
@@ -254,8 +259,8 @@ namespace FleetWise.Controllers
             }
 
             await _audit.WriteAsync(
-                remaining == 0 && !changedNothing ? "maintenance_completed" : "maintenance_updated",
-                remaining == 0 && !changedNothing
+                remaining == 0 && (!changedNothing || itemless) ? "maintenance_completed" : "maintenance_updated",
+                remaining == 0 && (!changedNothing || itemless)
                     ? $"completed maintenance on bus {order.VehicleId}"
                         + (summary.Count > 0 ? $" ({string.Join("; ", summary)})" : "")
                     : $"updated maintenance on bus {order.VehicleId}"
@@ -264,6 +269,96 @@ namespace FleetWise.Controllers
                 "vehicles", order.VehicleId);
 
             return Ok();
+        }
+
+
+        /// <summary>The bus's open order, opening one when it has none.</summary>
+        /// <remarks>
+        /// A bus has at most one open order. Work raised while it already has one joins
+        /// that order rather than starting a second, which is what kept several open at
+        /// once and hid all but the first.
+        /// </remarks>
+        private async Task<MaintenanceLog?> OpenOrderForAsync(string vehicleId, string workshopStatus)
+        {
+            var existing = (await _supabase.From<MaintenanceLog>()
+                    .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
+                    .Get()).Models
+                .Where(l => l.ResolvedAt == null)
+                .OrderBy(l => l.CreatedAt)
+                .FirstOrDefault();
+
+            if (existing is not null)
+            {
+                // A bus already carrying faults and now booked into the shop is booked.
+                if (workshopStatus == "Under Repair"
+                    && !string.Equals(existing.MaintenanceStatus, workshopStatus, OIC))
+                {
+                    existing.MaintenanceStatus = workshopStatus;
+                    await _supabase.From<MaintenanceLog>().Update(existing);
+                }
+                return existing;
+            }
+
+            var created = await _supabase.From<MaintenanceLog>().Insert(new MaintenanceLog
+            {
+                VehicleId = vehicleId,
+                MaintenanceStatus = workshopStatus,
+                IssueDetails = new MaintenanceIssueDetails(),
+                CreatedAt = PhClock.NowForDb,
+            });
+            return created.Models.FirstOrDefault();
+        }
+
+        /// <summary>Puts faults on an order, one line each however often they are raised.</summary>
+        /// <remarks>
+        /// A label matching a configured inspection item carries that item's criticality.
+        /// Anything typed by hand does not, so it never grounds a bus by itself.
+        /// </remarks>
+        private async Task AddOrderItemsAsync(int logId, IEnumerable<string> labels)
+        {
+            var wanted = labels
+                .Select(l => (l ?? "").Trim())
+                .Where(l => l.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (wanted.Count == 0) return;
+
+            var catalogue = (await _supabase.From<ChecklistItem>().Get()).Models
+                .GroupBy(c => c.Label, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            var present = (await _supabase.From<MaintenanceItem>()
+                    .Filter("log_id", Postgrest.Constants.Operator.Equals, logId.ToString())
+                    .Get()).Models
+                .ToDictionary(i => i.Label ?? "", i => i, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var label in wanted)
+            {
+                if (present.TryGetValue(label, out var already))
+                {
+                    // Raised again is open again, whatever it was closed as.
+                    if (!string.Equals(already.State, "open", OIC))
+                    {
+                        already.State = "open";
+                        already.ClosedAt = null;
+                        already.ClosedBy = null;
+                        already.Note = null;
+                        await _supabase.From<MaintenanceItem>().Update(already);
+                    }
+                    continue;
+                }
+
+                catalogue.TryGetValue(label, out var configured);
+                await _supabase.From<MaintenanceItem>().Insert(new MaintenanceItem
+                {
+                    LogId = logId,
+                    Label = label,
+                    IsCritical = configured?.IsCritical ?? false,
+                    Source = configured is null ? "manual" : "checklist",
+                    State = "open",
+                    CreatedAt = PhClock.NowForDb,
+                });
+            }
         }
 
         /// <summary>The faults on one order, still open ones first.</summary>
@@ -446,6 +541,13 @@ namespace FleetWise.Controllers
             if (current is not null)
                 vm.OpenOrderItems = await LoadOrderItemsAsync(current.LogId);
 
+            // Offered when booking work, so a fault named here matches one a driver reports.
+            vm.Catalogue = (await _supabase.From<ChecklistItem>().Get()).Models
+                .Where(c => c.Active)
+                .OrderBy(c => c.SortOrder)
+                .Select(c => new InspectionResultViewModel(c.Label, true, c.IsCritical))
+                .ToList();
+
             vm.History = await BuildHistoryAsync(id);
 
             // Flag review: the out-of-service state, the incident to act on, and its
@@ -619,88 +721,6 @@ namespace FleetWise.Controllers
         // Flag review actions (from the View Vehicle modal).
 
 
-        /// <summary>
-        /// Resolves an incident: closes every open log on the bus, clears the flag and the
-        /// out-of-service state, and records the action.
-        /// </summary>
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ResolveIncident(int logId, string? note)
-        {
-            if (logId <= 0) return BadRequest("Invalid incident.");
-
-            var logResp = await _supabase.From<MaintenanceLog>()
-                .Filter("log_id", Postgrest.Constants.Operator.Equals, logId.ToString())
-                .Get();
-            var clicked = logResp.Models.FirstOrDefault();
-            if (clicked is null) return NotFound();
-
-            var (uid, uname) = CurrentUser();
-            var vehicleId = clicked.VehicleId;
-
-            // Every unresolved log on the vehicle is closed, not only the one acted on. A
-            // bus can hold several open incidents, and returning it to ready means none
-            // remain.
-            if (!string.IsNullOrEmpty(vehicleId))
-            {
-                var open = (await _supabase.From<MaintenanceLog>()
-                        .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
-                        .Get()).Models
-                    .Where(l => l.ResolvedAt == null)
-                    .ToList();
-
-                foreach (var l in open)
-                {
-                    l.ResolvedAt = PhClock.Now;
-                    l.MaintenanceStatus = "No Issues";
-                    if (string.IsNullOrWhiteSpace(l.VerifiedBy)) l.VerifiedBy = uname;
-                    await _supabase.From<MaintenanceLog>().Update(l);
-                }
-            }
-            else if (clicked.ResolvedAt is null)
-            {
-                clicked.ResolvedAt = PhClock.Now;
-                clicked.MaintenanceStatus = "No Issues";
-                if (string.IsNullOrWhiteSpace(clicked.VerifiedBy)) clicked.VerifiedBy = uname;
-                await _supabase.From<MaintenanceLog>().Update(clicked);
-            }
-
-            // Clear the flag and return the vehicle to service.
-            if (!string.IsNullOrEmpty(vehicleId))
-            {
-                var vResp = await _supabase.From<Vehicle>()
-                    .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
-                    .Get();
-                var vehicle = vResp.Models.FirstOrDefault();
-                if (vehicle != null)
-                {
-                    vehicle.OutOfService = false;
-                    if (string.Equals(vehicle.VehicleStatus?.Trim(), "Flagged", OIC))
-                        vehicle.VehicleStatus = "Ready to Deploy";
-                    vehicle.LastMaintenanceDate = PhClock.Today;
-                    vehicle.UpdatedAt = PhClock.Now;
-                    await _supabase.From<Vehicle>().Update(vehicle);
-                }
-            }
-
-            await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
-            {
-                LogId = logId,
-                AuthorId = uid,
-                AuthorName = uname,
-                Action = "Resolved",
-                Note = string.IsNullOrWhiteSpace(note) ? "Incident resolved." : note.Trim(),
-                CreatedAt = PhClock.NowForDb,
-            });
-
-            // Clearing an incident returns a bus to the road, so the audit entry records
-            // who approved it should the fault prove real.
-            await _audit.WriteAsync("incident_resolved",
-                $"cleared the incident on bus {vehicleId} and returned it to service",
-                "vehicles", vehicleId);
-
-            return Ok();
-        }
 
         /// <summary>Grounds a bus so dispatch cannot assign it, or returns it to service.</summary>
         [HttpPost]
@@ -722,38 +742,28 @@ namespace FleetWise.Controllers
             // needs attention.
             var ms = string.Equals(maintenanceStatus?.Trim(), "Under Repair", OIC) ? "Under Repair" : "Needs Attention";
 
-            if (outOfService && effectiveLog is null)
+            if (outOfService)
             {
-                // Grounding a bus with no open incident still needs one, to hold the action
-                // and any later notes.
-                var insert = await _supabase.From<MaintenanceLog>().Insert(new MaintenanceLog
+                // One order carries the grounding, whether the bus already had faults or
+                // not, and a bus booked into the shop is promoted to under repair.
+                var order = await OpenOrderForAsync(vehicleId, ms);
+                if (order is null) return BadRequest("Could not open a maintenance order.");
+
+                var hasItems = (await _supabase.From<MaintenanceItem>()
+                        .Filter("log_id", Postgrest.Constants.Operator.Equals, order.LogId.ToString())
+                        .Get()).Models.Count > 0;
+
+                // A bus grounded with nothing on its list has no record of why, and
+                // nothing to close when it comes back. The reason becomes its first item,
+                // which is why it is asked for rather than optional.
+                if (!hasItems)
                 {
-                    VehicleId = vehicleId,
-                    MaintenanceStatus = ms,
-                    IssueDetails = new MaintenanceIssueDetails
-                    {
-                        Issues = new List<string>
-                        {
-                            string.IsNullOrWhiteSpace(note) ? "Taken out of service" : note.Trim()
-                        }
-                    },
-                    CreatedAt = PhClock.NowForDb,
-                });
-                effectiveLog = insert.Models.FirstOrDefault()?.LogId;
-            }
-            else if (outOfService && effectiveLog is int openLg)
-            {
-                // Grounding an already-flagged bus records the chosen nature on the open
-                // incident, which can promote a driver's flag to under repair.
-                var logResp = await _supabase.From<MaintenanceLog>()
-                    .Filter("log_id", Postgrest.Constants.Operator.Equals, openLg.ToString())
-                    .Get();
-                var openLog = logResp.Models.FirstOrDefault();
-                if (openLog != null && !string.Equals(openLog.MaintenanceStatus?.Trim(), ms, OIC))
-                {
-                    openLog.MaintenanceStatus = ms;
-                    await _supabase.From<MaintenanceLog>().Update(openLog);
+                    if (string.IsNullOrWhiteSpace(note))
+                        return BadRequest("Say why this bus is being taken out of service.");
+                    await AddOrderItemsAsync(order.LogId, new[] { note.Trim() });
                 }
+
+                effectiveLog = order.LogId;
             }
 
             vehicle.OutOfService = outOfService;
@@ -792,36 +802,44 @@ namespace FleetWise.Controllers
         /// history, and keeps the bus out of dispatch and the schedule planner.</remarks>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ScheduleMaintenance(string vehicleId, string? note)
+        public async Task<IActionResult> ScheduleMaintenance(string vehicleId, string? note, string? items)
         {
             if (string.IsNullOrWhiteSpace(vehicleId)) return BadRequest("Vehicle required.");
 
-            var (uid, uname) = CurrentUser();
-            var insert = await _supabase.From<MaintenanceLog>().Insert(new MaintenanceLog
+            List<string>? labels;
+            try
             {
-                VehicleId = vehicleId,
-                MaintenanceStatus = "Under Repair",
-                IssueDetails = new MaintenanceIssueDetails
-                {
-                    Issues = new List<string> { string.IsNullOrWhiteSpace(note) ? "Scheduled maintenance" : note.Trim() }
-                },
+                labels = System.Text.Json.JsonSerializer.Deserialize<List<string>>(items ?? "[]");
+            }
+            catch
+            {
+                return BadRequest("Could not read the work list.");
+            }
+
+            labels ??= new List<string>();
+            if (labels.Count == 0)
+                return BadRequest("Say what the bus is going in for.");
+
+            var (uid, uname) = CurrentUser();
+
+            var order = await OpenOrderForAsync(vehicleId, "Under Repair");
+            if (order is null) return BadRequest("Could not open a maintenance order.");
+
+            await AddOrderItemsAsync(order.LogId, labels);
+
+            await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
+            {
+                LogId = order.LogId,
+                AuthorId = uid,
+                AuthorName = uname,
+                Action = "Scheduled Maintenance",
+                Note = string.IsNullOrWhiteSpace(note)
+                    ? string.Join(", ", labels)
+                    : note.Trim(),
                 CreatedAt = PhClock.NowForDb,
             });
 
-            if (insert.Models.FirstOrDefault()?.LogId is int lg)
-            {
-                await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
-                {
-                    LogId = lg,
-                    AuthorId = uid,
-                    AuthorName = uname,
-                    Action = "Scheduled Maintenance",
-                    Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
-                    CreatedAt = PhClock.NowForDb,
-                });
-            }
-
-            // Take it off the road.
+            // A bus in the workshop is off the road.
             var vResp = await _supabase.From<Vehicle>()
                 .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
                 .Get();
@@ -834,7 +852,7 @@ namespace FleetWise.Controllers
             }
 
             await _audit.WriteAsync("maintenance_scheduled",
-                $"sent bus {vehicleId} to maintenance"
+                $"sent bus {vehicleId} to maintenance for {string.Join(", ", labels)}"
                     + (string.IsNullOrWhiteSpace(note) ? "" : $": {note.Trim()}"),
                 "vehicles", vehicleId);
 

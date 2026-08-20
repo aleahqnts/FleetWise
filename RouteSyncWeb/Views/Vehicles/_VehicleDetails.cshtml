@@ -267,27 +267,24 @@
                 @if (Model.OutOfService)
                 {
                     <text>
-                        <strong>Resolve</strong> closes the fault and returns the bus to ready.
-                        <strong>Return to Service</strong> un-grounds it while leaving the fault
-                        open, for a bus that is usable but still being watched. The driver must
-                        submit a fresh inspection either way before the trip can start.
+                        <strong>Return to Service</strong> un-grounds the bus while leaving its
+                        faults open, for one that is usable but still being watched. Work is
+                        closed under <strong>Update Maintenance</strong> above, which returns
+                        the bus once nothing is left. The driver submits a fresh inspection
+                        either way before a trip can start.
                     </text>
                 }
                 else
                 {
                     <text>
-                        <strong>Resolve</strong> closes the fault and clears the flag.
                         <strong>Mark Out of Service</strong> grounds the bus, which blocks
-                        every trip assigned to it.
+                        every trip assigned to it. Faults are closed under
+                        <strong>Update Maintenance</strong> above.
                     </text>
                 }
             </p>
 
             <div class="vh-review-actions">
-                @if (Model.OpenLogId.HasValue)
-                {
-                    <button type="button" class="vh-btn vh-btn--resolve" onclick="vhResolve(@Model.OpenLogId)">Resolve &amp; Return to Ready</button>
-                }
                 @if (Model.OutOfService)
                 {
                     <button type="button" class="vh-btn vh-btn--outline" onclick="vhSetService('@Model.VehicleId', false, @(Model.OpenLogId?.ToString() ?? "null"))">Return to Service</button>
@@ -300,6 +297,23 @@
 
         </div>
     }
+
+    @* The work an administrator can book, cloned into the schedule dialog. *@
+    <template id="vhCatalogueSource">
+        @foreach (var item in Model.Catalogue)
+        {
+            <div class="vh-item-edit">
+                <label class="vh-item-check">
+                    <input type="checkbox" value="@item.Item" />
+                    <span class="vh-item-label">@item.Item</span>
+                </label>
+                @if (item.IsCritical)
+                {
+                    <span class="vh-item-crit" title="Grounds the bus until it is fixed">Critical</span>
+                }
+            </div>
+        }
+    </template>
 
     @* History: everything recorded against this bus, whether or not an incident was
        involved, so retiring, grounding and returning it all appear in one place. *@
