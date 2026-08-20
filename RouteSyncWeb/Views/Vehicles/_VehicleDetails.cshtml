@@ -324,58 +324,61 @@
                     <span>Past Orders</span>
                     <span class="vh-section-badge vh-badge--default">@Model.PastOrders.Count</span>
                 </div>
-                <div class="vh-section-body vh-past">
-                    @foreach (var order in Model.PastOrders)
-                    {
-                        <details class="vh-past-order">
-                            <summary class="vh-past-head">
-                                <span class="vh-past-when">@order.Closed</span>
-                                <span class="vh-past-sum">@order.Summary</span>
-                            </summary>
-                            <div class="vh-past-body">
-                                <div class="vh-tl-date">Opened @order.Opened, closed @order.Closed</div>
+                <div class="vh-section-body">
+                    <div class="vh-past" id="vhPastList">
+                        @foreach (var order in Model.PastOrders)
+                        {
+                            <details class="vh-past-order">
+                                <summary class="vh-past-head">
+                                    <span class="vh-past-when">@order.Closed</span>
+                                    <span class="vh-past-sum">@order.Summary</span>
+                                </summary>
+                                <div class="vh-past-body">
+                                    <div class="vh-tl-date">Opened @order.Opened, closed @order.Closed</div>
 
-                                @if (order.Items.Count > 0)
-                                {
-                                    <ul class="vh-items">
-                                        @foreach (var item in order.Items)
-                                        {
-                                            <li class="vh-item--closed">
-                                                <span class="vh-item-mark">✓</span>
-                                                <span class="vh-item-label">@item.Label</span>
-                                                @if (item.IsCritical)
-                                                {
-                                                    <span class="vh-item-crit" title="Grounded the bus until it was fixed">Critical</span>
-                                                }
-                                                <span class="vh-item-outcome">@item.Outcome</span>
-                                            </li>
-                                            @if (!string.IsNullOrWhiteSpace(item.Note))
+                                    @if (order.Items.Count > 0)
+                                    {
+                                        <ul class="vh-items">
+                                            @foreach (var item in order.Items)
                                             {
-                                                <li class="vh-item-note">@item.Note</li>
-                                            }
-                                        }
-                                    </ul>
-                                }
-
-                                @if (order.Notes.Count > 0)
-                                {
-                                    <ul class="vh-thread">
-                                        @foreach (var n in order.Notes)
-                                        {
-                                            <li>
-                                                <span class="vh-thread-action">@n.Action</span>
-                                                @if (!string.IsNullOrWhiteSpace(n.Note))
+                                                <li class="vh-item--closed">
+                                                    <span class="vh-item-mark">✓</span>
+                                                    <span class="vh-item-label">@item.Label</span>
+                                                    @if (item.IsCritical)
+                                                    {
+                                                        <span class="vh-item-crit" title="Grounded the bus until it was fixed">Critical</span>
+                                                    }
+                                                    <span class="vh-item-outcome">@item.Outcome</span>
+                                                </li>
+                                                @if (!string.IsNullOrWhiteSpace(item.Note))
                                                 {
-                                                    <span class="vh-thread-note">@n.Note</span>
+                                                    <li class="vh-item-note">@item.Note</li>
                                                 }
-                                                <span class="vh-thread-meta">@n.AuthorName &middot; @n.When</span>
-                                            </li>
-                                        }
-                                    </ul>
-                                }
-                            </div>
-                        </details>
-                    }
+                                            }
+                                        </ul>
+                                    }
+
+                                    @if (order.Notes.Count > 0)
+                                    {
+                                        <ul class="vh-thread">
+                                            @foreach (var n in order.Notes)
+                                            {
+                                                <li>
+                                                    <span class="vh-thread-action">@n.Action</span>
+                                                    @if (!string.IsNullOrWhiteSpace(n.Note))
+                                                    {
+                                                        <span class="vh-thread-note">@n.Note</span>
+                                                    }
+                                                    <span class="vh-thread-meta">@n.AuthorName &middot; @n.When</span>
+                                                </li>
+                                            }
+                                        </ul>
+                                    }
+                                </div>
+                            </details>
+                        }
+                    </div>
+                    <div class="vh-page-bar" id="vhPastPager"></div>
                 </div>
             }
 
@@ -383,24 +386,16 @@
                involved, so retiring, grounding and returning it all appear in one place. *@
             <div class="vh-section-header">
                 <span>History</span>
-                @if (Model.History.Count > 5)
+                @if (Model.History.Count > 0)
                 {
-                    <span class="vh-hist-controls">
-                        Show
-                        <select id="vhHistSize" class="vh-form-input vh-hist-size" onchange="vhHistoryShow(this.value)">
-                            <option value="5">5</option>
-                            <option value="10">10</option>
-                            <option value="20">20</option>
-                            <option value="0">All</option>
-                        </select>
-                    </span>
+                    <span class="vh-section-badge vh-badge--default">@Model.History.Count</span>
                 }
             </div>
             <div class="vh-section-body">
                 @if (Model.History.Count > 0)
                 {
-                    @* Only the most recent few are shown, since a long-serving bus carries more
-                       entries than anyone reads at once. *@
+                    @* Paged, since a long-serving bus carries more entries than anyone
+                       reads at once. *@
                     <ul class="vh-history" id="vhHistoryList">
                         @foreach (var h in Model.History)
                         {
@@ -410,7 +405,7 @@
                             </li>
                         }
                     </ul>
-                    <div class="vh-hist-more" id="vhHistoryMore"></div>
+                    <div class="vh-page-bar" id="vhHistoryPager"></div>
                 }
                 else
                 {

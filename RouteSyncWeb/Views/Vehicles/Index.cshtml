@@ -331,17 +331,57 @@
 
     // History is rendered in full and trimmed here, so changing how much is shown costs
     // no round trip.
-    function vhHistoryShow(size) {
-        const list = document.getElementById('vhHistoryList');
+    // Pages a list that is already rendered: every row is in the DOM, so turning a page
+    // only changes which of them are visible. Used by the history and by past orders.
+    function vhPage(listId, pagerId, perPage, page) {
+        const list = document.getElementById(listId);
         if (!list) return;
 
         const rows = Array.from(list.children);
-        const limit = Number(size) || rows.length;
-        rows.forEach(function (row, i) { row.style.display = i < limit ? '' : 'none'; });
+        const pages = Math.max(1, Math.ceil(rows.length / perPage));
+        const current = Math.min(Math.max(1, page || 1), pages);
+        const from = (current - 1) * perPage;
 
-        const more = document.getElementById('vhHistoryMore');
-        const hidden = rows.length - Math.min(limit, rows.length);
-        if (more) more.textContent = hidden > 0 ? hidden + ' older entries hidden.' : '';
+        rows.forEach(function (row, i) {
+            row.style.display = (i >= from && i < from + perPage) ? '' : 'none';
+        });
+
+        const pager = document.getElementById(pagerId);
+        if (!pager) return;
+        pager.replaceChildren();
+        if (pages < 2) return;
+
+        function step(label, target) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'vh-page';
+            b.textContent = label;
+            if (target === null) b.disabled = true;
+            else b.onclick = function () { vhPage(listId, pagerId, perPage, target); };
+            return b;
+        }
+
+        // The first page, the last, and the ones either side of the current. Everything
+        // else collapses into a gap, so the control stays one line however long the list.
+        const wanted = new Set([1, pages, current, current - 1, current + 1]);
+        pager.appendChild(step('‹', current > 1 ? current - 1 : null));
+
+        let previous = 0;
+        for (let n = 1; n <= pages; n++) {
+            if (!wanted.has(n)) continue;
+            if (n - previous > 1) {
+                const gap = document.createElement('span');
+                gap.className = 'vh-page-gap';
+                gap.textContent = '…';
+                pager.appendChild(gap);
+            }
+            const b = step(String(n), n);
+            if (n === current) b.classList.add('vh-page--on');
+            pager.appendChild(b);
+            previous = n;
+        }
+
+        pager.appendChild(step('›', current < pages ? current + 1 : null));
     }
 
     function vhOpenChecklist() {
@@ -397,7 +437,8 @@
             .then(function (html) {
                 content.innerHTML = html;
                 // The panel arrives with every entry rendered; only the newest few show.
-                vhHistoryShow(5);
+                vhPage('vhHistoryList', 'vhHistoryPager', 8, 1);
+                vhPage('vhPastList', 'vhPastPager', 5, 1);
             })
             .catch(function () {
                 content.innerHTML = '<div class="vh-modal-loading vh-modal-error">Failed to load vehicle details.</div>';
@@ -886,28 +927,41 @@
         padding-left: 27px;
     }
 
-    .vh-hist-controls {
+    /* Pager, shared by the history and past orders. */
+    .vh-page-bar {
         display: flex;
         align-items: center;
-        gap: 7px;
-        font-size: 0.74rem;
-        font-weight: 400;
-        color: #9AA3B2;
-        text-transform: none;
-        letter-spacing: normal;
+        justify-content: center;
+        gap: 4px;
+        margin-top: 12px;
+        flex-wrap: wrap;
     }
 
-    .vh-hist-size {
-        width: auto;
-        padding: 3px 6px;
-        font-size: 0.74rem;
+    .vh-page {
+        min-width: 26px;
+        height: 26px;
+        padding: 0 6px;
+        border: 1px solid var(--vh-border);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--vh-text);
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 0.76rem;
+        line-height: 1;
+        cursor: pointer;
     }
 
-    .vh-hist-more {
-        margin-top: 8px;
-        font-size: 0.74rem;
-        color: #9AA3B2;
+    .vh-page:hover:not(:disabled) { background: var(--vh-bg); }
+    .vh-page:disabled { color: #C7CDD8; cursor: default; }
+
+    .vh-page--on {
+        background: var(--vh-navy);
+        border-color: var(--vh-navy);
+        color: #fff;
+        font-weight: 700;
     }
+
+    .vh-page-gap { color: #9AA3B2; font-size: 0.76rem; padding: 0 2px; }
 
     /* Everything recorded against a bus, newest first. */
     .vh-history {
