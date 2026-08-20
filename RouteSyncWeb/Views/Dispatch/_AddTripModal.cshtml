@@ -294,7 +294,8 @@
             return;
         }
         atmFillSelect(sel, 'Select a driver…',
-            drivers.map(d => ({ value: d.driverId, label: d.driverName })));
+            // Two drivers can share a name, so the identifier travels with it.
+            drivers.map(d => ({ value: d.driverId, label: `${d.driverName} · #${d.driverId}` })));
     }
 
     function hideHint(id) {
