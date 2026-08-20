@@ -44,8 +44,10 @@
     .sch-modal-sub { margin:0 0 12px; font-size:.85rem; color:#6B7C93; }
     .sch-modal-list { margin:0 0 18px; padding-left:18px; display:flex; flex-direction:column; gap:7px; }
     .sch-modal-list li { font-size:.85rem; color:#41505e; line-height:1.4; }
-    .sch-modal-actions { display:flex; gap:10px; }
-    .sch-modal-btn { flex:1; border:none; border-radius:10px; padding:11px; font-size:.9rem; font-weight:800; color:#fff; background:#E74C3C; cursor:pointer; }
+    /* Sized to their words and sitting at the end of the row, rather than each taking
+       half the dialog and wrapping whatever will not fit. */
+    .sch-modal-actions { display:flex; gap:10px; justify-content:flex-end; }
+    .sch-modal-btn { border:none; border-radius:8px; padding:9px 18px; font-size:.85rem; font-weight:700; color:#fff; background:#E74C3C; cursor:pointer; white-space:nowrap; }
     .sch-modal-btn:hover { background:#cf3d2e; }
     .sch-modal-btn-override { background:#fff; color:#B7791F; border:1.5px solid #E6B800; }
     .sch-modal-btn-override:hover { background:#FFF8E6; }
