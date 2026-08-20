@@ -320,11 +320,12 @@
                faults it carried and what was said while it was open. *@
             @if (Model.PastOrders.Count > 0)
             {
-                <div class="vh-section-header">
-                    <span>Past Orders</span>
-                    <span class="vh-section-badge vh-badge--default">@Model.PastOrders.Count</span>
-                </div>
-                <div class="vh-section-body">
+                <details class="vh-fold">
+                    <summary class="vh-section-header">
+                        <span class="vh-fold-title">Past Orders</span>
+                        <span class="vh-section-badge vh-badge--default">@Model.PastOrders.Count</span>
+                    </summary>
+                    <div class="vh-section-body">
                     <div class="vh-past" id="vhPastList">
                         @foreach (var order in Model.PastOrders)
                         {
@@ -379,19 +380,17 @@
                         }
                     </div>
                     <div class="vh-page-bar" id="vhPastPager"></div>
-                </div>
+                    </div>
+                </details>
             }
 
             @* History: everything recorded against this bus, whether or not an incident was
                involved, so retiring, grounding and returning it all appear in one place. *@
-            <div class="vh-section-header">
-                <span>History</span>
-                @if (Model.History.Count > 0)
-                {
-                    <span class="vh-section-badge vh-badge--default">@Model.History.Count</span>
-                }
-            </div>
-            <div class="vh-section-body">
+            <details class="vh-fold">
+                <summary class="vh-section-header">
+                    <span class="vh-fold-title">History</span>
+                </summary>
+                <div class="vh-section-body">
                 @if (Model.History.Count > 0)
                 {
                     @* Paged, since a long-serving bus carries more entries than anyone
@@ -411,7 +410,8 @@
                 {
                     <div class="vh-detail-row vh-detail-empty">Nothing recorded for this bus yet.</div>
                 }
-            </div>
+                </div>
+            </details>
         </div>
     </div>
 

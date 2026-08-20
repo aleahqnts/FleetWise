@@ -437,7 +437,7 @@
             .then(function (html) {
                 content.innerHTML = html;
                 // The panel arrives with every entry rendered; only the newest few show.
-                vhPage('vhHistoryList', 'vhHistoryPager', 8, 1);
+                vhPage('vhHistoryList', 'vhHistoryPager', 6, 1);
                 vhPage('vhPastList', 'vhPastPager', 5, 1);
             })
             .catch(function () {
@@ -926,6 +926,24 @@
         margin-top: 8px;
         padding-left: 27px;
     }
+
+    /* A whole section folded behind its own header. Closed on open, since the record
+       of a bus is worth reaching for rather than scrolling past. */
+    .vh-fold > summary.vh-section-header { cursor: pointer; list-style: none; }
+    .vh-fold > summary.vh-section-header::-webkit-details-marker { display: none; }
+    .vh-fold > summary.vh-section-header:hover { color: var(--vh-navy); }
+
+    /* The arrow rides with the title so the badge stays at the far edge. */
+    .vh-fold-title::before {
+        content: "›";
+        display: inline-block;
+        margin-right: 9px;
+        font-size: 1rem;
+        line-height: 1;
+        transition: transform .15s ease;
+    }
+
+    .vh-fold[open] > summary .vh-fold-title::before { transform: rotate(90deg); }
 
     /* Pager, shared by the history and past orders. */
     .vh-page-bar {
