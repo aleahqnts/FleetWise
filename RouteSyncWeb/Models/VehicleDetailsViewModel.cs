@@ -22,6 +22,9 @@ namespace FleetWise.Models
         public string Issue { get; set; } = string.Empty;
         /// <summary>Failed checklist items, rewritten and grouped by section.</summary>
         public List<InspectionSectionViewModel> InspectionSections { get; set; } = new();
+
+        /// <summary>Every item of the latest inspection, for the full checklist view.</summary>
+        public List<InspectionResultSectionViewModel> InspectionChecklist { get; set; } = new();
         /// <summary>The badge shown for the inspection: a failure reads as flagged.</summary>
         public string InspectionBadge { get; set; } = string.Empty;
 
@@ -74,6 +77,16 @@ namespace FleetWise.Models
         public string Section { get; set; } = string.Empty;
         public List<string> Items { get; set; } = new();
     }
+
+    /// <summary>One inspection section with every item and how it was marked.</summary>
+    public class InspectionResultSectionViewModel
+    {
+        public string Section { get; set; } = string.Empty;
+        public List<InspectionResultViewModel> Items { get; set; } = new();
+    }
+
+    /// <summary>One inspected item and whether it passed.</summary>
+    public sealed record InspectionResultViewModel(string Item, bool Passed, bool IsCritical);
 
     /// <summary>One entry in an incident's thread.</summary>
     public class VehicleNoteViewModel

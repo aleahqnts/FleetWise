@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using FleetWise.Models;
@@ -14,7 +15,7 @@ namespace FleetWise.Controllers
 
         // Fixed filter vocabularies for the Status and Issues dropdowns.
         private static readonly string[] StatusFilterOptions =
-            { "Ready to Deploy", "On Trip", "Pending", "Flagged", "Out of Service" };
+            { "Ready to Deploy", "On Trip", "Pending", "Flagged", "Out of Service", "Retired" };
 
         private static readonly string[] ConditionFilterOptions =
             { "No Issues", "Needs Attention", "Under Repair" };
@@ -37,16 +38,19 @@ namespace FleetWise.Controllers
                 // Rows load separately through VehicleRows, so the page appears immediately.
                 Rows = new List<VehicleListItemViewModel>(),
 
-                TotalVehicles = vehicles.Count,
-                FlaggedVehicles = vehicles.Count(v => maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
-                ScheduledMaintenance = vehicles.Count(v =>
-                    maintenance.TryGetValue(v.VehicleId, out var m) && m == "Under Repair"),
+                TotalVehicles = vehicles.Count(v => v.RetiredAt == null),
+                RetiredVehicles = vehicles.Count(v => v.RetiredAt != null),
+                FlaggedVehicles = vehicles.Count(v => v.RetiredAt == null
+                    && maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
+                ScheduledMaintenance = vehicles.Count(v => v.RetiredAt == null
+                    && maintenance.TryGetValue(v.VehicleId, out var m) && m == "Under Repair"),
 
                 RouteOptions = routes
                     .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
                     .ToList(),
                 StatusOptions = StatusFilterOptions.ToList(),
                 ConditionOptions = ConditionFilterOptions.ToList(),
+                NextVehicleId = NextVehicleId(vehicles),
 
                 SelectedRoute = route,
                 SelectedStatus = status,
@@ -65,26 +69,32 @@ namespace FleetWise.Controllers
             return PartialView("_VehicleRows", items);
         }
 
+        /// <summary>
+        /// Sends a browser that arrived here by any means other than the form back to
+        /// the registry.
+        /// </summary>
+        /// <remarks>
+        /// A rejected submission renders the page at this address, so stepping back to
+        /// it later is a plain GET. Without this the visitor meets an error page rather
+        /// than the list they were looking at.
+        /// </remarks>
+        [HttpGet]
+        public IActionResult Create() => RedirectToAction(nameof(Index));
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(AddVehicleViewModel model)
         {
-            if (ModelState.IsValid)
-            {
-                var existing = await _supabase.From<Vehicle>()
-                    .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, model.VehicleId.Trim())
-                    .Get();
-
-                if (existing.Models.Count > 0)
-                    ModelState.AddModelError(nameof(model.VehicleId), "A vehicle with this ID already exists.");
-            }
-
             if (!ModelState.IsValid)
                 return await ReRenderIndexAsync(model);
 
+            // Read at submit rather than when the form opened, so a bus added from
+            // another seat in the meantime does not hand out the same number twice.
+            var vehicleId = await NextVehicleIdAsync();
+
             var vehicle = new Vehicle
             {
-                VehicleId = model.VehicleId.Trim(),
+                VehicleId = vehicleId,
                 PlateNumber = model.PlateNumber.Trim(),
                 RouteId = model.RouteId,
                 Capacity = 50,                         // default; the form does not capture capacity
@@ -98,8 +108,36 @@ namespace FleetWise.Controllers
                 $"added bus {vehicle.VehicleId} (plate {vehicle.PlateNumber})",
                 "vehicles", vehicle.VehicleId);
 
-            TempData["Success"] = $"Vehicle \"{model.VehicleId}\" was added successfully.";
+            TempData["Success"] = $"Vehicle \"{vehicleId}\" was added successfully.";
             return RedirectToAction(nameof(Index));
+        }
+
+
+        /// <summary>The next free bus number, as V001, V002 and so on.</summary>
+        /// <remarks>
+        /// Counts from the highest number already issued rather than from how many
+        /// buses exist, so retiring one never hands its number to a new arrival and
+        /// leaves two rows in the trail sharing an identifier.
+        /// </remarks>
+        private async Task<string> NextVehicleIdAsync()
+        {
+            var all = await _supabase.From<Vehicle>().Get();
+            return NextVehicleId(all.Models);
+        }
+
+        /// <summary>The next free bus number for a known set of vehicles.</summary>
+        private static string NextVehicleId(IEnumerable<Vehicle> vehicles)
+        {
+            var highest = vehicles
+                .Select(v => v.VehicleId)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Select(id => Regex.Match(id, @"^V(\d+)$", RegexOptions.IgnoreCase))
+                .Where(m => m.Success)
+                .Select(m => int.TryParse(m.Groups[1].Value, out var n) ? n : 0)
+                .DefaultIfEmpty(0)
+                .Max();
+
+            return $"V{highest + 1:D3}";
         }
 
         /// <summary>
@@ -169,6 +207,8 @@ namespace FleetWise.Controllers
                 vm.TimeOfReport = checklist.SubmittedAt.ToString("MM/dd/yy hh:mm tt");
                 vm.Issue = DeriveInspectionIssue(checklist);
                 vm.InspectionSections = DeriveInspectionSections(checklist);
+                var itemsResponse = await _supabase.From<ChecklistItem>().Get();
+                vm.InspectionChecklist = DeriveInspectionChecklist(checklist, itemsResponse.Models);
                 vm.InspectionBadge = DeriveInspectionBadge(checklist.ChecklistStatus);
 
                 // The inspection flag comes from the driver's report, and resolving
@@ -255,6 +295,94 @@ namespace FleetWise.Controllers
 
             return PartialView("_EditVehicleForm", vm);
         }
+
+
+        /// <summary>
+        /// Takes a bus out of the fleet, or brings it back.
+        /// </summary>
+        /// <remarks>
+        /// The row survives, because trips, inspections, maintenance logs and the audit
+        /// trail all key on the identifier and would otherwise point at nothing. A
+        /// retired bus is absent from the registry, the counts and every assignment
+        /// list, so it cannot be scheduled by accident.
+        ///
+        /// Retiring also grounds the bus, since the two answers to "can this run today"
+        /// must not disagree.
+        /// </remarks>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SetRetired(string vehicleId, bool retired, string? reason)
+        {
+            var response = await _supabase.From<Vehicle>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
+                .Get();
+
+            var vehicle = response.Models.FirstOrDefault();
+            if (vehicle is null)
+            {
+                TempData["Error"] = "Vehicle not found.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (retired)
+            {
+                // A bus on a trip right now cannot be retired from under its driver.
+                var active = await _supabase.From<Trip>()
+                    .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
+                    .Filter("trip_status", Postgrest.Constants.Operator.Equals, "Active")
+                    .Get();
+
+                if (active.Models.Count > 0)
+                {
+                    TempData["Error"] = $"{vehicleId} is on a trip. End the trip before retiring it.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                // A counter left attached would keep reporting against a bus that is no
+                // longer in the fleet, and the phone could not be given to another one.
+                if (!string.IsNullOrWhiteSpace(vehicle.CounterDeviceId))
+                {
+                    TempData["Error"] =
+                        $"{vehicleId} still has counter {vehicle.CounterDeviceId} attached. "
+                        + "Remove the counter before retiring it.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                vehicle.RetiredAt = PhClock.Now;
+                vehicle.RetiredReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+                vehicle.OutOfService = true;
+                vehicle.VehicleStatus = "Out of Service";
+            }
+            else
+            {
+                vehicle.RetiredAt = null;
+                vehicle.RetiredReason = null;
+                // Returning to the fleet leaves the bus grounded on purpose: whether it is
+                // roadworthy is a separate decision, made in the review panel.
+                vehicle.VehicleStatus = "Out of Service";
+            }
+
+            vehicle.UpdatedAt = PhClock.Now;
+            await _supabase.From<Vehicle>().Update(vehicle);
+
+            await _audit.WriteAsync(
+                retired ? "vehicle_retired" : "vehicle_restored",
+                retired
+                    ? $"retired bus {vehicleId} from the fleet"
+                        + (string.IsNullOrWhiteSpace(reason) ? "" : $" ({reason.Trim()})")
+                    : $"restored bus {vehicleId} to the fleet",
+                "vehicles", vehicleId);
+
+            TempData["Success"] = retired
+                ? $"{vehicleId} was retired from the fleet."
+                : $"{vehicleId} was restored to the fleet. It stays out of service until you return it.";
+
+            return RedirectToAction(nameof(Index));
+        }
+
+        /// <inheritdoc cref="Create()"/>
+        [HttpGet]
+        public IActionResult Edit() => RedirectToAction(nameof(Index));
 
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -594,17 +722,21 @@ namespace FleetWise.Controllers
             // running, or its operational status. A stored flag or trip state with no
             // incident or trip behind it reads as ready.
             string RoadStatus(Vehicle v) =>
-                v.OutOfService ? "Out of Service"
+                v.RetiredAt != null ? "Retired"
+                : v.OutOfService ? "Out of Service"
                 : maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues" ? "Flagged"
                 : activeVehicleIds.Contains(v.VehicleId) ? "On Trip"
                 : NonTripStatus(v.VehicleStatus);
 
-            IEnumerable<Vehicle> filtered = vehicles;
+            // Retired buses stay out of the registry unless the filter names them. They
+            // are history rather than fleet, and every count on the page reads the same way.
+            var wantsRetired = string.Equals(status, "Retired", OIC);
+            IEnumerable<Vehicle> filtered = vehicles.Where(v => (v.RetiredAt != null) == wantsRetired);
 
             if (!string.IsNullOrWhiteSpace(route) && int.TryParse(route, out var routeId))
                 filtered = filtered.Where(v => v.RouteId == routeId);
 
-            if (!string.IsNullOrWhiteSpace(status))
+            if (!string.IsNullOrWhiteSpace(status) && !wantsRetired)
             {
                 if (string.Equals(status, "Flagged", OIC))
                     // An out-of-service bus is a flagged one that was grounded, so it stays
@@ -652,15 +784,18 @@ namespace FleetWise.Controllers
             var vm = new VehiclesIndexViewModel
             {
                 Rows = new List<VehicleListItemViewModel>(),
-                TotalVehicles = vehicles.Count,
-                FlaggedVehicles = vehicles.Count(v => maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
-                ScheduledMaintenance = vehicles.Count(v =>
-                    maintenance.TryGetValue(v.VehicleId, out var um) && um == "Under Repair"),
+                TotalVehicles = vehicles.Count(v => v.RetiredAt == null),
+                RetiredVehicles = vehicles.Count(v => v.RetiredAt != null),
+                FlaggedVehicles = vehicles.Count(v => v.RetiredAt == null
+                    && maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
+                ScheduledMaintenance = vehicles.Count(v => v.RetiredAt == null
+                    && maintenance.TryGetValue(v.VehicleId, out var um) && um == "Under Repair"),
                 RouteOptions = routes
                     .Select(r => new SelectListItem { Value = r.RouteId.ToString(), Text = r.RouteName })
                     .ToList(),
                 StatusOptions = StatusFilterOptions.ToList(),
                 ConditionOptions = ConditionFilterOptions.ToList(),
+                NextVehicleId = NextVehicleId(vehicles),
             };
 
             SetModalViewData(vm, addModel, openModal: "AddVehicle");
@@ -690,6 +825,8 @@ namespace FleetWise.Controllers
                 PlateNumber = posted?.PlateNumber ?? vehicle.PlateNumber ?? "",
                 RouteId = posted?.RouteId ?? vehicle.RouteId ?? 0,
                 RouteOptions = BuildRouteOptions(routes),
+                Retired = vehicle.RetiredAt != null,
+                RetiredReason = vehicle.RetiredReason,
             };
         }
 
@@ -702,10 +839,12 @@ namespace FleetWise.Controllers
             var vm = new VehiclesIndexViewModel
             {
                 Rows = new List<VehicleListItemViewModel>(),
-                TotalVehicles = vehicles.Count,
-                FlaggedVehicles = vehicles.Count(v => maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
-                ScheduledMaintenance = vehicles.Count(v =>
-                    maintenance.TryGetValue(v.VehicleId, out var m) && m == "Under Repair"),
+                TotalVehicles = vehicles.Count(v => v.RetiredAt == null),
+                RetiredVehicles = vehicles.Count(v => v.RetiredAt != null),
+                FlaggedVehicles = vehicles.Count(v => v.RetiredAt == null
+                    && maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
+                ScheduledMaintenance = vehicles.Count(v => v.RetiredAt == null
+                    && maintenance.TryGetValue(v.VehicleId, out var m) && m == "Under Repair"),
                 RouteOptions = BuildRouteOptions(routes),
                 StatusOptions = StatusFilterOptions.ToList(),
                 ConditionOptions = ConditionFilterOptions.ToList(),
@@ -728,6 +867,8 @@ namespace FleetWise.Controllers
             ViewBag.AddVehicleModel = addModel;
             ViewBag.RouteOptions = vm.RouteOptions;
             ViewBag.OpenModal = openModal;
+            // A preview only. The number is claimed at submit, not here.
+            ViewBag.NextVehicleId = vm.NextVehicleId;
         }
 
         private static string DeriveMaintenance(IEnumerable<MaintenanceLog> logs)
@@ -834,6 +975,61 @@ namespace FleetWise.Controllers
                     .ToList();
                 if (failed.Count > 0)
                     result.Add(new InspectionSectionViewModel { Section = s.Name, Items = failed });
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Every inspected item with how the driver marked it, grouped by section.
+        /// </summary>
+        /// <remarks>
+        /// The flagged list answers what went wrong. This answers what was checked,
+        /// which is the question asked of an inspection that passed.
+        /// </remarks>
+        private static List<InspectionResultSectionViewModel> DeriveInspectionChecklist(
+            BusChecklist c, IReadOnlyCollection<ChecklistItem> configured)
+        {
+            var sections = new (string Key, string Name, Dictionary<string, string> Map)[]
+            {
+                ("exterior_inspection", "Exterior Inspection", c.ExteriorInspection),
+                ("engine_compartment", "Engine Compartment", c.EngineCompartment),
+                ("interior_inspection", "Interior Inspection", c.InteriorInspection),
+                ("brake_safety", "Brake & Safety Systems", c.BrakeSafety),
+                ("passenger_systems", "Passenger & Fare Systems", c.PassengerSystems),
+            };
+
+            // The order and the weight of each line come from the configured items, since
+            // the stored inspection carries neither.
+            var order = configured
+                .GroupBy(i => i.Label)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            var result = new List<InspectionResultSectionViewModel>();
+            foreach (var s in sections)
+            {
+                if (s.Map is null || s.Map.Count == 0) continue;
+
+                var items = s.Map
+                    .Select(kv =>
+                    {
+                        order.TryGetValue(kv.Key, out var config);
+                        return new
+                        {
+                            // An item retired since the inspection has no configured
+                            // position, so it sorts after the ones that do.
+                            Sort = config?.SortOrder ?? int.MaxValue,
+                            Result = new InspectionResultViewModel(
+                                kv.Key,
+                                string.Equals(kv.Value?.Trim(), "Pass", OIC),
+                                config?.IsCritical ?? false),
+                        };
+                    })
+                    .OrderBy(x => x.Sort)
+                    .ThenBy(x => x.Result.Item, StringComparer.OrdinalIgnoreCase)
+                    .Select(x => x.Result)
+                    .ToList();
+
+                result.Add(new InspectionResultSectionViewModel { Section = s.Name, Items = items });
             }
             return result;
         }

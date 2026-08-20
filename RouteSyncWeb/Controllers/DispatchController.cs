@@ -338,7 +338,7 @@ namespace FleetWise.Controllers
             await Task.WhenAll(tripsTask, vehiclesTask, routesTask, driversTask, availTask);
 
             var todayTrips = tripsTask.Result.Models;
-            var vehicles = vehiclesTask.Result.Models;
+            var vehicles = vehiclesTask.Result.Models.Where(v => v.RetiredAt == null).ToList();
             var routes = routesTask.Result.Models;
             var drivers = driversTask.Result.Models;
             var availability = availTask.Result.Models
@@ -486,7 +486,7 @@ namespace FleetWise.Controllers
             await Task.WhenAll(tripsTask, vehiclesTask, driversTask, availTask, routeTask);
 
             var todayTrips = tripsTask.Result.Models;
-            var vehicles = vehiclesTask.Result.Models;
+            var vehicles = vehiclesTask.Result.Models.Where(v => v.RetiredAt == null).ToList();
             var drivers = driversTask.Result.Models;
             var availability = availTask.Result.Models.ToDictionary(a => a.UserId, a => a.AvailabilityStatus);
             var route = routeTask.Result.Models.FirstOrDefault();

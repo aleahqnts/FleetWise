@@ -14,10 +14,13 @@
                 <div class="modal-body vh-modal-body">
                     <div class="vh-section-header">Vehicle Profile</div>
                     <div class="vh-section-body">
+                        @* Shown so the number is known before saving, but assigned by
+                           the server at submit: the form cannot reserve one. *@
                         <div class="vh-form-row">
-                            <label asp-for="VehicleId">Vehicle ID:</label>
-                            <input asp-for="VehicleId" class="vh-form-input" placeholder="BUS-04" />
-                            <span asp-validation-for="VehicleId" class="vh-field-error"></span>
+                            <label>Vehicle ID:</label>
+                            <input class="vh-form-input vh-form-input--fixed" value="@ViewBag.NextVehicleId"
+                                   readonly tabindex="-1" aria-readonly="true" />
+                            <span class="vh-field-note">Assigned automatically.</span>
                         </div>
                         <div class="vh-form-row">
                             <label asp-for="PlateNumber">Plate Number:</label>
@@ -25,7 +28,7 @@
                             <span asp-validation-for="PlateNumber" class="vh-field-error"></span>
                         </div>
                         <div class="vh-form-row">
-                            <label asp-for="RouteId">Route:</label>
+                            <label asp-for="RouteId">Assigned route:</label>
                             <div class="vh-select-wrap" style="width:100%;">
                                 <select asp-for="RouteId" class="vh-form-input" style="appearance:none;"
                                         asp-items="(List<SelectListItem>)ViewBag.RouteOptions">
