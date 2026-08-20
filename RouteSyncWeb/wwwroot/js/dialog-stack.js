@@ -1,16 +1,11 @@
-// Keyboard behaviour for dialogs across the dashboard.
+// Keyboard behaviour for stacked dialogs.
 //
-// Two problems this solves, both of which appear once dialogs stack.
+// Bootstrap listens for Escape on the dialog element, so a dialog that does not trap
+// focus never sees the key until something inside is clicked. Several here deliberately
+// do not trap it, to keep an overlay above them typeable.
 //
-// Bootstrap listens for Escape on the dialog element itself. A dialog that does not
-// trap focus, which several here deliberately do not so an overlay above them stays
-// typeable, therefore never sees the key until something inside it has been clicked.
-// Focusing each dialog as it opens, and handing focus back to whatever remains open
-// when one closes, keeps Escape working without a click in between.
-//
-// Dialogs built from plain markup rather than Bootstrap have no key handling at all.
-// They opt in by naming their own close function in data-dialog-close, and the
-// topmost one is closed first, so Escape always acts on what is in front.
+// Dialogs built from plain markup have no key handling at all; they name their own close
+// function in data-dialog-close. Escape always acts on the frontmost.
 (function () {
     function isVisible(el) {
         return el && getComputedStyle(el).display !== 'none';

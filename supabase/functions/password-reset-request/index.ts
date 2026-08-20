@@ -2,18 +2,15 @@
 // Body: { email } -> 200 { ok: true }, or 429 when a shared limit is hit.
 // Deploy with --no-verify-jwt (the caller is locked out of the app by definition).
 //
-// Serves both surfaces: drivers in the mobile app and staff on the dashboard. The
-// account's role decides only which one the email tells them to go back to.
+// Serves drivers and dashboard staff alike; the stored role decides only which surface
+// the mail names.
 //
-// Mails a six-digit code to the address on the account and records an HMAC of it.
-// The response is 200 whatever the lookup finds: an unknown address, a suspended
-// account and a mail outage all look identical from outside, so this endpoint
-// cannot be used to discover who holds an account. The real reason lands in the
-// audit trail instead.
+// Mails a six-digit code and records an HMAC of it. Always answers 200, so an unknown
+// address, a suspended account and a mail outage are indistinguishable from outside. The
+// real reason goes to the audit trail.
 //
-// Response timing still differs slightly between a hit and a miss, since a hit
-// calls out to the mail provider. That is accepted: staff addresses are already
-// visible to every administrator, so timing buys an attacker nothing new.
+// Timing still differs between a hit and a miss, since a hit calls the mail provider.
+// Accepted: staff addresses are already visible to every administrator.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { CORS_HEADERS, hmacHex, json } from "../_shared/auth.ts";
