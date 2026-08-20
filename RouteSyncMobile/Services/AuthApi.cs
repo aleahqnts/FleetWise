@@ -20,7 +20,15 @@ public class AuthApi
 {
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(12) };
 
-    public enum Outcome { Ok, Denied, Unreachable }
+    /// <summary>
+    /// Ok, a definite refusal, or neither.
+    /// </summary>
+    /// <remarks>
+    /// Refused and Unreachable are kept apart so a caller never treats a server that
+    /// answered as one that could not be found. Failed splits off a server that answered
+    /// with a fault of its own, which is neither the caller's doing nor the network's.
+    /// </remarks>
+    public enum Outcome { Ok, Denied, Unreachable, Failed }
 
     public record LoginResult(Outcome Outcome, string? Token, UserModel? User, string? Message);
     public record CallResult(Outcome Outcome, string? Message);
@@ -165,6 +173,64 @@ public class AuthApi
             return new(Outcome.Unreachable, null);
         }
     }
+
+    public record InspectionResult(Outcome Outcome, string? Status, bool Blocked,
+        List<string> Failed, List<string> Critical, string? Message);
+
+    /// <summary>
+    /// Sends a completed inspection for recording.
+    /// </summary>
+    /// <remarks>
+    /// The server decides which faults ground the bus and grounds it, because the app
+    /// holds no write on that gate and because a build that answered the question itself
+    /// could drive away from a failed brake.
+    /// </remarks>
+    public async Task<InspectionResult> SubmitInspectionAsync(
+        string tripId, Dictionary<string, string> results, string? notes)
+    {
+        if (SupabaseConfig.Jwt is null)
+            return new(Outcome.Unreachable, null, false, new(), new(), null);
+        try
+        {
+            var res = await PostAsync("inspection-submit",
+                new { trip_id = tripId, results, notes }, SupabaseConfig.Jwt);
+            var body = await res.Content.ReadAsStringAsync();
+
+            if (res.IsSuccessStatusCode)
+            {
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
+                return new(Outcome.Ok,
+                    Str(root, "status"),
+                    root.TryGetProperty("blocked", out var b) && b.GetBoolean(),
+                    Strings(root, "failed"),
+                    Strings(root, "critical"),
+                    null);
+            }
+
+            if (res.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized)
+                return new(Outcome.Denied, null, false, new(), new(),
+                    ErrorOf(body) ?? "The inspection was not accepted.");
+
+            // The server answered and something went wrong at its end, which is worth
+            // saying plainly rather than sending a driver to check their signal.
+            if ((int)res.StatusCode >= 500)
+                return new(Outcome.Failed, null, false, new(), new(),
+                    ErrorOf(body) ?? "The server could not record this inspection.");
+
+            return new(Outcome.Unreachable, null, false, new(), new(), null);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[AuthApi.Inspection] {ex.Message}");
+            return new(Outcome.Unreachable, null, false, new(), new(), null);
+        }
+    }
+
+    private static List<string> Strings(JsonElement root, string name)
+        => root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Array
+           ? v.EnumerateArray().Select(e => e.GetString() ?? "").Where(s => s.Length > 0).ToList()
+           : new();
 
     private static async Task<HttpResponseMessage> PostAsync(string fn, object body, string? jwt = null)
     {

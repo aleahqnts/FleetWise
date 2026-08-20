@@ -3,6 +3,7 @@
 @implements IDisposable
 @inject SessionService Session
 @inject DriverDataService Data
+@inject AuthApi Api
 @inject NavigationManager Nav
 
 @if (loading)
@@ -257,56 +258,36 @@ else
         busy = true;
         try
         {
-            // Three outcomes, not two. A critical failure stops the trip; anything
-            // else is a defect the driver may still work with, reported either way.
-            var failedItems = sections.SelectMany(s => s.Items).Where(i => i.Status != "Pass").ToList();
-            var criticalItems = failedItems.Where(i => i.IsCritical).ToList();
+            // The outcome is the server's to decide. It holds the configured items, so it
+            // knows which faults ground a bus, and it is the only side permitted to ground
+            // one. What is computed here is for the screen alone.
+            var results = sections
+                .SelectMany(s => s.Items)
+                .ToDictionary(i => i.Label, i => i.Status ?? "Fail");
 
-            var allPass = failedItems.Count == 0;
-            blocked = criticalItems.Count > 0;
-            hasDefects = !allPass && !blocked;
-            reportedIssues = failedItems
-                .Select(i => i.IsCritical ? $"{i.Label} (critical)" : i.Label)
-                .ToList();
-            var status = blocked ? "Failed"
-                       : allPass ? "Passed"
-                       : "Passed with Defects";
+            var r = await Api.SubmitInspectionAsync(TripId, results, null);
 
-            var checklist = new BusChecklist
+            if (r.Outcome == AuthApi.Outcome.Unreachable)
             {
-                TripId = TripId,
-                VehicleId = trip!.VehicleId,
-                DriverId = Session.CurrentUser!.UserId,
-                SubmittedAt = PhTime.Now,
-                ExteriorInspection = ToDict(0),
-                EngineCompartment = ToDict(1),
-                InteriorInspection = ToDict(2),
-                BrakeSafety = ToDict(3),
-                PassengerSystems = new(), // section retired; column kept so old rows still render
-                ChecklistStatus = status,
-                Notes = null
-            };
-
-            var inserted = await Data.SubmitChecklistAsync(checklist);
-
-            // A failed inspection opens a maintenance incident, so the fault is a reviewable
-            // record on the dashboard rather than a status the next shift overwrites. The
-            // incident lists the exact items that failed.
-            if (!allPass && inserted is not null)
+                message = "Cannot reach the server. Check your connection and try again.";
+                return;
+            }
+            if (r.Outcome == AuthApi.Outcome.Failed)
             {
-                await Data.OpenInspectionIncidentAsync(
-                    inserted.ChecklistId, trip!.VehicleId, TripId,
-                    failedItems.Select(i => i.Label).ToList(),
-                    criticalItems.Select(i => i.Label).ToList());
+                message = $"{r.Message} Tell your operator, and do not start the trip.";
+                return;
+            }
+            if (r.Outcome == AuthApi.Outcome.Denied)
+            {
+                message = r.Message;
+                return;
             }
 
-            // Grounding is what actually blocks the trip: the home screen refuses to
-            // start on a bus that is out of service, and only the vehicles tab can
-            // lift it. A defect leaves the bus deployable and merely flagged.
-            if (blocked)
-                await Data.GroundVehicleAsync(trip!.VehicleId);
-            else
-                await Data.UpdateVehicleStatusAsync(trip!.VehicleId, allPass ? "Ready to Deploy" : "Flagged");
+            blocked = r.Blocked;
+            hasDefects = !blocked && r.Failed.Count > 0;
+            reportedIssues = r.Failed
+                .Select(label => r.Critical.Contains(label) ? $"{label} (critical)" : label)
+                .ToList();
 
             submitted = true;
         }
@@ -320,9 +301,6 @@ else
             busy = false;
         }
     }
-
-    private Dictionary<string, string> ToDict(int sectionIndex)
-        => sections[sectionIndex].Items.ToDictionary(i => i.Label, i => i.Status ?? "Fail");
 
     public class Section
     {
