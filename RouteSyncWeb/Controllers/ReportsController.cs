@@ -15,7 +15,7 @@ namespace FleetWise.Controllers
     public class ReportsController : Controller
     {
         private readonly Supabase.Client _supabase;
-        private const int PageSize = 6;
+        private const int PageSize = 5;
 
         public ReportsController(Supabase.Client supabase) => _supabase = supabase;
 

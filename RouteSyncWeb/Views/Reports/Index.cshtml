@@ -439,33 +439,45 @@
             @* Content (hidden until loaded) *@
             <div id="tripModalContent" style="display:none;">
 
-                <div class="tr-section tr-section--id">
+                @* The trip and how it ended, together, since one is read in light of the other. *@
+                <div class="tr-head">
                     <span id="mdTripId" class="tr-trip-id-badge"></span>
-                    <div class="tr-info-row"><span class="tr-info-label">Shift Type:</span> <span id="mdShiftType"></span></div>
-                    <div class="tr-info-row"><span class="tr-info-label">Shift Time:</span> <span id="mdShiftTime"></span></div>
-                    <div class="tr-info-row"><span class="tr-info-label">Route:</span> <span id="mdRoute"></span></div>
+                    <span id="mdStatus" class="rp-shift"></span>
+                </div>
+
+                @* Two facts to a line. Each is short, and the pairing is what keeps the
+                   whole trip on screen without scrolling. *@
+                <div class="tr-section">
+                    <div class="tr-section-title">Trip</div>
+                    <div class="tr-grid">
+                        <div class="tr-info-row"><span class="tr-info-label">Route</span><span id="mdRoute"></span></div>
+                        <div class="tr-info-row"><span class="tr-info-label">Date</span><span id="mdDate"></span></div>
+                        <div class="tr-info-row"><span class="tr-info-label">Shift</span><span id="mdShiftType"></span></div>
+                        <div class="tr-info-row"><span class="tr-info-label">Shift Time</span><span id="mdShiftTime"></span></div>
+                    </div>
                 </div>
 
                 <div class="tr-section">
-                    <div class="tr-section-title">Vehicle Details</div>
-                    <div class="tr-info-row"><span class="tr-info-label">Vehicle ID:</span> <span id="mdVehicleId"></span></div>
-                    <div class="tr-info-row"><span class="tr-info-label">Plate Number:</span> <span id="mdPlate"></span></div>
-                </div>
-
-                <div class="tr-section">
-                    <div class="tr-section-title">Driver Details</div>
-                    <div class="tr-info-row"><span class="tr-info-label">Driver Name:</span> <span id="mdDriverName"></span></div>
-                    <div class="tr-info-row"><span class="tr-info-label">Driver ID:</span> <span id="mdDriverId"></span></div>
+                    <div class="tr-grid tr-grid--split">
+                        <div>
+                            <div class="tr-section-title">Vehicle</div>
+                            <div class="tr-info-row"><span class="tr-info-label">Bus ID</span><span id="mdVehicleId"></span></div>
+                            <div class="tr-info-row"><span class="tr-info-label">Plate Number</span><span id="mdPlate"></span></div>
+                        </div>
+                        <div>
+                            <div class="tr-section-title">Driver</div>
+                            <div class="tr-info-row"><span class="tr-info-label">Name</span><span id="mdDriverName"></span></div>
+                            <div class="tr-info-row"><span class="tr-info-label">Driver ID</span><span id="mdDriverId"></span></div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="tr-section tr-section--last">
-                    <div class="tr-section-title">Trip Details</div>
-                    <div class="tr-info-row"><span class="tr-info-label">Date:</span> <span id="mdDate"></span></div>
-                    <div class="tr-info-row"><span class="tr-info-label">Shift Start:</span> <span id="mdStartTime"></span></div>
-                    <div class="tr-info-row"><span class="tr-info-label">Shift End:</span> <span id="mdEndTime"></span></div>
-                    <div class="tr-info-row"><span class="tr-info-label">Total Passengers:</span> <span id="mdPassengers"></span></div>
-                    <div class="tr-info-row"><span class="tr-info-label">Estimated Revenue:</span> <span id="mdRevenue"></span></div>
-                    <div class="tr-info-row"><span class="tr-info-label">Status:</span> <span id="mdStatus" class="rp-shift"></span></div>
+                    <div class="tr-section-title">Result</div>
+                    <div class="tr-grid">
+                        <div class="tr-info-row"><span class="tr-info-label">Passengers</span><span id="mdPassengers"></span></div>
+                        <div class="tr-info-row"><span class="tr-info-label">Revenue</span><span id="mdRevenue"></span></div>
+                    </div>
                 </div>
 
             </div>
@@ -1330,10 +1342,8 @@
     document.getElementById('mdVehicleId').textContent   = d.vehicleId;
     document.getElementById('mdPlate').textContent       = d.plateNumber;
     document.getElementById('mdDriverName').textContent  = d.driverName;
-    document.getElementById('mdDriverId').textContent    = 'DRV' + String(d.driverId).padStart(3, '0');
+    document.getElementById('mdDriverId').textContent    = d.driverId;
     document.getElementById('mdDate').textContent        = d.date;
-    document.getElementById('mdStartTime').textContent   = d.shiftStart;
-    document.getElementById('mdEndTime').textContent     = d.shiftEnd;
     document.getElementById('mdPassengers').textContent  = d.totalPassengers;
     document.getElementById('mdRevenue').textContent     = formatCurrency(d.estimatedRevenue);
 
