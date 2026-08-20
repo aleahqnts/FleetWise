@@ -470,6 +470,32 @@ namespace FleetWise.Controllers
                 .ToList();
         }
 
+        /// <summary>The inspection sections, in the order a bus is walked around.</summary>
+        private static readonly string[] SectionKeys =
+        {
+            "exterior_inspection", "engine_compartment", "interior_inspection",
+            "brake_safety", "passenger_systems",
+        };
+
+        private static readonly string[] SectionNames =
+        {
+            "Exterior Inspection", "Engine Compartment", "Interior Inspection",
+            "Brake & Safety Systems", "Passenger & Fare Systems",
+        };
+
+        /// <summary>Where a section sits in that order, with anything unknown last.</summary>
+        private static int SectionOrder(string? key)
+        {
+            var at = Array.IndexOf(SectionKeys, key ?? "");
+            return at < 0 ? SectionKeys.Length : at;
+        }
+
+        private static string SectionName(string? key)
+        {
+            var at = Array.IndexOf(SectionKeys, key ?? "");
+            return at < 0 ? "Other Checks" : SectionNames[at];
+        }
+
         /// <summary>The next free bus number, as V001, V002 and so on.</summary>
         /// <remarks>
         /// Counts from the highest number already issued rather than from how many
@@ -601,7 +627,15 @@ namespace FleetWise.Controllers
             vm.Catalogue = (await _supabase.From<ChecklistItem>().Get()).Models
                 .Where(c => c.Active)
                 .OrderBy(c => c.SortOrder)
-                .Select(c => new InspectionResultViewModel(c.Label, true, c.IsCritical))
+                .GroupBy(c => c.SectionKey)
+                .OrderBy(g => SectionOrder(g.Key))
+                .Select(g => new InspectionResultSectionViewModel
+                {
+                    Section = SectionName(g.Key),
+                    Items = g
+                        .Select(c => new InspectionResultViewModel(c.Label, true, c.IsCritical))
+                        .ToList(),
+                })
                 .ToList();
 
             vm.History = await BuildHistoryAsync(id);
@@ -1285,11 +1319,11 @@ namespace FleetWise.Controllers
         {
             var sections = new (string Key, string Name, Dictionary<string, string> Map)[]
             {
-                ("exterior_inspection", "Exterior Inspection", c.ExteriorInspection),
-                ("engine_compartment", "Engine Compartment", c.EngineCompartment),
-                ("interior_inspection", "Interior Inspection", c.InteriorInspection),
-                ("brake_safety", "Brake & Safety Systems", c.BrakeSafety),
-                ("passenger_systems", "Passenger & Fare Systems", c.PassengerSystems),
+                (SectionKeys[0], SectionNames[0], c.ExteriorInspection),
+                (SectionKeys[1], SectionNames[1], c.EngineCompartment),
+                (SectionKeys[2], SectionNames[2], c.InteriorInspection),
+                (SectionKeys[3], SectionNames[3], c.BrakeSafety),
+                (SectionKeys[4], SectionNames[4], c.PassengerSystems),
             };
 
             // The order and the weight of each line come from the configured items, since

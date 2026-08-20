@@ -422,18 +422,24 @@
 
     @* The work an administrator can book, cloned into the schedule dialog. *@
     <template id="vhCatalogueSource">
-        @foreach (var item in Model.Catalogue)
+        @foreach (var group in Model.Catalogue)
         {
-            <div class="vh-item-edit">
-                <label class="vh-item-check">
-                    <input type="checkbox" value="@item.Item" />
-                    <span class="vh-item-label">@item.Item</span>
-                </label>
-                @if (item.IsCritical)
-                {
-                    <span class="vh-item-crit" title="Grounds the bus until it is fixed">Critical</span>
-                }
-            </div>
+            <div class="vh-item-group">@group.Section</div>
+            @foreach (var item in group.Items)
+            {
+                @* The tag sits inside the label so it shares the line with the item it
+                   describes rather than wrapping under it. *@
+                <div class="vh-item-edit">
+                    <label class="vh-item-check">
+                        <input type="checkbox" value="@item.Item" />
+                        <span class="vh-item-label">@item.Item</span>
+                        @if (item.IsCritical)
+                        {
+                            <span class="vh-item-crit" title="Keeps the bus off the road until it is fixed">Critical</span>
+                        }
+                    </label>
+                </div>
+            }
         }
     </template>
 
