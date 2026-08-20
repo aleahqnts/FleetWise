@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace FleetWise.Models
 {
     /// <summary>
@@ -34,6 +36,12 @@ namespace FleetWise.Models
         public string CurrentStatus { get; set; } = "No Issues";
         /// <summary>The incident still open, if there is one. Resolved ones belong to history.</summary>
         public MaintenanceEntryViewModel? OpenIncident { get; set; }
+
+        /// <summary>The faults being worked under the open order, still open ones first.</summary>
+        public List<MaintenanceItemLineViewModel> OpenOrderItems { get; set; } = new();
+
+        /// <summary>How many of those are still open, which is what decides whether the order can close.</summary>
+        public int OpenItemCount => OpenOrderItems.Count(i => i.IsOpen);
 
         /// <summary>
         /// Everything that has happened to this bus, newest first.
@@ -97,6 +105,16 @@ namespace FleetWise.Models
 
     /// <summary>One inspected item and whether it passed.</summary>
     public sealed record InspectionResultViewModel(string Item, bool Passed, bool IsCritical);
+
+    /// <summary>One fault on the open order, as it reads in the panel.</summary>
+    public sealed record MaintenanceItemLineViewModel(
+        long ItemId,
+        string Label,
+        bool IsCritical,
+        bool IsOpen,
+        string Outcome,
+        string ClosedBy,
+        string Note);
 
     /// <summary>One thing that happened to a bus, as recorded in the audit trail.</summary>
     public sealed record VehicleHistoryEntryViewModel(string When, string Who, string What, bool Refused);
