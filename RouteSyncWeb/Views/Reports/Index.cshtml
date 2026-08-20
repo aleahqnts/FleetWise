@@ -426,7 +426,10 @@
 <div id="statModal" data-dialog-close="closeStatModal" class="tr-modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="statModalTitle">
     <div class="tr-modal tr-modal--wide">
         <div class="tr-modal-header">
-            <h3 class="tr-modal-title" id="statModalTitle">—</h3>
+            <div class="st-head">
+                <h3 class="tr-modal-title" id="statModalTitle">—</h3>
+                <span class="st-count" id="statModalCount"></span>
+            </div>
             <button class="tr-modal-close" id="statModalClose" aria-label="Close">&times;</button>
         </div>
         <div class="tr-modal-body">
@@ -435,16 +438,7 @@
                 <span>Loading…</span>
             </div>
             <div id="statModalContent" style="display:none;">
-                <div class="tr-head">
-                    <span class="st-blurb" id="statModalBlurb"></span>
-                    <span class="st-count" id="statModalCount"></span>
-                </div>
-                <div class="tr-section" id="statModalRouteWrap">
-                    <div class="tr-section-title">By Route</div>
-                    <div class="tr-grid" id="statModalRoutes"></div>
-                </div>
                 <div class="tr-section tr-section--last">
-                    <div class="tr-section-title">Trips</div>
                     <div class="rp-table-wrap">
                         <table class="rp-table"><thead id="statModalHead"></thead><tbody id="statModalBody"></tbody></table>
                     </div>
@@ -484,7 +478,6 @@
                 @* Two facts to a line. Each is short, and the pairing is what keeps the
                    whole trip on screen without scrolling. *@
                 <div class="tr-section">
-                    <div class="tr-section-title">Trip</div>
                     <div class="tr-grid">
                         <div class="tr-info-row"><span class="tr-info-label">Route</span><span id="mdRoute"></span></div>
                         <div class="tr-info-row"><span class="tr-info-label">Date</span><span id="mdDate"></span></div>
@@ -1429,26 +1422,8 @@
             const d = await res.json();
 
             document.getElementById('statModalTitle').textContent = d.title;
-            document.getElementById('statModalBlurb').textContent = d.blurb;
             document.getElementById('statModalCount').textContent =
                 `${d.count} ${d.count === 1 ? 'trip' : 'trips'} · ${d.date}`;
-
-            // By route, hidden when there is only one and the split says nothing.
-            const routes = document.getElementById('statModalRoutes');
-            routes.replaceChildren();
-            (d.byRoute || []).forEach(r => {
-                const row = document.createElement('div');
-                row.className = 'tr-info-row';
-                const label = document.createElement('span');
-                label.className = 'tr-info-label';
-                label.textContent = r.route;
-                const value = document.createElement('span');
-                value.textContent = r.value;
-                row.append(label, value);
-                routes.appendChild(row);
-            });
-            document.getElementById('statModalRouteWrap').style.display =
-                (d.byRoute || []).length > 1 ? '' : 'none';
 
             const head = document.getElementById('statModalHead');
             head.replaceChildren();

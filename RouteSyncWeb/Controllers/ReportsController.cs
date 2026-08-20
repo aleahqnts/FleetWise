@@ -295,19 +295,15 @@ namespace FleetWise.Controllers
             string Driver(Trip t) => userNames.TryGetValue(t.DriverId, out var dn) ? dn : "N/A";
             string Bus(Trip t) => plates.TryGetValue(t.VehicleId, out var pn) ? $"{t.VehicleId} · {pn}" : t.VehicleId;
 
-            var (title, blurb, columns) = kind switch
+            var (title, columns) = kind switch
             {
                 "missed" => ("Missed Trips",
-                    "Shifts that passed without the trip being started or finished.",
                     new[] { "Trip ID", "Route", "Driver", "Bus", "Shift", "Scheduled" }),
                 "passengers" => ("Passengers Carried",
-                    "Every trip that carried someone, and how many it carried.",
                     new[] { "Trip ID", "Route", "Driver", "Bus", "Shift", "Status", "Passengers" }),
                 "revenue" => ("Revenue Earned",
-                    "Trips that finished and took a fare. Nothing else earns.",
                     new[] { "Trip ID", "Route", "Driver", "Bus", "Shift", "Passengers", "Revenue" }),
                 _ => ("Completed Trips",
-                    "Trips that ran their shift through to the end.",
                     new[] { "Trip ID", "Route", "Driver", "Bus", "Shift", "Passengers", "Revenue" }),
             };
 
@@ -318,29 +314,11 @@ namespace FleetWise.Controllers
                 _ => t => new[] { t.TripId, Route(t), Driver(t), Bus(t), t.ShiftType ?? "", t.TotalBoarded.ToString("N0"), Money(t) },
             };
 
-            // A total per route, so a figure can be read as where it came from before the
-            // trips themselves are read.
-            var byRoute = trips
-                .GroupBy(Route)
-                .Select(g => new
-                {
-                    route = g.Key,
-                    value = kind switch
-                    {
-                        "passengers" => g.Sum(t => t.TotalBoarded).ToString("N0"),
-                        "revenue" => $"₱{g.Sum(EarnedAmount):N2}",
-                        _ => g.Count().ToString("N0"),
-                    }
-                })
-                .ToList();
-
             return Json(new
             {
                 title,
-                blurb,
                 date = anchor.ToString("MMMM d, yyyy"),
                 count = trips.Count,
-                byRoute,
                 columns,
                 rows = trips.Select(row).ToList(),
             });

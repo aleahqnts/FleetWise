@@ -671,17 +671,20 @@
     /* Wider than a single trip, since this one carries a table. */
     .tr-modal--wide { max-width: 940px; }
 
-    .st-blurb {
-    font-size: 0.86rem;
-    color: var(--rp-muted);
-    font-family: 'Segoe UI', sans-serif;
+    /* The title and the day it covers, on one line. */
+    .st-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    min-width: 0;
     }
 
     .st-count {
-    font-size: 0.76rem;
-    font-weight: 700;
-    color: var(--rp-text);
+    font-size: 0.78rem;
+    color: var(--rp-muted);
     white-space: nowrap;
+    font-family: 'Segoe UI', sans-serif;
     }
 
     .st-empty {
@@ -744,13 +747,13 @@
     }
 
     .tr-section {
-    padding: 18px 24px;
+    padding: 14px 24px;
     border-bottom: 1px solid var(--rp-border);
     }
 
     .tr-section--last {
     border-bottom: none;
-    padding-bottom: 24px;
+    padding-bottom: 18px;
     }
 
     .tr-section--id {
@@ -802,7 +805,7 @@
     justify-content: space-between;
     gap: 12px;
     flex-wrap: wrap;
-    padding: 18px 24px;
+    padding: 14px 24px;
     border-bottom: 1px solid var(--rp-border);
     }
 
@@ -810,7 +813,7 @@
     .tr-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px 24px;
+    gap: 12px 24px;
     }
 
     /* Vehicle and driver side by side, each keeping its own heading. */
