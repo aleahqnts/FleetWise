@@ -1,5 +1,5 @@
-# Phase 7a verify: mint device JWT + prove PostgREST accepts it (role -> app_camera).
-# Run:  powershell -File C:\Users\Chester\FleetWise\supabase\verify-7a.ps1
+﻿# Phase 7a verify: mint device JWT + prove PostgREST accepts it (role -> app_camera).
+# Run:  powershell -File C:\Users\Chester\FleetWise\backend\tools\verify-7a.ps1
 $base = "https://vrtluruqaxutecydbrsq.supabase.co"
 $key  = "sb_publishable_sjkjW2K7QOPRKmixJdhSgA_8rPtoFzD"
 
