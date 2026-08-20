@@ -259,7 +259,7 @@
             rtmFillSelect(driverSel,
                 list.length === 0 ? 'No drivers available for this shift' : 'Select a driver…',
                 // Two drivers can share a name, so the identifier travels with it.
-                list.map(d => ({ value: d.driverId, label: `${d.driverName} · #${d.driverId}` })),
+                list.map(d => ({ value: d.driverId, label: `${d.driverName} · ${d.driverId}` })),
                 selectedId);
 
             driverHint.textContent = list.length === 0

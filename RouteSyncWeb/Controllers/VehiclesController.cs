@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -1403,10 +1403,10 @@ namespace FleetWise.Controllers
 
         private static string DriverName(UserModel driver, int driverId)
         {
-            if (driver is null) return $"Driver #{driverId}";
+            if (driver is null) return $"Driver {driverId}";
             var name = string.Join(" ",
                 new[] { driver.FirstName, driver.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
-            return string.IsNullOrWhiteSpace(name) ? $"Driver #{driverId}" : name;
+            return string.IsNullOrWhiteSpace(name) ? $"Driver {driverId}" : name;
         }
 
         /// <summary>

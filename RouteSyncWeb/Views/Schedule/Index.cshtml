@@ -93,7 +93,7 @@
                                                         <option value="">Driver…</option>
                                                         @foreach (var dr in Model.Drivers.Where(d => d.Offered || (cell != null && cell.DriverId == d.DriverId)))
                                                         {
-                                                            <option value="@dr.DriverId" selected="@(cell != null && cell.DriverId == dr.DriverId)">@dr.DriverName · #@dr.DriverId@(dr.Offered ? "" : " (unavailable)")</option>
+                                                            <option value="@dr.DriverId" selected="@(cell != null && cell.DriverId == dr.DriverId)">@dr.DriverName · @dr.DriverId@(dr.Offered ? "" : " (unavailable)")</option>
                                                         }
                                                     </select>
                                                 </div>
@@ -164,7 +164,7 @@
     const SCH_VEHICLES = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
         Model.Vehicles.Where(v => v.Offered).Select(v => new { id = v.VehicleId, label = $"{v.VehicleId} · {v.PlateNumber}" })));
     const SCH_DRIVERS = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-        Model.Drivers.Where(d => d.Offered).Select(d => new { id = d.DriverId, label = $"{d.DriverName} · #{d.DriverId}" })));
+        Model.Drivers.Where(d => d.Offered).Select(d => new { id = d.DriverId, label = $"{d.DriverName} · {d.DriverId}" })));
 
     // One <select>, built from the data above. textContent, never innerHTML.
     function schBuildSelect(cls, placeholder, items) {
