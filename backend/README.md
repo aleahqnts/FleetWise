@@ -10,7 +10,7 @@ shapes the database they talk to. All three clients (`RouteSyncWeb`, `RouteSyncM
 |------|-------|
 | `supabase/functions/` | Deno edge functions, deployed to Supabase |
 | `supabase/functions/_shared/` | JWT signing and verification, audit writer, mail, password rules |
-| `schema/` | The SQL applied to the database, in the order it was applied |
+| `schema/` | A dump of the live database: its tables, policies, grants, and roles |
 | `tools/` | PowerShell probes for checking auth by hand |
 
 The `supabase/` directory keeps that exact name because the CLI looks for it by
@@ -34,11 +34,27 @@ through `Deno.env.get`.
 
 ## Schema
 
-`schema/` is a record, not a migration runner. Files are applied by hand through the
-Supabase SQL editor, so nothing here tracks what the database has already seen.
+`schema/` is a snapshot of the live database, taken with `pg_dump`, not a migration
+runner. Changes are made by hand through the Supabase SQL editor, so these files follow
+the database rather than drive it. Refresh them after a schema change.
 
-It is worth keeping because it is the only written form of the authorization model.
-`phase7.sql` alone creates the two application roles and the row-level security
-policies and grants that decide what each one may read and write; `phase10a.sql` adds
-the triggers that keep the audit log append-only. A database dump would recover the
-statements, but not the reasoning recorded alongside them.
+| File | Holds |
+|------|-------|
+| `schema.sql` | Tables, enums, functions, triggers, row-level security policies, grants |
+| `roles.sql` | The `app_driver` and `app_camera` roles |
+
+Two files, because a schema dump does not include roles. Restoring `schema.sql` alone
+would recreate policies that name roles nothing had created, so `roles.sql` runs first.
+
+### Refreshing
+
+The CLI runs `pg_dump` inside Docker. Without Docker, ask it to print the script it
+would have run and run that instead, against a local `pg_dump` of version 17 or newer:
+
+```
+npx supabase@latest db dump --project-ref vrtluruqaxutecydbrsq --workdir backend --dry-run
+```
+
+Add `--role-only` for the second file. The printed script carries a freshly minted
+database password, so keep it out of the repository. One correction is needed: it
+abbreviates `--quote-all-identifiers`, which some builds reject.
