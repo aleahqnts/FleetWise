@@ -111,8 +111,15 @@ namespace FleetWise.Controllers
                 && resolved[t.TripId].TripStatus != "Completed"
                 && resolved[t.TripId].TripStatus != "Missed");
             int unassigned = trips.Count(t => resolved[t.TripId].TripStatus == "Assignment Issue");
-            int flaggedVehicles = vehicles.Count(v => flaggedVehicleIds.Contains(v.VehicleId));
-            int unavailableDrivers = availability.Count(a => a.AvailabilityStatus == "Unavailable");
+            // Counted from the day on screen rather than the whole fleet. A bus with an
+            // open fault that nobody is scheduled to drive is the vehicles tab's business,
+            // and reporting it here sends a dispatcher looking for a trip that does not exist.
+            var vehiclesOnDuty = trips.Select(t => t.VehicleId).Where(v => v != null).ToHashSet();
+            var driversOnDuty = trips.Select(t => t.DriverId).ToHashSet();
+
+            int flaggedVehicles = vehiclesOnDuty.Count(v => flaggedVehicleIds.Contains(v));
+            int unavailableDrivers = availability.Count(a =>
+                a.AvailabilityStatus == "Unavailable" && driversOnDuty.Contains(a.UserId));
 
             // Trips grouped by route, then by shift.
             var vm = new DispatchViewModel

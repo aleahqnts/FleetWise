@@ -188,7 +188,10 @@
         flex-direction: column;
         overflow: hidden;
         transition: width var(--fw-transition);
-        z-index: 200;
+        /* Above the fixed bars a page may pin to the bottom, which reserve room for the
+           collapsed width only and would otherwise be drawn over the profile block once
+           this expands. Still below every dialog. */
+        z-index: 500;
     }
 
     .fw-sidebar:hover {
