@@ -38,8 +38,7 @@ namespace FleetWise.Controllers
                 // Rows load separately through VehicleRows, so the page appears immediately.
                 Rows = new List<VehicleListItemViewModel>(),
 
-                TotalVehicles = vehicles.Count(v => v.RetiredAt == null),
-                RetiredVehicles = vehicles.Count(v => v.RetiredAt != null),
+                TotalVehicles = vehicles.Count,
                 FlaggedVehicles = vehicles.Count(v => v.RetiredAt == null
                     && maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
                 ScheduledMaintenance = vehicles.Count(v => v.RetiredAt == null
@@ -112,6 +111,30 @@ namespace FleetWise.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+
+
+        /// <summary>Everything recorded against one bus, newest first.</summary>
+        /// <remarks>
+        /// The audit trail already holds every action taken on a vehicle and who took it,
+        /// including the ones that happen without an incident to hang a note on, so it is
+        /// read directly rather than assembled from maintenance notes.
+        /// </remarks>
+        private async Task<List<VehicleHistoryEntryViewModel>> BuildHistoryAsync(string vehicleId)
+        {
+            var (rows, _) = await _audit.QueryAsync(
+                $"target_table=eq.vehicles&target_id=eq.{Uri.EscapeDataString(vehicleId)}"
+                + "&order=occurred_at.desc&limit=50");
+
+            if (rows is null) return new();
+
+            return rows
+                .Select(r => new VehicleHistoryEntryViewModel(
+                    r.OccurredAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt"),
+                    string.IsNullOrWhiteSpace(r.ActorRole) ? "Dashboard" : r.ActorRole,
+                    r.Summary ?? r.Action,
+                    !string.Equals(r.Outcome, "ok", OIC)))
+                .ToList();
+        }
 
         /// <summary>The next free bus number, as V001, V002 and so on.</summary>
         /// <remarks>
@@ -230,12 +253,14 @@ namespace FleetWise.Controllers
                 }
             }
 
+            // The maintenance panel reports what is wrong now. What went wrong before is
+            // history, and is read from the audit trail below.
             vm.CurrentStatus = DeriveMaintenance(logs);
-            if (logs.Count > 0)
-            {
-                vm.HasMaintenance = true;
-                vm.MaintenanceEntries = logs.Select(FormatMaintenanceEntry).ToList();
-            }
+            var current = logs.FirstOrDefault(l => l.ResolvedAt == null);
+            vm.OpenIncident = current is null ? null : FormatMaintenanceEntry(current);
+            vm.HasMaintenance = current is not null;
+
+            vm.History = await BuildHistoryAsync(id);
 
             // Flag review: the out-of-service state, the incident to act on, and its
             // thread of comments and actions. The thread follows the open incident, or the
@@ -313,16 +338,14 @@ namespace FleetWise.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SetRetired(string vehicleId, bool retired, string? reason)
         {
+            if (string.IsNullOrWhiteSpace(vehicleId)) return BadRequest("Vehicle required.");
+
             var response = await _supabase.From<Vehicle>()
                 .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
                 .Get();
 
             var vehicle = response.Models.FirstOrDefault();
-            if (vehicle is null)
-            {
-                TempData["Error"] = "Vehicle not found.";
-                return RedirectToAction(nameof(Index));
-            }
+            if (vehicle is null) return BadRequest("Vehicle not found.");
 
             if (retired)
             {
@@ -333,33 +356,26 @@ namespace FleetWise.Controllers
                     .Get();
 
                 if (active.Models.Count > 0)
-                {
-                    TempData["Error"] = $"{vehicleId} is on a trip. End the trip before retiring it.";
-                    return RedirectToAction(nameof(Index));
-                }
+                    return BadRequest($"{vehicleId} is on a trip. End the trip before retiring it.");
 
                 // A counter left attached would keep reporting against a bus that is no
                 // longer in the fleet, and the phone could not be given to another one.
                 if (!string.IsNullOrWhiteSpace(vehicle.CounterDeviceId))
-                {
-                    TempData["Error"] =
-                        $"{vehicleId} still has counter {vehicle.CounterDeviceId} attached. "
-                        + "Remove the counter before retiring it.";
-                    return RedirectToAction(nameof(Index));
-                }
+                    return BadRequest($"{vehicleId} still has counter {vehicle.CounterDeviceId} attached. "
+                                      + "Remove the counter before retiring it.");
 
                 vehicle.RetiredAt = PhClock.Now;
                 vehicle.RetiredReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+                // Grounding is the out_of_service flag alone. vehicle_status carries the
+                // shift's own labels and has none for this.
                 vehicle.OutOfService = true;
-                vehicle.VehicleStatus = "Out of Service";
             }
             else
             {
                 vehicle.RetiredAt = null;
                 vehicle.RetiredReason = null;
-                // Returning to the fleet leaves the bus grounded on purpose: whether it is
-                // roadworthy is a separate decision, made in the review panel.
-                vehicle.VehicleStatus = "Out of Service";
+                // The bus stays grounded on purpose: whether it is roadworthy is a
+                // separate decision, made in the review panel.
             }
 
             vehicle.UpdatedAt = PhClock.Now;
@@ -373,11 +389,7 @@ namespace FleetWise.Controllers
                     : $"restored bus {vehicleId} to the fleet",
                 "vehicles", vehicleId);
 
-            TempData["Success"] = retired
-                ? $"{vehicleId} was retired from the fleet."
-                : $"{vehicleId} was restored to the fleet. It stays out of service until you return it.";
-
-            return RedirectToAction(nameof(Index));
+            return Ok();
         }
 
         /// <inheritdoc cref="Create()"/>
@@ -728,15 +740,12 @@ namespace FleetWise.Controllers
                 : activeVehicleIds.Contains(v.VehicleId) ? "On Trip"
                 : NonTripStatus(v.VehicleStatus);
 
-            // Retired buses stay out of the registry unless the filter names them. They
-            // are history rather than fleet, and every count on the page reads the same way.
-            var wantsRetired = string.Equals(status, "Retired", OIC);
-            IEnumerable<Vehicle> filtered = vehicles.Where(v => (v.RetiredAt != null) == wantsRetired);
+            IEnumerable<Vehicle> filtered = vehicles;
 
             if (!string.IsNullOrWhiteSpace(route) && int.TryParse(route, out var routeId))
                 filtered = filtered.Where(v => v.RouteId == routeId);
 
-            if (!string.IsNullOrWhiteSpace(status) && !wantsRetired)
+            if (!string.IsNullOrWhiteSpace(status))
             {
                 if (string.Equals(status, "Flagged", OIC))
                     // An out-of-service bus is a flagged one that was grounded, so it stays
@@ -784,8 +793,7 @@ namespace FleetWise.Controllers
             var vm = new VehiclesIndexViewModel
             {
                 Rows = new List<VehicleListItemViewModel>(),
-                TotalVehicles = vehicles.Count(v => v.RetiredAt == null),
-                RetiredVehicles = vehicles.Count(v => v.RetiredAt != null),
+                TotalVehicles = vehicles.Count,
                 FlaggedVehicles = vehicles.Count(v => v.RetiredAt == null
                     && maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
                 ScheduledMaintenance = vehicles.Count(v => v.RetiredAt == null
@@ -839,8 +847,7 @@ namespace FleetWise.Controllers
             var vm = new VehiclesIndexViewModel
             {
                 Rows = new List<VehicleListItemViewModel>(),
-                TotalVehicles = vehicles.Count(v => v.RetiredAt == null),
-                RetiredVehicles = vehicles.Count(v => v.RetiredAt != null),
+                TotalVehicles = vehicles.Count,
                 FlaggedVehicles = vehicles.Count(v => v.RetiredAt == null
                     && maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
                 ScheduledMaintenance = vehicles.Count(v => v.RetiredAt == null
