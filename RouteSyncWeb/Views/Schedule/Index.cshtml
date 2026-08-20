@@ -79,18 +79,20 @@
                                             else
                                             {
                                                 <div class="sch-cell" data-route="@route.RouteId" data-shift="@shift" data-date="@day.ToString("yyyy-MM-dd")" data-tripid="@(cell?.TripId ?? "")">
+                                                    @* One that cannot be booked appears only where this slot already
+                                                       holds it, marked, so the slot still reads true. *@
                                                     <select class="sch-sel sch-veh">
                                                         <option value="">Vehicle…</option>
-                                                        @foreach (var v in Model.Vehicles)
+                                                        @foreach (var v in Model.Vehicles.Where(v => v.Offered || cell?.VehicleId == v.VehicleId))
                                                         {
-                                                            <option value="@v.VehicleId" selected="@(cell?.VehicleId == v.VehicleId)">@v.VehicleId · @v.PlateNumber</option>
+                                                            <option value="@v.VehicleId" selected="@(cell?.VehicleId == v.VehicleId)">@v.VehicleId · @v.PlateNumber@(v.Offered ? "" : " (unavailable)")</option>
                                                         }
                                                     </select>
                                                     <select class="sch-sel sch-drv">
                                                         <option value="">Driver…</option>
-                                                        @foreach (var dr in Model.Drivers)
+                                                        @foreach (var dr in Model.Drivers.Where(d => d.Offered || (cell != null && cell.DriverId == d.DriverId)))
                                                         {
-                                                            <option value="@dr.DriverId" selected="@(cell != null && cell.DriverId == dr.DriverId)">@dr.DriverName</option>
+                                                            <option value="@dr.DriverId" selected="@(cell != null && cell.DriverId == dr.DriverId)">@dr.DriverName@(dr.Offered ? "" : " (unavailable)")</option>
                                                         }
                                                     </select>
                                                 </div>
@@ -159,9 +161,9 @@
     // always text and never markup. JsonSerializer escapes < > & by default, so nothing
     // here can close this script tag either.
     const SCH_VEHICLES = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-        Model.Vehicles.Select(v => new { id = v.VehicleId, label = $"{v.VehicleId} · {v.PlateNumber}" })));
+        Model.Vehicles.Where(v => v.Offered).Select(v => new { id = v.VehicleId, label = $"{v.VehicleId} · {v.PlateNumber}" })));
     const SCH_DRIVERS = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-        Model.Drivers.Select(d => new { id = d.DriverId, label = d.DriverName })));
+        Model.Drivers.Where(d => d.Offered).Select(d => new { id = d.DriverId, label = d.DriverName })));
 
     // One <select>, built from the data above. textContent, never innerHTML.
     function schBuildSelect(cls, placeholder, items) {

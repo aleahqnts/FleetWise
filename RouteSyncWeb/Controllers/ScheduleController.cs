@@ -44,12 +44,25 @@ namespace FleetWise.Controllers
                                 .Filter("role_id", Operator.Equals, "2")
                                 .Filter("account_status", Operator.Equals, "Activated")
                                 .Get();
+            var availabilityTask = _supabase.From<DriverAvailability>().Get();
             var tripsTask = _supabase.From<Trip>()
                                 .Filter("date", Operator.GreaterThanOrEqual, weekStart.ToString("yyyy-MM-dd"))
                                 .Filter("date", Operator.LessThanOrEqual, weekEnd.ToString("yyyy-MM-dd"))
                                 .Get();
 
-            await Task.WhenAll(routesTask, vehiclesTask, driversTask, tripsTask);
+            await Task.WhenAll(routesTask, vehiclesTask, driversTask, availabilityTask, tripsTask);
+
+            // A bus or a driver already holding a slot this week stays on its list even when
+            // it can no longer be booked. Dropping it would leave that slot showing nothing,
+            // and a slot showing nothing is read as cleared and deleted on the next save.
+            var trips = tripsTask.Result.Models;
+            var bookedVehicles = trips.Select(t => t.VehicleId).ToHashSet();
+            var bookedDrivers = trips.Select(t => t.DriverId).ToHashSet();
+
+            var unavailable = availabilityTask.Result.Models
+                .Where(a => string.Equals(a.AvailabilityStatus, "Unavailable", StringComparison.OrdinalIgnoreCase))
+                .Select(a => a.UserId)
+                .ToHashSet();
 
             var vm = new ScheduleViewModel
             {
@@ -63,14 +76,29 @@ namespace FleetWise.Controllers
                 Vehicles = vehiclesTask.Result.Models
                     // A flag is advisory and the bus stays schedulable. A grounded bus is
                     // withheld, and one that has left the fleet is not a candidate at all.
-                    .Where(v => !v.OutOfService && v.RetiredAt == null)
+                    .Where(v => (!v.OutOfService && v.RetiredAt == null)
+                             || bookedVehicles.Contains(v.VehicleId))
                     .OrderBy(v => v.VehicleId)
-                    .Select(v => new VehicleOption { VehicleId = v.VehicleId, PlateNumber = v.PlateNumber }).ToList(),
-                Drivers = driversTask.Result.Models.OrderBy(d => d.FirstName)
-                    .Select(d => new DriverOption { DriverId = d.UserId, DriverName = $"{d.FirstName} {d.LastName}" }).ToList(),
+                    .Select(v => new VehicleOption
+                    {
+                        VehicleId = v.VehicleId,
+                        PlateNumber = v.PlateNumber,
+                        Offered = !v.OutOfService && v.RetiredAt == null,
+                    }).ToList(),
+                Drivers = driversTask.Result.Models
+                    // A driver who has said they cannot work is not offered, for the same
+                    // reason a grounded bus is not.
+                    .Where(d => !unavailable.Contains(d.UserId) || bookedDrivers.Contains(d.UserId))
+                    .OrderBy(d => d.FirstName)
+                    .Select(d => new DriverOption
+                    {
+                        DriverId = d.UserId,
+                        DriverName = $"{d.FirstName} {d.LastName}",
+                        Offered = !unavailable.Contains(d.UserId),
+                    }).ToList(),
             };
 
-            foreach (var t in tripsTask.Result.Models.OrderBy(t => t.VehicleId))
+            foreach (var t in trips.OrderBy(t => t.VehicleId))
             {
                 var key = $"{t.RouteId}|{t.ShiftType}|{t.Date:yyyy-MM-dd}";
                 if (!vm.Cells.TryGetValue(key, out var list))

@@ -377,10 +377,10 @@ namespace FleetWise.Controllers
                         RouteName = r.RouteName
                     }).ToList(),
 
-                // A flag is advisory and the bus stays deployable. Only a grounded bus is
-                // withheld from assignment.
+                // A flag is advisory and the bus stays deployable. A grounded bus is
+                // withheld, and one that has left the fleet is not a candidate at all.
                 Vehicles = vehicles
-                    .Where(v => !v.OutOfService)
+                    .Where(v => !v.OutOfService && v.RetiredAt == null)
                     .OrderBy(v => v.VehicleId)
                     .Select(v => new VehicleOption
                     {

@@ -29,6 +29,12 @@ namespace FleetWise.ViewModels
         public string VehicleId { get; set; }
         public string PlateNumber { get; set; }
         public string VehicleType { get; set; }
+
+        /// <summary>
+        /// Whether this can be booked now. One that cannot is listed only where a slot
+        /// already holds it, so the slot still shows what it holds.
+        /// </summary>
+        public bool Offered { get; set; } = true;
         // Shifts this vehicle is already booked for today.
         public List<string> BookedShifts { get; set; } = new();
     }
@@ -37,6 +43,12 @@ namespace FleetWise.ViewModels
     {
         public int DriverId { get; set; }
         public string DriverName { get; set; }
+
+        /// <summary>
+        /// Whether this can be booked now. One that cannot is listed only where a slot
+        /// already holds it, so the slot still shows what it holds.
+        /// </summary>
+        public bool Offered { get; set; } = true;
         // Shifts this driver is already booked for today.
         public List<string> BookedShifts { get; set; } = new();
     }
