@@ -92,6 +92,19 @@
     view-transition-name: app-topbar;
 }
 
+/* The sidebar takes no part in the animation. Naming it above kept it out of the page
+   snapshot; this drops the cross-fade between its own two snapshots as well, so the
+   new one is simply shown. It looks exactly as it did before there were transitions. */
+::view-transition-old(app-sidebar) {
+    animation: none;
+    opacity: 0;
+}
+
+::view-transition-new(app-sidebar) {
+    animation: none;
+    opacity: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
     ::view-transition-group(*),
     ::view-transition-old(*),
