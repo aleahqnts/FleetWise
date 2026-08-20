@@ -33,8 +33,12 @@
             </svg>
         </div>
         <div class="vh-card-text">
-            <span class="vh-card-label">Total Vehicles</span>
-            <span class="vh-card-value">@Model.TotalVehicles</span>
+            <span class="vh-card-label">Total Active Vehicles</span>
+            <span class="vh-card-value">@Model.ActiveVehicles</span>
+            @if (Model.RetiredVehicles > 0)
+            {
+                <span class="vh-card-sub">@Model.RetiredVehicles retired</span>
+            }
         </div>
     </a>
 
@@ -143,7 +147,7 @@
 
         <div class="vh-items-edit" id="vhScheduleList"></div>
 
-        <div class="vh-form-row">
+        <div class="vh-form-row vh-form-row--tight">
             <label for="vhScheduleOther">Other:</label>
             <input type="text" id="vhScheduleOther" class="vh-form-input" maxlength="200"
                    placeholder="Work not listed above, such as aircon service or repaint" />
@@ -151,11 +155,6 @@
 
         <textarea id="vhScheduleNote" class="vh-form-input vh-action-note" rows="2"
                   placeholder="Note (optional): who is doing the work, when it is booked"></textarea>
-
-        <p class="vh-action-foot">
-            Each item you tick, and anything under Other, becomes a job on the order to be
-            closed one by one. The note explains the booking and closes nothing.
-        </p>
 
         <div class="vh-action-btns">
             <button type="button" class="vh-btn vh-btn--outline" onclick="vhScheduleCancel()">Cancel</button>
@@ -442,7 +441,7 @@
             .then(function (html) {
                 content.innerHTML = html;
                 // The panel arrives with every entry rendered; only the newest few show.
-                vhPage('vhHistoryList', 'vhHistoryPager', 6, 1);
+                vhPage('vhHistoryList', 'vhHistoryPager', 5, 1);
                 vhPage('vhPastList', 'vhPastPager', 5, 1);
             })
             .catch(function () {
@@ -1118,6 +1117,12 @@
         font-weight: 500;
     }
 
+    .vh-card-sub {
+        font-size: 0.72rem;
+        color: var(--vh-muted);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
     .vh-card-value {
         font-size: 1.7rem;
         font-weight: 700;
@@ -1769,13 +1774,8 @@
 
     .vh-action-note { width: 100%; resize: vertical; }
 
-    /* Says what the dialog will do with what was entered. */
-    .vh-action-foot {
-        margin: 10px 0 0;
-        font-size: 0.76rem;
-        line-height: 1.45;
-        color: var(--vh-muted);
-    }
+    /* A label that belongs to its field rather than to a column of labels. */
+    .vh-form-row--tight { grid-template-columns: auto 1fr; gap: 8px 10px; }
 
     /* Section heading inside a scrolling list of inspection items. It stays put while
        the list moves, so the group a row belongs to is never off screen. */
@@ -1790,7 +1790,6 @@
         letter-spacing: .04em;
         text-transform: uppercase;
         padding: 6px 8px;
-        margin: 0 -2px;
         border-radius: 4px;
     }
 

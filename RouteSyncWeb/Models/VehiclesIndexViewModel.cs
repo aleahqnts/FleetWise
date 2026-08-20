@@ -9,7 +9,9 @@ namespace FleetWise.Models
         public List<VehicleListItemViewModel> Rows { get; set; } = new();
 
         // Summary cards (computed over ALL vehicles, unaffected by the table filters).
-        public int TotalVehicles { get; set; }
+        /// <summary>Buses still in the fleet. Retired ones are counted separately.</summary>
+        public int ActiveVehicles { get; set; }
+        public int RetiredVehicles { get; set; }
         public int FlaggedVehicles { get; set; }
         public int ScheduledMaintenance { get; set; }
 

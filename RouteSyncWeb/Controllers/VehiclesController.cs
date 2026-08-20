@@ -38,7 +38,8 @@ namespace FleetWise.Controllers
                 // Rows load separately through VehicleRows, so the page appears immediately.
                 Rows = new List<VehicleListItemViewModel>(),
 
-                TotalVehicles = vehicles.Count,
+                ActiveVehicles = vehicles.Count(v => v.RetiredAt == null),
+                RetiredVehicles = vehicles.Count(v => v.RetiredAt != null),
                 FlaggedVehicles = vehicles.Count(v => v.RetiredAt == null
                     && maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
                 ScheduledMaintenance = vehicles.Count(v => v.RetiredAt == null
@@ -1114,7 +1115,8 @@ namespace FleetWise.Controllers
             var vm = new VehiclesIndexViewModel
             {
                 Rows = new List<VehicleListItemViewModel>(),
-                TotalVehicles = vehicles.Count,
+                ActiveVehicles = vehicles.Count(v => v.RetiredAt == null),
+                RetiredVehicles = vehicles.Count(v => v.RetiredAt != null),
                 FlaggedVehicles = vehicles.Count(v => v.RetiredAt == null
                     && maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
                 ScheduledMaintenance = vehicles.Count(v => v.RetiredAt == null
@@ -1168,7 +1170,8 @@ namespace FleetWise.Controllers
             var vm = new VehiclesIndexViewModel
             {
                 Rows = new List<VehicleListItemViewModel>(),
-                TotalVehicles = vehicles.Count,
+                ActiveVehicles = vehicles.Count(v => v.RetiredAt == null),
+                RetiredVehicles = vehicles.Count(v => v.RetiredAt != null),
                 FlaggedVehicles = vehicles.Count(v => v.RetiredAt == null
                     && maintenance.GetValueOrDefault(v.VehicleId, "No Issues") != "No Issues"),
                 ScheduledMaintenance = vehicles.Count(v => v.RetiredAt == null
