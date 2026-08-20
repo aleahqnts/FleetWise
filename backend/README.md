@@ -11,7 +11,6 @@ shapes the database they talk to. All three clients (`RouteSyncWeb`, `RouteSyncM
 | `supabase/functions/` | Deno edge functions, deployed to Supabase |
 | `supabase/functions/_shared/` | JWT signing and verification, audit writer, mail, password rules |
 | `schema/` | A dump of the live database: its tables, policies, grants, and roles |
-| `tools/` | PowerShell probes for checking auth by hand |
 
 The `supabase/` directory keeps that exact name because the CLI looks for it by
 convention. Everything else sits beside it.
