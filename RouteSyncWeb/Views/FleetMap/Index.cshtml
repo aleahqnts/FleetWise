@@ -2,8 +2,6 @@
     ViewData["Title"] = "Fleet Map";
 }
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
 @section TopbarContent {
     <div class="fm-topbar">
         <div class="fm-search-wrap">
@@ -156,6 +154,7 @@
 </div>
 
 @section Styles {
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="~/css/fleetmap.css" asp-append-version="true" />
 }
 
