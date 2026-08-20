@@ -85,3 +85,16 @@
         animation: none !important;
     }
 }
+
+/* Where the browser cannot cross between documents, the arriving page fades its own
+   content in instead. Only one of the two ever runs. */
+@supports not (view-transition-name: none) {
+    @keyframes page-enter {
+        from { opacity: 0; transform: translateY(4px); }
+        to   { opacity: 1; transform: none; }
+    }
+
+    .main-content {
+        animation: page-enter 160ms ease both;
+    }
+}
