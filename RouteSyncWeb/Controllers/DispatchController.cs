@@ -887,16 +887,16 @@ namespace FleetWise.Controllers
             foreach (var t in driverTrips.Where(t => t.Date.Date == date.Date))
             {
                 if (NextShift.TryGetValue(shift, out var after) && t.ShiftType == after)
-                    return $"This driver is booked for {shift} and {after} back to back on {Fmt(date)}. Give them a break.";
+                    return $"This driver is assigned to consecutive {shift} and {after} shifts on {Fmt(date)}, with no rest between them.";
                 if (NextShift.TryGetValue(t.ShiftType, out var after2) && after2 == shift)
-                    return $"This driver is booked for {t.ShiftType} and {shift} back to back on {Fmt(date)}. Give them a break.";
+                    return $"This driver is assigned to consecutive {t.ShiftType} and {shift} shifts on {Fmt(date)}, with no rest between them.";
             }
 
             // An evening shift and the following morning, checked in both directions.
             if (shift == "Evening" && driverTrips.Any(t => t.Date.Date == date.AddDays(1).Date && t.ShiftType == "Morning"))
-                return $"This driver ends with Evening on {Fmt(date)} and starts Morning the next day. They need rest.";
+                return $"This driver finishes the Evening shift on {Fmt(date)} and starts the Morning shift the next day, with no rest between them.";
             if (shift == "Morning" && driverTrips.Any(t => t.Date.Date == date.AddDays(-1).Date && t.ShiftType == "Evening"))
-                return $"This driver works Evening the day before then Morning on {Fmt(date)}. They need rest.";
+                return $"This driver finishes the Evening shift the day before and starts the Morning shift on {Fmt(date)}, with no rest between them.";
 
             return null;
         }

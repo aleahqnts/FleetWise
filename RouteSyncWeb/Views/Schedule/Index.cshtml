@@ -71,7 +71,8 @@
                                         <td class="sch-cell-td">
                                             @if (locked)
                                             {
-                                                <div class="sch-locked">
+                                                <div class="sch-locked" data-shift="@shift" data-date="@day.ToString("yyyy-MM-dd")"
+                                                     data-veh="@cell.VehicleId" data-drv="@cell.DriverId">
                                                     <span class="sch-lock-badge">@cell.TripStatus</span>
                                                     <span class="sch-lock-txt">@cell.VehicleId · @(Model.Drivers.FirstOrDefault(d => d.DriverId == cell.DriverId)?.DriverName ?? "—")</span>
                                                 </div>
@@ -199,9 +200,60 @@
 
     function schWireCell(cell) {
         cell.querySelectorAll('.sch-sel').forEach(sel =>
-            sel.addEventListener('change', () => cell.classList.add('sch-dirty')));
+            sel.addEventListener('change', () => {
+                cell.classList.add('sch-dirty');
+                schNarrowChoices();
+            }));
     }
+
+    // A bus is in one place at a time and so is a driver, so once a slot on a given day
+    // and shift holds one, no other slot that day and shift offers it. That covers every
+    // route at once: two routes running the same shift cannot share a bus either.
+    //
+    // A lane that has started is not editable but still occupies what it holds, so it is
+    // read as well. Withdrawing a choice that cannot be made leaves back-to-back shifts as
+    // the only conflict a dispatcher can still create, which is the only one worth an
+    // override, since a driver working two in a row is possible and a bus in two places
+    // is not.
+    function schNarrowChoices() {
+        const groups = {};
+        document.querySelectorAll('.sch-cell, .sch-locked').forEach(el => {
+            const key = el.dataset.shift + '|' + el.dataset.date;
+            (groups[key] ??= []).push(el);
+        });
+
+        Object.values(groups).forEach(function (els) {
+            [['sch-veh', 'veh'], ['sch-drv', 'drv']].forEach(function (pair) {
+                const [cls, lockedAttr] = pair;
+
+                // What this shift and day already holds, and which select holds it.
+                const taken = new Map();
+                els.forEach(function (el) {
+                    if (el.classList.contains('sch-locked')) {
+                        const held = el.dataset[lockedAttr];
+                        if (held) taken.set(held, null);   // null = held by a locked lane
+                        return;
+                    }
+                    const sel = el.querySelector('.' + cls);
+                    if (sel && sel.value) taken.set(sel.value, sel);
+                });
+
+                els.forEach(function (el) {
+                    const sel = el.querySelector('.' + cls);
+                    if (!sel) return;
+                    Array.from(sel.options).forEach(function (opt) {
+                        // Its own choice stays; the blank stays; anything held elsewhere goes.
+                        const elsewhere = opt.value && taken.has(opt.value) && taken.get(opt.value) !== sel;
+                        opt.hidden = elsewhere;
+                        opt.disabled = elsewhere;
+                    });
+                });
+            });
+        });
+    }
+
     document.querySelectorAll('.sch-cell').forEach(schWireCell);
+    schNarrowChoices();
 
     // Add a new bus lane (empty row) to a shift, across all 7 days.
     function schAddBus(btn) {
@@ -226,6 +278,7 @@
             tr.appendChild(td);
         });
         tbody.appendChild(tr);
+        schNarrowChoices();
 
         // grow the sticky shift-label rowspan to cover the new lane
         const labelCell = tbody.querySelector('.sch-shift-col');
@@ -341,13 +394,13 @@
                 const next = SHIFT_ADJ[r.shift];
                 if (next && map[r.date + '|' + next] && (r.dirty || map[r.date + '|' + next].dirty)) {
                     flag(r.el); flag(map[r.date + '|' + next].el);
-                    messages.push(`This driver is booked for ${r.shift} and ${next} back to back on ${schFmtDate(r.date)}. Give them a break.`);
+                    messages.push(`This driver is assigned to consecutive ${r.shift} and ${next} shifts on ${schFmtDate(r.date)}, with no rest between them.`);
                 }
                 // Evening -> next-day Morning
                 if (r.shift === 'Evening') {
                     const tomo = new Date(r.date); tomo.setDate(tomo.getDate() + 1);
                     const tk = tomo.toISOString().slice(0, 10) + '|Morning';
-                    if (map[tk] && (r.dirty || map[tk].dirty)) { flag(r.el); flag(map[tk].el); messages.push(`This driver ends with Evening on ${schFmtDate(r.date)} and starts Morning the next day. They need rest.`); }
+                    if (map[tk] && (r.dirty || map[tk].dirty)) { flag(r.el); flag(map[tk].el); messages.push(`This driver finishes the Evening shift on ${schFmtDate(r.date)} and starts the Morning shift the next day, with no rest between them.`); }
                 }
             });
         });

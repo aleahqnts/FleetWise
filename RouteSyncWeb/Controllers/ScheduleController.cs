@@ -424,11 +424,11 @@ namespace FleetWise.Controllers
                 foreach (var day in byDayShift.Keys.Select(k => k.Day).Distinct())
                 {
                     Pair((day, "Morning"), (day, "Afternoon"),
-                        $"This driver is booked for Morning and Afternoon back to back on {FmtDate(day.ToString("yyyy-MM-dd"))}. Give them a break.");
+                        $"This driver is assigned to consecutive Morning and Afternoon shifts on {FmtDate(day.ToString("yyyy-MM-dd"))}, with no rest between them.");
                     Pair((day, "Afternoon"), (day, "Evening"),
-                        $"This driver is booked for Afternoon and Evening back to back on {FmtDate(day.ToString("yyyy-MM-dd"))}. Give them a break.");
+                        $"This driver is assigned to consecutive Afternoon and Evening shifts on {FmtDate(day.ToString("yyyy-MM-dd"))}, with no rest between them.");
                     Pair((day, "Evening"), (day.AddDays(1), "Morning"),
-                        $"This driver ends with Evening on {FmtDate(day.ToString("yyyy-MM-dd"))} and starts Morning the next day. They need rest.");
+                        $"This driver finishes the Evening shift on {FmtDate(day.ToString("yyyy-MM-dd"))} and starts the Morning shift the next day, with no rest between them.");
                 }
             }
 
