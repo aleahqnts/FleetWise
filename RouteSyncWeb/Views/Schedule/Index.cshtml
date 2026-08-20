@@ -71,7 +71,8 @@
                                         <td class="sch-cell-td">
                                             @if (locked)
                                             {
-                                                <div class="sch-locked">
+                                                <div class="sch-locked" data-shift="@shift" data-date="@day.ToString("yyyy-MM-dd")"
+                                                     data-veh="@cell.VehicleId" data-drv="@cell.DriverId">
                                                     <span class="sch-lock-badge">@cell.TripStatus</span>
                                                     <span class="sch-lock-txt">@cell.VehicleId · @(Model.Drivers.FirstOrDefault(d => d.DriverId == cell.DriverId)?.DriverName ?? "—")</span>
                                                 </div>
@@ -79,18 +80,20 @@
                                             else
                                             {
                                                 <div class="sch-cell" data-route="@route.RouteId" data-shift="@shift" data-date="@day.ToString("yyyy-MM-dd")" data-tripid="@(cell?.TripId ?? "")">
+                                                    @* One that cannot be booked appears only where this slot already
+                                                       holds it, marked, so the slot still reads true. *@
                                                     <select class="sch-sel sch-veh">
                                                         <option value="">Vehicle…</option>
-                                                        @foreach (var v in Model.Vehicles)
+                                                        @foreach (var v in Model.Vehicles.Where(v => v.Offered || cell?.VehicleId == v.VehicleId))
                                                         {
-                                                            <option value="@v.VehicleId" selected="@(cell?.VehicleId == v.VehicleId)">@v.VehicleId · @v.PlateNumber</option>
+                                                            <option value="@v.VehicleId" selected="@(cell?.VehicleId == v.VehicleId)">@v.VehicleId · @v.PlateNumber@(v.Offered ? "" : " (unavailable)")</option>
                                                         }
                                                     </select>
                                                     <select class="sch-sel sch-drv">
                                                         <option value="">Driver…</option>
-                                                        @foreach (var dr in Model.Drivers)
+                                                        @foreach (var dr in Model.Drivers.Where(d => d.Offered || (cell != null && cell.DriverId == d.DriverId)))
                                                         {
-                                                            <option value="@dr.DriverId" selected="@(cell != null && cell.DriverId == dr.DriverId)">@dr.DriverName</option>
+                                                            <option value="@dr.DriverId" selected="@(cell != null && cell.DriverId == dr.DriverId)">@dr.DriverName@(dr.Offered ? "" : " (unavailable)")</option>
                                                         }
                                                     </select>
                                                 </div>
@@ -116,13 +119,13 @@
         <div class="sch-modal">
             <div class="sch-modal-head">
                 <span class="sch-modal-ico">&#9888;</span>
-                <h3>Schedule conflicts</h3>
+                <h3 id="sch-conflict-title">Schedule Conflicts</h3>
             </div>
-            <p class="sch-modal-sub">Please fix the cells in red before saving.</p>
+            <p id="sch-conflict-sub" class="sch-modal-sub">Review the highlighted cells before saving.</p>
             <ul id="sch-conflict-list" class="sch-modal-list"></ul>
             <div class="sch-modal-actions">
-                <button class="sch-modal-btn" onclick="schCloseConflicts()">Go back &amp; fix</button>
-                <button id="sch-override-btn" class="sch-modal-btn sch-modal-btn-override" style="display:none;" onclick="schConfirmOverride()">Override &amp; save anyway</button>
+                <button class="sch-modal-btn" onclick="schCloseConflicts()">Go Back</button>
+                <button id="sch-override-btn" class="sch-modal-btn sch-modal-btn-override" style="display:none;" onclick="schConfirmOverride()">Save Anyway</button>
             </div>
         </div>
     </div>
@@ -132,13 +135,13 @@
         <div class="sch-modal">
             <div class="sch-modal-head">
                 <span class="sch-modal-ico">&#9888;</span>
-                <h3>Override these conflicts?</h3>
+                <h3>Override These Conflicts?</h3>
             </div>
-            <p class="sch-modal-sub">You are saving a schedule that breaks the booking rules below. This is intentional. Confirm only if you mean to.</p>
+            <p class="sch-modal-sub">This schedule breaks the booking rules listed below. Confirm only if that is intended.</p>
             <ul id="sch-override-list" class="sch-modal-list"></ul>
             <div class="sch-modal-actions">
                 <button class="sch-modal-btn" onclick="schCancelOverride()">Cancel</button>
-                <button class="sch-modal-btn sch-modal-btn-override" onclick="schSave(true)">Yes, override</button>
+                <button class="sch-modal-btn sch-modal-btn-override" onclick="schSave(true)">Confirm Override</button>
             </div>
         </div>
     </div>
@@ -159,9 +162,9 @@
     // always text and never markup. JsonSerializer escapes < > & by default, so nothing
     // here can close this script tag either.
     const SCH_VEHICLES = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-        Model.Vehicles.Select(v => new { id = v.VehicleId, label = $"{v.VehicleId} · {v.PlateNumber}" })));
+        Model.Vehicles.Where(v => v.Offered).Select(v => new { id = v.VehicleId, label = $"{v.VehicleId} · {v.PlateNumber}" })));
     const SCH_DRIVERS = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-        Model.Drivers.Select(d => new { id = d.DriverId, label = d.DriverName })));
+        Model.Drivers.Where(d => d.Offered).Select(d => new { id = d.DriverId, label = d.DriverName })));
 
     // One <select>, built from the data above. textContent, never innerHTML.
     function schBuildSelect(cls, placeholder, items) {
@@ -197,9 +200,60 @@
 
     function schWireCell(cell) {
         cell.querySelectorAll('.sch-sel').forEach(sel =>
-            sel.addEventListener('change', () => cell.classList.add('sch-dirty')));
+            sel.addEventListener('change', () => {
+                cell.classList.add('sch-dirty');
+                schNarrowChoices();
+            }));
     }
+
+    // A bus is in one place at a time and so is a driver, so once a slot on a given day
+    // and shift holds one, no other slot that day and shift offers it. That covers every
+    // route at once: two routes running the same shift cannot share a bus either.
+    //
+    // A lane that has started is not editable but still occupies what it holds, so it is
+    // read as well. Withdrawing a choice that cannot be made leaves back-to-back shifts as
+    // the only conflict a dispatcher can still create, which is the only one worth an
+    // override, since a driver working two in a row is possible and a bus in two places
+    // is not.
+    function schNarrowChoices() {
+        const groups = {};
+        document.querySelectorAll('.sch-cell, .sch-locked').forEach(el => {
+            const key = el.dataset.shift + '|' + el.dataset.date;
+            (groups[key] ??= []).push(el);
+        });
+
+        Object.values(groups).forEach(function (els) {
+            [['sch-veh', 'veh'], ['sch-drv', 'drv']].forEach(function (pair) {
+                const [cls, lockedAttr] = pair;
+
+                // What this shift and day already holds, and which select holds it.
+                const taken = new Map();
+                els.forEach(function (el) {
+                    if (el.classList.contains('sch-locked')) {
+                        const held = el.dataset[lockedAttr];
+                        if (held) taken.set(held, null);   // null = held by a locked lane
+                        return;
+                    }
+                    const sel = el.querySelector('.' + cls);
+                    if (sel && sel.value) taken.set(sel.value, sel);
+                });
+
+                els.forEach(function (el) {
+                    const sel = el.querySelector('.' + cls);
+                    if (!sel) return;
+                    Array.from(sel.options).forEach(function (opt) {
+                        // Its own choice stays; the blank stays; anything held elsewhere goes.
+                        const elsewhere = opt.value && taken.has(opt.value) && taken.get(opt.value) !== sel;
+                        opt.hidden = elsewhere;
+                        opt.disabled = elsewhere;
+                    });
+                });
+            });
+        });
+    }
+
     document.querySelectorAll('.sch-cell').forEach(schWireCell);
+    schNarrowChoices();
 
     // Add a new bus lane (empty row) to a shift, across all 7 days.
     function schAddBus(btn) {
@@ -224,6 +278,7 @@
             tr.appendChild(td);
         });
         tbody.appendChild(tr);
+        schNarrowChoices();
 
         // grow the sticky shift-label rowspan to cover the new lane
         const labelCell = tbody.querySelector('.sch-shift-col');
@@ -241,8 +296,11 @@
 
     // allowOverride = soft scheduling rule (double-booking / back-to-back) the dispatcher
     // may force past. Partial slots (missing bus/driver) pass false -> no override offered.
-    function schShowConflicts(messages, allowOverride) {
+    function schShowConflicts(messages, allowOverride, title, sub) {
         schLastConflicts = messages;
+        document.getElementById('sch-conflict-title').textContent = title || 'Schedule Conflicts';
+        document.getElementById('sch-conflict-sub').textContent =
+            sub || 'Review the highlighted cells before saving.';
         const ul = document.getElementById('sch-conflict-list');
         ul.replaceChildren();
         (messages || []).forEach(function (m) {
@@ -302,7 +360,9 @@
         });
         if (partial) {
             // Data integrity, not a scheduling rule -> never overridable.
-            schShowConflicts(['Each slot needs both a bus and a driver. Pick both or leave it blank.'], false);
+            schShowConflicts(['Each slot needs both a bus and a driver. Pick both or leave it blank.'],
+                             false, 'Incomplete Slots',
+                             'Review the highlighted cells before saving.');
             return;
         }
 
@@ -334,13 +394,13 @@
                 const next = SHIFT_ADJ[r.shift];
                 if (next && map[r.date + '|' + next] && (r.dirty || map[r.date + '|' + next].dirty)) {
                     flag(r.el); flag(map[r.date + '|' + next].el);
-                    messages.push(`This driver is booked for ${r.shift} and ${next} back to back on ${schFmtDate(r.date)}. Give them a break.`);
+                    messages.push(`This driver is assigned to consecutive ${r.shift} and ${next} shifts on ${schFmtDate(r.date)}.`);
                 }
                 // Evening -> next-day Morning
                 if (r.shift === 'Evening') {
                     const tomo = new Date(r.date); tomo.setDate(tomo.getDate() + 1);
                     const tk = tomo.toISOString().slice(0, 10) + '|Morning';
-                    if (map[tk] && (r.dirty || map[tk].dirty)) { flag(r.el); flag(map[tk].el); messages.push(`This driver ends with Evening on ${schFmtDate(r.date)} and starts Morning the next day. They need rest.`); }
+                    if (map[tk] && (r.dirty || map[tk].dirty)) { flag(r.el); flag(map[tk].el); messages.push(`This driver finishes the Evening shift on ${schFmtDate(r.date)} and starts the Morning shift the next day.`); }
                 }
             });
         });
@@ -355,11 +415,15 @@
             body: JSON.stringify({ cells, weekStart: SCH_WEEK_START, weekEnd: SCH_WEEK_END, override: !!force })
         }).then(async res => {
             if (!res.ok) {
-                // Server rejects with { conflicts: [{ message, cells:[{routeId,shift,date}] }] }.
-                // Highlight the offending (editable) cells in red and list the reasons.
+                // 409 carries { conflicts: [{ message, cells:[{routeId,shift,date}] }] } and
+                // may be forced past. Anything else is a refusal or a fault, and says why.
                 let data = null;
-                try { data = await res.json(); } catch { /* not JSON */ }
-                if (data && Array.isArray(data.conflicts)) {
+                try { data = await res.json(); } catch { /* an error page, not JSON */ }
+
+                // Anything carrying cells is marked in the grid, whatever the status. The
+                // status only decides whether it can be forced past: a 409 is a booking
+                // rule, a 400 is a bus or a driver that cannot take the work at all.
+                if (data && Array.isArray(data.conflicts) && data.conflicts.length) {
                     const msgs = [];
                     data.conflicts.forEach(cf => {
                         msgs.push(cf.message);
@@ -369,17 +433,29 @@
                             ).forEach(flag);
                         });
                     });
-                    // Server-side backstop conflict (e.g. a locked trip the grid didn't
-                    // resend) -> still overridable.
-                    schShowConflicts([...new Set(msgs)], true);
+                    const overridable = res.status === 409;
+                    schShowConflicts(
+                        [...new Set(msgs)], overridable,
+                        overridable ? 'Schedule Conflicts' : 'Cannot Be Booked',
+                        overridable
+                            ? 'Review the highlighted cells before saving.'
+                            : 'These assignments are unavailable. Correct the highlighted cells to continue.');
                 } else {
-                    schShowConflicts([(data && data.message) || 'Save failed. Please review the schedule.'], false);
+                    // A bare string body is still a reason worth reading; a page that is not
+                    // JSON at all leaves only the status, which beats saying nothing.
+                    const reason = (data && data.message)
+                        || (typeof data === 'string' && data)
+                        || `The server answered ${res.status} ${res.statusText || ''}`.trim() + '.';
+                    schShowConflicts([reason], false, 'Could Not Save',
+                        'This cannot be overridden. Correct the issue below, then save again.');
                 }
                 return;
             }
             sessionStorage.setItem('sch_saved', '1'); // survive the reload -> show toast
             window.location.reload();
-        }).catch(err => schShowConflicts(['Save failed: ' + err.message]))
+        }).catch(err => schShowConflicts(
+              ['The server could not be reached: ' + err.message], false,
+              'Could Not Save', 'Check your connection, then save again.'))
           .finally(() => { btn.disabled = false; btn.textContent = 'Save Schedule'; });
     }
 </script>

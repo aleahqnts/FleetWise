@@ -28,6 +28,9 @@ namespace FleetWise.Controllers
         };
         private static readonly string[] ShiftOrder = { "Morning", "Afternoon", "Evening" };
 
+        /// <summary>The role a bus is driven by, which is the only one this page books.</summary>
+        private const int DriverRoleId = 2;
+
         // GET weekly planner.
         public async Task<IActionResult> Index(string start)
         {
@@ -41,12 +44,25 @@ namespace FleetWise.Controllers
                                 .Filter("role_id", Operator.Equals, "2")
                                 .Filter("account_status", Operator.Equals, "Activated")
                                 .Get();
+            var availabilityTask = _supabase.From<DriverAvailability>().Get();
             var tripsTask = _supabase.From<Trip>()
                                 .Filter("date", Operator.GreaterThanOrEqual, weekStart.ToString("yyyy-MM-dd"))
                                 .Filter("date", Operator.LessThanOrEqual, weekEnd.ToString("yyyy-MM-dd"))
                                 .Get();
 
-            await Task.WhenAll(routesTask, vehiclesTask, driversTask, tripsTask);
+            await Task.WhenAll(routesTask, vehiclesTask, driversTask, availabilityTask, tripsTask);
+
+            // A bus or a driver already holding a slot this week stays on its list even when
+            // it can no longer be booked. Dropping it would leave that slot showing nothing,
+            // and a slot showing nothing is read as cleared and deleted on the next save.
+            var trips = tripsTask.Result.Models;
+            var bookedVehicles = trips.Select(t => t.VehicleId).ToHashSet();
+            var bookedDrivers = trips.Select(t => t.DriverId).ToHashSet();
+
+            var unavailable = availabilityTask.Result.Models
+                .Where(a => string.Equals(a.AvailabilityStatus, "Unavailable", StringComparison.OrdinalIgnoreCase))
+                .Select(a => a.UserId)
+                .ToHashSet();
 
             var vm = new ScheduleViewModel
             {
@@ -60,14 +76,29 @@ namespace FleetWise.Controllers
                 Vehicles = vehiclesTask.Result.Models
                     // A flag is advisory and the bus stays schedulable. A grounded bus is
                     // withheld, and one that has left the fleet is not a candidate at all.
-                    .Where(v => !v.OutOfService && v.RetiredAt == null)
+                    .Where(v => (!v.OutOfService && v.RetiredAt == null)
+                             || bookedVehicles.Contains(v.VehicleId))
                     .OrderBy(v => v.VehicleId)
-                    .Select(v => new VehicleOption { VehicleId = v.VehicleId, PlateNumber = v.PlateNumber }).ToList(),
-                Drivers = driversTask.Result.Models.OrderBy(d => d.FirstName)
-                    .Select(d => new DriverOption { DriverId = d.UserId, DriverName = $"{d.FirstName} {d.LastName}" }).ToList(),
+                    .Select(v => new VehicleOption
+                    {
+                        VehicleId = v.VehicleId,
+                        PlateNumber = v.PlateNumber,
+                        Offered = !v.OutOfService && v.RetiredAt == null,
+                    }).ToList(),
+                Drivers = driversTask.Result.Models
+                    // A driver who has said they cannot work is not offered, for the same
+                    // reason a grounded bus is not.
+                    .Where(d => !unavailable.Contains(d.UserId) || bookedDrivers.Contains(d.UserId))
+                    .OrderBy(d => d.FirstName)
+                    .Select(d => new DriverOption
+                    {
+                        DriverId = d.UserId,
+                        DriverName = $"{d.FirstName} {d.LastName}",
+                        Offered = !unavailable.Contains(d.UserId),
+                    }).ToList(),
             };
 
-            foreach (var t in tripsTask.Result.Models.OrderBy(t => t.VehicleId))
+            foreach (var t in trips.OrderBy(t => t.VehicleId))
             {
                 var key = $"{t.RouteId}|{t.ShiftType}|{t.Date:yyyy-MM-dd}";
                 if (!vm.Cells.TryGetValue(key, out var list))
@@ -88,10 +119,13 @@ namespace FleetWise.Controllers
         [HttpPost]
         public async Task<IActionResult> Save([FromBody] SaveScheduleRequest req)
         {
-            if (!ModelState.IsValid) return BadRequest(ModelState.FirstError());
+            // Every failure answers with the same shape, { message } and optionally
+            // { conflicts }, so the planner can always say what went wrong rather than
+            // falling back to a sentence that names nothing.
+            if (!ModelState.IsValid) return BadRequest(new { message = ModelState.FirstError() });
             if (req == null || !DateTime.TryParse(req.WeekStart, out var weekStart)
                             || !DateTime.TryParse(req.WeekEnd, out var weekEnd))
-                return BadRequest("Invalid week range.");
+                return BadRequest(new { message = "That week could not be read. Reload the planner and try again." });
 
             var cells = req.Cells ?? new();
 
@@ -136,79 +170,194 @@ namespace FleetWise.Controllers
                     Date = t.Date.ToString("yyyy-MM-dd"),
                 }, locked: true)));
 
-            // Conflicts are advisory and can be overridden from the confirmation modal, so
-            // the save is blocked only until that acknowledgement arrives.
-            var conflicts = FindConflicts(effective);
-            if (!req.Override && conflicts.Count > 0) return BadRequest(new { conflicts });
-
-            // Trips that survive this save, whether kept as they are or updated.
-            var keptIds = new HashSet<string>();
-            int added = 0, changed = 0, deleted = 0;   // counted for the audit line
-
-            foreach (var c in cells)
+            // A bus or a driver can stop being usable while the planner sits open, and the
+            // grid is a picture of the fleet as it was when it loaded. Anything newly booked
+            // is therefore checked against the fleet as it stands now.
+            //
+            // Cells left as they were are not checked. A trip already run on a bus since
+            // grounded is history, and re-checking it would leave the week unsavable.
+            var refusal = await RefuseUnusableAsync(effective);
+            if (refusal.Count > 0)
             {
-                if (string.IsNullOrEmpty(c.VehicleId) || c.DriverId == 0
-                 || string.IsNullOrEmpty(c.Shift) || !DateTime.TryParse(c.Date, out var date))
-                    continue;
-                if (!ShiftTimes.TryGetValue(c.Shift, out var window)) continue;
-
-                if (!string.IsNullOrEmpty(c.TripId) && existingById.TryGetValue(c.TripId, out var trip))
+                return BadRequest(new
                 {
-                    keptIds.Add(trip.TripId);
-                    // A trip that has started is locked and never modified.
-                    if (trip.TripStatus == "Active" || trip.TripStatus == "Completed") continue;
-                    if (trip.VehicleId == c.VehicleId && trip.DriverId == c.DriverId) continue; // unchanged
+                    message = "Some of this cannot be booked.",
+                    conflicts = refusal,
+                });
+            }
+
+            // Conflicts are advisory and can be overridden from the confirmation modal, so
+            // the save is blocked only until that acknowledgement arrives. Answered with a
+            // 409 rather than a 400, the same way dispatch does, because the two mean
+            // different things to the planner: one it may force past, the other it may not.
+            var conflicts = FindConflicts(effective);
+            if (!req.Override && conflicts.Count > 0)
+                return Conflict(new { message = "This schedule breaks a booking rule.", conflicts });
+
+            // A write that fails partway leaves the week half-rewritten, so the planner is
+            // told plainly rather than being handed a page it cannot read. The detail goes
+            // to the audit trail, where it can be looked up without being shown here.
+            try
+            {
+                // Trips that survive this save, whether kept as they are or updated.
+                var keptIds = new HashSet<string>();
+                int added = 0, changed = 0, deleted = 0;   // counted for the audit line
+
+                foreach (var c in cells)
+                {
+                    if (string.IsNullOrEmpty(c.VehicleId) || c.DriverId == 0
+                     || string.IsNullOrEmpty(c.Shift) || !DateTime.TryParse(c.Date, out var date))
+                        continue;
+                    if (!ShiftTimes.TryGetValue(c.Shift, out var window)) continue;
+
+                    if (!string.IsNullOrEmpty(c.TripId) && existingById.TryGetValue(c.TripId, out var trip))
+                    {
+                        keptIds.Add(trip.TripId);
+                        // A trip that has started is locked and never modified.
+                        if (trip.TripStatus == "Active" || trip.TripStatus == "Completed") continue;
+                        if (trip.VehicleId == c.VehicleId && trip.DriverId == c.DriverId) continue; // unchanged
+
+                        await _supabase.From<Trip>()
+                            .Filter("trip_id", Operator.Equals, trip.TripId)
+                            .Set(t => t.VehicleId, c.VehicleId)
+                            .Set(t => t.DriverId, c.DriverId)
+                            .Update();
+                        changed++;
+                    }
+                    else
+                    {
+                        // A new bus for this route, shift and day.
+                        await _supabase.From<Trip>().Insert(new Trip
+                        {
+                            Date = DateTime.SpecifyKind(date, DateTimeKind.Utc),
+                            ShiftType = c.Shift,
+                            ShiftStartTime = window.start,
+                            ShiftEndTime = window.end,
+                            RouteId = c.RouteId,
+                            VehicleId = c.VehicleId,
+                            DriverId = c.DriverId,
+                            TripStatus = "Not Yet Started",
+                            EstimatedRevenue = 0
+                        });
+                        added++;
+                    }
+                }
+
+                // Trips no longer present in the grid are deleted, except those already started.
+                foreach (var t in existing)
+                {
+                    if (keptIds.Contains(t.TripId)) continue;
+                    if (t.TripStatus == "Active" || t.TripStatus == "Completed") continue;
 
                     await _supabase.From<Trip>()
-                        .Filter("trip_id", Operator.Equals, trip.TripId)
-                        .Set(t => t.VehicleId, c.VehicleId)
-                        .Set(t => t.DriverId, c.DriverId)
-                        .Update();
-                    changed++;
+                        .Filter("trip_id", Operator.Equals, t.TripId)
+                        .Delete();
+                    deleted++;
                 }
-                else
+
+                // One planner save can rewrite a whole week, so the audit entry carries the
+                // counts. A save that changed nothing is not recorded.
+                if (added + changed + deleted > 0)
                 {
-                    // A new bus for this route, shift and day.
-                    await _supabase.From<Trip>().Insert(new Trip
-                    {
-                        Date = DateTime.SpecifyKind(date, DateTimeKind.Utc),
-                        ShiftType = c.Shift,
-                        ShiftStartTime = window.start,
-                        ShiftEndTime = window.end,
-                        RouteId = c.RouteId,
-                        VehicleId = c.VehicleId,
-                        DriverId = c.DriverId,
-                        TripStatus = "Not Yet Started",
-                        EstimatedRevenue = 0
-                    });
-                    added++;
+                    await _audit.WriteAsync("schedule_saved",
+                        $"saved the schedule for {weekStart:MMM d} to {weekEnd:MMM d}: "
+                            + $"{added} added, {changed} changed, {deleted} removed"
+                            + (req.Override ? ", overriding a conflict warning" : ""),
+                        "trips");
                 }
+
             }
-
-            // Trips no longer present in the grid are deleted, except those already started.
-            foreach (var t in existing)
-            {
-                if (keptIds.Contains(t.TripId)) continue;
-                if (t.TripStatus == "Active" || t.TripStatus == "Completed") continue;
-
-                await _supabase.From<Trip>()
-                    .Filter("trip_id", Operator.Equals, t.TripId)
-                    .Delete();
-                deleted++;
-            }
-
-            // One planner save can rewrite a whole week, so the audit entry carries the
-            // counts. A save that changed nothing is not recorded.
-            if (added + changed + deleted > 0)
+            catch (Exception ex)
             {
                 await _audit.WriteAsync("schedule_saved",
-                    $"saved the schedule for {weekStart:MMM d} to {weekEnd:MMM d}: "
-                        + $"{added} added, {changed} changed, {deleted} removed"
-                        + (req.Override ? ", overriding a conflict warning" : ""),
-                    "trips");
+                    $"failed to save the schedule for {weekStart:MMM d} to {weekEnd:MMM d}: {ex.Message}",
+                    "trips", outcome: "error");
+
+                return StatusCode(500, new
+                {
+                    message = "The schedule could not be saved. Reload the planner to see "
+                            + "what was written, then try again."
+                });
             }
 
             return Ok();
+        }
+
+        /// <summary>
+        /// Refuses cells booking a bus or a driver that cannot take the work.
+        /// </summary>
+        /// <remarks>
+        /// The dropdowns already withhold a grounded or retired bus, and a driver whose
+        /// account is closed, but they were filled when the page loaded. This is the same
+        /// question asked of the fleet as it stands at the moment of saving.
+        ///
+        /// Unlike a double booking, none of this can be forced past: the answer is not that
+        /// the schedule is awkward but that the bus or the driver is unavailable.
+        /// </remarks>
+        private async Task<List<object>> RefuseUnusableAsync(
+            List<(ScheduleCellInput cell, bool locked)> effective)
+        {
+            var booked = effective
+                .Where(e => !e.locked
+                         && !string.IsNullOrEmpty(e.cell.VehicleId)
+                         && e.cell.DriverId != 0)
+                .Select(e => e.cell)
+                .ToList();
+
+            var refused = new List<object>();
+            if (booked.Count == 0) return refused;
+
+            var vehicleIds = booked.Select(c => c.VehicleId).Distinct().Cast<object>().ToList();
+            var driverIds = booked.Select(c => c.DriverId).Distinct().Cast<object>().ToList();
+
+            var vehiclesTask = _supabase.From<Vehicle>()
+                .Filter("vehicle_id", Operator.In, vehicleIds).Get();
+            var driversTask = _supabase.From<UserModel>()
+                .Filter("user_id", Operator.In, driverIds).Get();
+            var availTask = _supabase.From<DriverAvailability>()
+                .Filter("user_id", Operator.In, driverIds).Get();
+
+            await Task.WhenAll(vehiclesTask, driversTask, availTask);
+
+            var vehicles = vehiclesTask.Result.Models.ToDictionary(v => v.VehicleId);
+            var drivers = driversTask.Result.Models.ToDictionary(d => d.UserId);
+            var availability = availTask.Result.Models
+                .ToDictionary(a => a.UserId, a => a.AvailabilityStatus);
+
+            void Refuse(string message, ScheduleCellInput c) => refused.Add(new
+            {
+                message,
+                cells = new[] { new { routeId = c.RouteId, shift = c.Shift, date = c.Date } },
+            });
+
+            const StringComparison OIC = StringComparison.OrdinalIgnoreCase;
+
+            foreach (var c in booked)
+            {
+                if (!vehicles.TryGetValue(c.VehicleId, out var vehicle))
+                    Refuse($"Bus {c.VehicleId} is no longer in the fleet.", c);
+                else if (vehicle.RetiredAt != null)
+                    Refuse($"Bus {c.VehicleId} has been retired.", c);
+                else if (vehicle.OutOfService)
+                    Refuse($"Bus {c.VehicleId} is out of service and cannot be booked.", c);
+
+                if (!drivers.TryGetValue(c.DriverId, out var driver) || driver.RoleId != DriverRoleId)
+                {
+                    Refuse("That driver is no longer on the roster.", c);
+                    continue;
+                }
+
+                var name = $"{driver.FirstName} {driver.LastName}".Trim();
+                if (name.Length == 0) name = $"Driver #{driver.UserId}";
+
+                if (!string.Equals(driver.AccountStatus, "Activated", OIC))
+                    Refuse($"{name}'s account is no longer active.", c);
+                else if (availability.TryGetValue(c.DriverId, out var status)
+                      && string.Equals(status, "Unavailable", OIC))
+                    Refuse($"{name} is marked unavailable.", c);
+            }
+
+            return refused;
         }
 
         /// <summary>
@@ -275,11 +424,11 @@ namespace FleetWise.Controllers
                 foreach (var day in byDayShift.Keys.Select(k => k.Day).Distinct())
                 {
                     Pair((day, "Morning"), (day, "Afternoon"),
-                        $"This driver is booked for Morning and Afternoon back to back on {FmtDate(day.ToString("yyyy-MM-dd"))}. Give them a break.");
+                        $"This driver is assigned to consecutive Morning and Afternoon shifts on {FmtDate(day.ToString("yyyy-MM-dd"))}.");
                     Pair((day, "Afternoon"), (day, "Evening"),
-                        $"This driver is booked for Afternoon and Evening back to back on {FmtDate(day.ToString("yyyy-MM-dd"))}. Give them a break.");
+                        $"This driver is assigned to consecutive Afternoon and Evening shifts on {FmtDate(day.ToString("yyyy-MM-dd"))}.");
                     Pair((day, "Evening"), (day.AddDays(1), "Morning"),
-                        $"This driver ends with Evening on {FmtDate(day.ToString("yyyy-MM-dd"))} and starts Morning the next day. They need rest.");
+                        $"This driver finishes the Evening shift on {FmtDate(day.ToString("yyyy-MM-dd"))} and starts the Morning shift the next day.");
                 }
             }
 
