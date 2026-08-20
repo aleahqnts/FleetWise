@@ -448,12 +448,16 @@ namespace FleetWise.Controllers
         /// The audit trail already holds every action taken on a vehicle and who took it,
         /// including the ones that happen without an incident to hang a note on, so it is
         /// read directly rather than assembled from maintenance notes.
+        ///
+        /// Only the columns the panel shows are asked for. The row diff a trail entry can
+        /// carry is the largest thing in it and is read on the audit page, not here.
         /// </remarks>
         private async Task<List<VehicleHistoryEntryViewModel>> BuildHistoryAsync(string vehicleId)
         {
             var (rows, _) = await _audit.QueryAsync(
                 $"target_table=eq.vehicles&target_id=eq.{Uri.EscapeDataString(vehicleId)}"
-                + "&order=occurred_at.desc&limit=50");
+                + "&select=occurred_at,actor_role,action,outcome,summary"
+                + "&order=occurred_at.desc&limit=300");
 
             if (rows is null) return new();
 
