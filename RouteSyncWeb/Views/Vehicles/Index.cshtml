@@ -1325,8 +1325,26 @@
     }
 
     .vh-modal-sm { max-width: 540px; }
+    .vh-modal-lg { max-width: 1120px; }
 
     .vh-modal-body { padding: 0; }
+
+    /* Two columns. The right one carries the long lists so it takes the extra width,
+       and they start at the top rather than stretching, since the two are rarely the
+       same height. Below 992px there is no room for a second column. */
+    .vh-cols {
+        display: grid;
+        grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+        align-items: start;
+    }
+
+    .vh-col { min-width: 0; }
+    .vh-col + .vh-col { border-left: 1px solid var(--vh-border); }
+
+    @@media (max-width: 991.98px) {
+        .vh-cols { grid-template-columns: minmax(0, 1fr); }
+        .vh-col + .vh-col { border-left: 0; border-top: 1px solid var(--vh-border); }
+    }
 
     .vh-section-header {
         background: var(--vh-bg);
