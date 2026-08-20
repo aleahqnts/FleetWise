@@ -423,14 +423,7 @@ namespace FleetWise.Controllers
             int Passengers(Trip t) => t.TotalBoarded;
 
             // Apply filters.
-            var filtered = allTrips
-                .Where(t => t.Date.Date == anchor)
-                .Where(t => !routeId.HasValue || t.RouteId == routeId.Value)
-                .Where(t => !driverId.HasValue || t.DriverId == driverId.Value)
-                .Where(t => string.IsNullOrEmpty(vehicleId) || t.VehicleId == vehicleId)
-                .OrderBy(t => t.RouteId)
-                .ThenBy(t => t.ShiftStartTime)
-                .ToList();
+            var filtered = ReportableTrips(allTrips, anchor, routeId, driverId, vehicleId);
 
             object groups = reportType switch
             {
@@ -450,6 +443,42 @@ namespace FleetWise.Controllers
             return Json(new { groups, totals });
         }
 
+        /// <summary>The trips a report covers, filtered and in reading order.</summary>
+        /// <remarks>
+        /// A report says what happened, so a trip still running or not yet due out is left
+        /// out: it has nothing to report and would arrive as a row of zeroes, reading as a
+        /// service that ran and carried nobody.
+        ///
+        /// One that never ran is kept and marked missed. A shift the fleet failed to cover
+        /// is part of the day's account, and a report that hid it would show a day going
+        /// better than it did.
+        /// </remarks>
+        private static List<Trip> ReportableTrips(
+            IEnumerable<Trip> all, DateTime anchor, int? routeId, int? driverId, string? vehicleId) =>
+            all.Where(t => t.Date.Date == anchor)
+               .Where(t => !routeId.HasValue || t.RouteId == routeId.Value)
+               .Where(t => !driverId.HasValue || t.DriverId == driverId.Value)
+               .Where(t => string.IsNullOrEmpty(vehicleId) || t.VehicleId == vehicleId)
+               .Where(Concluded)
+               .OrderBy(t => t.RouteId)
+               .ThenBy(t => t.ShiftStartTime)
+               .ToList();
+
+        /// <summary>Whether a trip has finished, whether by running or by being missed.</summary>
+        private static bool Concluded(Trip t) => DeriveStatus(t) is "Completed" or "Missed";
+
+        /// <summary>
+        /// What a trip took, which is nothing unless it ran.
+        /// </summary>
+        /// <remarks>
+        /// A missed trip carries whatever revenue was planned for it. Printing that figure
+        /// beside the trips that earned theirs would add money to the day that nobody paid.
+        /// </remarks>
+        private static string Money(Trip t) => $"₱{EarnedAmount(t):N2}";
+
+        /// <summary>The same figure unformatted, for a column a spreadsheet will add up.</summary>
+        private static decimal EarnedAmount(Trip t) => Earned(t) ? t.EstimatedRevenue : 0m;
+
         private static object BuildDailyTripReport(
             List<Trip> trips,
             Dictionary<int, string> routeNames,
@@ -462,7 +491,7 @@ namespace FleetWise.Controllers
                 .Select(g => new
                 {
                     groupName = g.Key,
-                    columns = new[] { "Trip ID", "Date", "Driver", "Bus ID", "Shift", "Shift Time", "Passengers", "Revenue" },
+                    columns = new[] { "Trip ID", "Date", "Driver", "Bus ID", "Shift", "Shift Time", "Status", "Passengers", "Revenue" },
                     rows = g.Select(t => new[]
                     {
                         t.TripId,
@@ -471,8 +500,9 @@ namespace FleetWise.Controllers
                         vehiclesById.TryGetValue(t.VehicleId, out var v) ? v.PlateNumber : t.VehicleId,
                         t.ShiftType ?? "",
                         ShiftRange(t),
+                        DeriveStatus(t),
                         passengers(t).ToString(),
-                        $"₱{t.EstimatedRevenue:N2}"
+                        Money(t)
                     }).ToList()
                 })
                 .ToList();
@@ -491,7 +521,7 @@ namespace FleetWise.Controllers
                 .Select(g => new
                 {
                     groupName = g.Key,
-                    columns = new[] { "Trip ID", "Date", "Driver", "Shift", "Shift Time", "Passengers" },
+                    columns = new[] { "Trip ID", "Date", "Driver", "Shift", "Shift Time", "Status", "Passengers" },
                     rows = g.Select(t => new[]
                     {
                         t.TripId,
@@ -499,6 +529,7 @@ namespace FleetWise.Controllers
                         userNames.TryGetValue(t.DriverId, out var dn) ? dn : "N/A",
                         t.ShiftType ?? "",
                         ShiftRange(t),
+                        DeriveStatus(t),
                         passengers(t).ToString()
                     }).ToList()
                 })
@@ -518,7 +549,7 @@ namespace FleetWise.Controllers
                 .Select(g => new
                 {
                     groupName = g.Key,
-                    columns = new[] { "Trip ID", "Date", "Driver", "Bus ID", "Shift", "Estimated Revenue" },
+                    columns = new[] { "Trip ID", "Date", "Driver", "Bus ID", "Shift", "Status", "Revenue" },
                     rows = g.Select(t => new[]
                     {
                         t.TripId,
@@ -526,7 +557,8 @@ namespace FleetWise.Controllers
                         userNames.TryGetValue(t.DriverId, out var dn) ? dn : "N/A",
                         vehiclesById.TryGetValue(t.VehicleId, out var v) ? v.PlateNumber : t.VehicleId,
                         t.ShiftType ?? "",
-                        $"₱{t.EstimatedRevenue:N2}"
+                        DeriveStatus(t),
+                        Money(t)
                     }).ToList()
                 })
                 .ToList();
@@ -560,14 +592,7 @@ namespace FleetWise.Controllers
 
             int Passengers(Trip t) => t.TotalBoarded;
 
-            var filtered = tripsResp.Models
-                .Where(t => t.Date.Date == anchor)
-                .Where(t => !routeId.HasValue || t.RouteId == routeId.Value)
-                .Where(t => !driverId.HasValue || t.DriverId == driverId.Value)
-                .Where(t => string.IsNullOrEmpty(vehicleId) || t.VehicleId == vehicleId)
-                .OrderBy(t => t.RouteId)
-                .ThenBy(t => t.ShiftStartTime)
-                .ToList();
+            var filtered = ReportableTrips(tripsResp.Models, anchor, routeId, driverId, vehicleId);
 
             // Build report data.
             string reportTitle = reportType switch
@@ -586,9 +611,9 @@ namespace FleetWise.Controllers
 
             string[] columns = reportType switch
             {
-                "Passenger" => new[] { "Trip ID", "Date", "Driver", "Route", "Shift", "Shift Time", "Passengers" },
-                "Revenue" => new[] { "Trip ID", "Date", "Driver", "Bus ID", "Route", "Shift", "Est. Revenue" },
-                _ => new[] { "Trip ID", "Date", "Driver", "Bus ID", "Route", "Shift", "Actual Start", "Actual End", "Passengers", "Revenue" }
+                "Passenger" => new[] { "Trip ID", "Date", "Driver", "Route", "Shift", "Shift Time", "Status", "Passengers" },
+                "Revenue" => new[] { "Trip ID", "Date", "Driver", "Bus ID", "Route", "Shift", "Status", "Revenue" },
+                _ => new[] { "Trip ID", "Date", "Driver", "Bus ID", "Route", "Shift", "Actual Start", "Actual End", "Status", "Passengers", "Revenue" }
             };
 
             Func<Trip, string[]> rowBuilder = reportType switch
@@ -601,6 +626,7 @@ namespace FleetWise.Controllers
                     routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A",
                     t.ShiftType ?? "",
                     ShiftRange(t),
+                    DeriveStatus(t),
                     Passengers(t).ToString()
                 },
                 "Revenue" => t => new[]
@@ -611,7 +637,8 @@ namespace FleetWise.Controllers
                     vehiclesById.TryGetValue(t.VehicleId, out var v) ? v.PlateNumber : t.VehicleId,
                     routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A",
                     t.ShiftType ?? "",
-                    $"₱{t.EstimatedRevenue:N2}"
+                    DeriveStatus(t),
+                    Money(t)
                 },
                 _ => t => new[]
                 {
@@ -623,8 +650,9 @@ namespace FleetWise.Controllers
                     t.ShiftType ?? "",
                     FmtActual(t.ActualStartTime),
                     FmtActual(t.ActualEndTime),
+                    DeriveStatus(t),
                     Passengers(t).ToString(),
-                    $"₱{t.EstimatedRevenue:N2}"
+                    Money(t)
                 }
             };
 
@@ -746,7 +774,7 @@ namespace FleetWise.Controllers
                         // Clear grand total at the end.
                         var totalTrips = filtered.Count;
                         var totalPax = filtered.Sum(Passengers);
-                        var totalRev = filtered.Sum(t => t.EstimatedRevenue);
+                        var totalRev = filtered.Where(Earned).Sum(t => t.EstimatedRevenue);
                         string totalsText = reportType switch
                         {
                             "Passenger" => $"Total Trips: {totalTrips}        Total Passengers: {totalPax:N0}",
@@ -806,14 +834,7 @@ namespace FleetWise.Controllers
 
             int Passengers(Trip t) => t.TotalBoarded;
 
-            var filtered = tripsResp.Models
-                .Where(t => t.Date.Date == anchor)
-                .Where(t => !routeId.HasValue || t.RouteId == routeId.Value)
-                .Where(t => !driverId.HasValue || t.DriverId == driverId.Value)
-                .Where(t => string.IsNullOrEmpty(vehicleId) || t.VehicleId == vehicleId)
-                .OrderBy(t => t.RouteId)
-                .ThenBy(t => t.ShiftStartTime)
-                .ToList();
+            var filtered = ReportableTrips(tripsResp.Models, anchor, routeId, driverId, vehicleId);
 
             string CsvEscape(string s) =>
                 s != null && (s.Contains(',') || s.Contains('"') || s.Contains('\n'))
@@ -838,7 +859,7 @@ namespace FleetWise.Controllers
             {
                 case "Passenger":
                     fileName = $"PassengerReport_{anchor:yyyy-MM-dd}.csv";
-                    sb.AppendLine("Trip ID,Date,Driver,Route,Shift,Shift Time,Passengers");
+                    sb.AppendLine("Trip ID,Date,Driver,Route,Shift,Shift Time,Status,Passengers");
                     foreach (var t in filtered)
                         sb.AppendLine(string.Join(",",
                             CsvEscape(t.TripId),
@@ -847,12 +868,13 @@ namespace FleetWise.Controllers
                             CsvEscape(routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A"),
                             CsvEscape(t.ShiftType ?? ""),
                             CsvEscape(ShiftRange(t, "-")),
+                            CsvEscape(DeriveStatus(t)),
                             Passengers(t).ToString()));
                     break;
 
                 case "Revenue":
                     fileName = $"RevenueReport_{anchor:yyyy-MM-dd}.csv";
-                    sb.AppendLine("Trip ID,Date,Driver,Bus ID,Route,Shift,Estimated Revenue");
+                    sb.AppendLine("Trip ID,Date,Driver,Bus ID,Route,Shift,Status,Revenue");
                     foreach (var t in filtered)
                         sb.AppendLine(string.Join(",",
                             CsvEscape(t.TripId),
@@ -861,12 +883,13 @@ namespace FleetWise.Controllers
                             CsvEscape(vehiclesById.TryGetValue(t.VehicleId, out var v) ? v.PlateNumber : t.VehicleId),
                             CsvEscape(routeNames.TryGetValue(t.RouteId, out var rn) ? rn : "N/A"),
                             CsvEscape(t.ShiftType ?? ""),
-                            t.EstimatedRevenue.ToString("F2")));
+                            CsvEscape(DeriveStatus(t)),
+                            EarnedAmount(t).ToString("F2")));
                     break;
 
                 default:
                     fileName = $"DailyTripReport_{anchor:yyyy-MM-dd}.csv";
-                    sb.AppendLine("Trip ID,Date,Driver,Bus ID,Route,Shift,Shift Time,Actual Start,Actual End,Passengers,Revenue");
+                    sb.AppendLine("Trip ID,Date,Driver,Bus ID,Route,Shift,Shift Time,Actual Start,Actual End,Status,Passengers,Revenue");
                     foreach (var t in filtered)
                         sb.AppendLine(string.Join(",",
                             CsvEscape(t.TripId),
@@ -878,8 +901,9 @@ namespace FleetWise.Controllers
                             CsvEscape(ShiftRange(t, "-")),
                             CsvEscape(FmtActual(t.ActualStartTime)),
                             CsvEscape(FmtActual(t.ActualEndTime)),
+                            CsvEscape(DeriveStatus(t)),
                             Passengers(t).ToString(),
-                            t.EstimatedRevenue.ToString("F2")));
+                            EarnedAmount(t).ToString("F2")));
                     break;
             }
 
@@ -890,7 +914,7 @@ namespace FleetWise.Controllers
             if (reportType != "Revenue")
                 sb.AppendLine($"Total Passengers,{filtered.Sum(Passengers)}");
             if (reportType != "Passenger")
-                sb.AppendLine($"Total Revenue,{filtered.Sum(t => t.EstimatedRevenue):F2}");
+                sb.AppendLine($"Total Revenue,{filtered.Where(Earned).Sum(t => t.EstimatedRevenue):F2}");
 
             var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
             return File(bytes, "text/csv", fileName);
