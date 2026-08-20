@@ -47,3 +47,41 @@
     background: #f8f9fa;
     overflow-y: auto;
 }
+
+/* ---------------------------------------------------------------------------
+   Page transitions.
+
+   The browser holds the page it is leaving on screen until the next one is ready
+   to paint, then crosses between them. Nothing waits on the animation: it runs
+   over a navigation that was happening anyway, and a browser without support
+   navigates exactly as it did before.
+   --------------------------------------------------------------------------- */
+
+@view-transition {
+    navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 140ms;
+    animation-timing-function: ease;
+}
+
+/* The shell is the same on every page, so it is named and held still while the
+   content inside it changes. Without this the sidebar would fade with the rest and
+   the whole window would appear to blink. */
+.fw-sidebar {
+    view-transition-name: app-sidebar;
+}
+
+.topbar {
+    view-transition-name: app-topbar;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+        animation: none !important;
+    }
+}
