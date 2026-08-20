@@ -306,25 +306,7 @@ public class DriverDataService
     // Outside the web dashboard, the change-password edge function is the only writer of
     // password_hash. The app never touches it.
 
-    /// <summary>
-    /// Submits a checklist and returns the inserted row, so the caller has the generated
-    /// identifier needed to link a maintenance incident when the inspection fails.
-    /// </summary>
-    public async Task<BusChecklist?> SubmitChecklistAsync(BusChecklist checklist)
-    {
-        var r = await _supabase.From<BusChecklist>().Insert(checklist);
-        return r.Models.FirstOrDefault();
-    }
 
-    /// <summary>
-    /// Opens a maintenance incident for a failed inspection.
-    /// </summary>
-    /// <remarks>
-    /// The incident is an unresolved maintenance log entry, which makes the fault a
-    /// permanent reviewable record that survives the bus later going on trip. Flipping
-    /// vehicle_status alone would not, because that value is overwritten. The checklist
-    /// identifier links the incident back to the inspection that raised it.
-    /// </remarks>
     /// <summary>The inspection items to show, in the order the dashboard set.</summary>
     public async Task<List<ChecklistItem>> GetChecklistItemsAsync()
     {
@@ -333,39 +315,6 @@ public class DriverDataService
             .Order("sort_order", Postgrest.Constants.Ordering.Ascending)
             .Get();
         return r.Models;
-    }
-
-    public async Task OpenInspectionIncidentAsync(int checklistId, string vehicleId, string tripId,
-        List<string> issues, List<string> criticalIssues)
-    {
-        var critical = criticalIssues.Count > 0;
-        await PostAsync("maintenance_logs", new
-        {
-            checklist_id = checklistId,
-            vehicle_id = vehicleId,
-            trip_id = tripId,
-            // severity and critical_issues are extra keys inside the same json column.
-            // Rows without them read as a defect, which is the safe assumption: an
-            // incident that never named a critical fault did not ground anything.
-            issue_details = new { issues, severity = critical ? "Critical" : "Minor", critical_issues = criticalIssues },
-            maintenance_status = critical ? "Out of Service" : "Needs Attention",
-            created_at = PhTime.Now
-        });
-    }
-
-    /// <summary>
-    /// Grounds a bus that failed a critical item, which is what stops the trip.
-    /// </summary>
-    /// <remarks>
-    /// out_of_service is the one gate the whole system already honours: the home
-    /// screen refuses to start a trip on a grounded bus and the dispatch board reads
-    /// the assignment as an issue. Setting it here means the block needs no separate
-    /// mechanism, and only the vehicles tab can lift it.
-    /// </remarks>
-    public async Task GroundVehicleAsync(string vehicleId)
-    {
-        await PatchAsync($"vehicles?vehicle_id=eq.{Uri.EscapeDataString(vehicleId)}",
-            new { vehicle_status = "Out of Service", out_of_service = true, updated_at = PhTime.Now });
     }
 
     public async Task UpdateVehicleStatusAsync(string vehicleId, string status)
