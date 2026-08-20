@@ -33,8 +33,12 @@
             </svg>
         </div>
         <div class="vh-card-text">
-            <span class="vh-card-label">Total Vehicles</span>
-            <span class="vh-card-value">@Model.TotalVehicles</span>
+            <span class="vh-card-label">Total Active Vehicles</span>
+            <span class="vh-card-value">@Model.ActiveVehicles</span>
+            @if (Model.RetiredVehicles > 0)
+            {
+                <span class="vh-card-sub">@Model.RetiredVehicles retired</span>
+            }
         </div>
     </a>
 
@@ -143,14 +147,14 @@
 
         <div class="vh-items-edit" id="vhScheduleList"></div>
 
-        <div class="vh-form-row">
-            <label for="vhScheduleOther">Anything else:</label>
+        <div class="vh-form-row vh-form-row--tight">
+            <label for="vhScheduleOther">Other:</label>
             <input type="text" id="vhScheduleOther" class="vh-form-input" maxlength="200"
-                   placeholder="Aircon service, repaint, annual inspection…" />
+                   placeholder="Work not listed above, such as aircon service or repaint" />
         </div>
 
         <textarea id="vhScheduleNote" class="vh-form-input vh-action-note" rows="2"
-                  placeholder="Note (optional): who is doing the work, when it is booked…"></textarea>
+                  placeholder="Note (optional): who is doing the work, when it is booked"></textarea>
 
         <div class="vh-action-btns">
             <button type="button" class="vh-btn vh-btn--outline" onclick="vhScheduleCancel()">Cancel</button>
@@ -437,7 +441,7 @@
             .then(function (html) {
                 content.innerHTML = html;
                 // The panel arrives with every entry rendered; only the newest few show.
-                vhPage('vhHistoryList', 'vhHistoryPager', 6, 1);
+                vhPage('vhHistoryList', 'vhHistoryPager', 5, 1);
                 vhPage('vhPastList', 'vhPastPager', 5, 1);
             })
             .catch(function () {
@@ -577,7 +581,7 @@
             if (other) picked.push(other);
 
             if (picked.length === 0) {
-                vhScheduleError('Pick what the bus is going in for, or say what else.');
+                vhScheduleError('Select at least one item, or describe the work under Other.');
                 return;
             }
 
@@ -1113,6 +1117,12 @@
         font-weight: 500;
     }
 
+    .vh-card-sub {
+        font-size: 0.72rem;
+        color: var(--vh-muted);
+        font-family: 'Segoe UI', sans-serif;
+    }
+
     .vh-card-value {
         font-size: 1.7rem;
         font-weight: 700;
@@ -1520,6 +1530,9 @@
 
     .vh-detail-empty { color: var(--vh-muted); }
 
+    /* The operator's own words for why a bus left, kept apart from the explanation. */
+    .vh-retire-reason { margin-top: 10px; }
+
     /* Spinner / error shown while the View modal fetches its details partial. */
     .vh-modal-loading {
         padding: 56px 24px;
@@ -1763,6 +1776,27 @@
     }
 
     .vh-action-note { width: 100%; resize: vertical; }
+
+    /* A label that belongs to its field rather than to a column of labels. */
+    .vh-form-row--tight { grid-template-columns: auto 1fr; gap: 8px 10px; }
+
+    /* Section heading inside a scrolling list of inspection items. It stays put while
+       the list moves, so the group a row belongs to is never off screen. */
+    .vh-item-group {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: var(--vh-bg);
+        color: var(--vh-muted);
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        padding: 6px 8px;
+        border-radius: 4px;
+    }
+
+    .vh-item-group ~ .vh-item-group { margin-top: 8px; }
     .vh-action-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 
     .vh-oos-banner {

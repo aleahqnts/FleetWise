@@ -57,11 +57,18 @@
 <div class="vh-section-body">
     @if (Model.Retired)
     {
+        @* The reason is the operator's own words and sits on its own line, so it is not
+           read as part of what retiring does. *@
         <div class="vh-oos-banner">
-            This bus has left the fleet@(string.IsNullOrWhiteSpace(Model.RetiredReason) ? "" : $": {Model.RetiredReason}").
-            It is hidden from the registry and cannot be scheduled. Its trips and
-            inspections are kept.
+            This bus has left the fleet. It is hidden from the registry and cannot be
+            scheduled. Its trips and inspections are kept.
         </div>
+        @if (!string.IsNullOrWhiteSpace(Model.RetiredReason))
+        {
+            <div class="vh-detail-row vh-retire-reason">
+                <strong>Reason:</strong> @Model.RetiredReason
+            </div>
+        }
         <p class="vh-action-hint">
             <strong>Restore</strong> brings the bus back to the registry. It returns out
             of service, so its roadworthiness is decided separately.
