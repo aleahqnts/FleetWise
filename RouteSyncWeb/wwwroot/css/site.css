@@ -93,16 +93,29 @@
 }
 
 /* The sidebar takes no part in the animation. Naming it above kept it out of the page
-   snapshot; this drops the cross-fade between its own two snapshots as well, so the
-   new one is simply shown. It looks exactly as it did before there were transitions. */
-::view-transition-old(app-sidebar) {
+   snapshot; this drops the cross-fade between its own two as well.
+
+   Clearing the animation is not enough on its own. The two snapshots are blended
+   together, and that blending is what the eye reads as a fade, so the isolation and the
+   blend mode have to go too. The old snapshot is then not drawn at all and the new one
+   is simply shown, which is how the sidebar behaved before any of this existed. */
+::view-transition-group(app-sidebar) {
     animation: none;
-    opacity: 0;
 }
 
+::view-transition-image-pair(app-sidebar) {
+    isolation: auto;
+}
+
+::view-transition-old(app-sidebar),
 ::view-transition-new(app-sidebar) {
     animation: none;
-    opacity: 1;
+    mix-blend-mode: normal;
+    display: block;
+}
+
+::view-transition-old(app-sidebar) {
+    display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
