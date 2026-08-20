@@ -15,6 +15,12 @@ namespace FleetWise.Models
 
         // Dropdown option lists.
         public List<SelectListItem> RouteOptions { get; set; } = new();
+
+        /// <summary>Buses that have left the fleet, counted apart from it.</summary>
+        public int RetiredVehicles { get; set; }
+
+        /// <summary>The identifier the next added bus will receive.</summary>
+        public string NextVehicleId { get; set; } = "";
         public List<string> StatusOptions { get; set; } = new();
         public List<string> ConditionOptions { get; set; } = new();
 
