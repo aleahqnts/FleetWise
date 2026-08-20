@@ -365,7 +365,10 @@
                 let data = null;
                 try { data = await res.json(); } catch { /* an error page, not JSON */ }
 
-                if (res.status === 409 && data && Array.isArray(data.conflicts)) {
+                // Anything carrying cells is marked in the grid, whatever the status. The
+                // status only decides whether it can be forced past: a 409 is a booking
+                // rule, a 400 is a bus or a driver that cannot take the work at all.
+                if (data && Array.isArray(data.conflicts) && data.conflicts.length) {
                     const msgs = [];
                     data.conflicts.forEach(cf => {
                         msgs.push(cf.message);
@@ -375,9 +378,13 @@
                             ).forEach(flag);
                         });
                     });
-                    // Server-side backstop conflict (e.g. a locked trip the grid didn't
-                    // resend) -> still overridable.
-                    schShowConflicts([...new Set(msgs)], true);
+                    const overridable = res.status === 409;
+                    schShowConflicts(
+                        [...new Set(msgs)], overridable,
+                        overridable ? 'Schedule conflicts' : 'Cannot be booked',
+                        overridable
+                            ? 'Please fix the cells in red before saving.'
+                            : 'The cells in red cannot be saved as they are, and this cannot be forced.');
                 } else {
                     // A bare string body is still a reason worth reading; a page that is not
                     // JSON at all leaves only the status, which beats saying nothing.

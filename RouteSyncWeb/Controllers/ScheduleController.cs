@@ -28,6 +28,9 @@ namespace FleetWise.Controllers
         };
         private static readonly string[] ShiftOrder = { "Morning", "Afternoon", "Evening" };
 
+        /// <summary>The role a bus is driven by, which is the only one this page books.</summary>
+        private const int DriverRoleId = 2;
+
         // GET weekly planner.
         public async Task<IActionResult> Index(string start)
         {
@@ -139,6 +142,22 @@ namespace FleetWise.Controllers
                     Date = t.Date.ToString("yyyy-MM-dd"),
                 }, locked: true)));
 
+            // A bus or a driver can stop being usable while the planner sits open, and the
+            // grid is a picture of the fleet as it was when it loaded. Anything newly booked
+            // is therefore checked against the fleet as it stands now.
+            //
+            // Cells left as they were are not checked. A trip already run on a bus since
+            // grounded is history, and re-checking it would leave the week unsavable.
+            var refusal = await RefuseUnusableAsync(effective);
+            if (refusal.Count > 0)
+            {
+                return BadRequest(new
+                {
+                    message = "Some of this cannot be booked.",
+                    conflicts = refusal,
+                });
+            }
+
             // Conflicts are advisory and can be overridden from the confirmation modal, so
             // the save is blocked only until that acknowledgement arrives. Answered with a
             // 409 rather than a 400, the same way dispatch does, because the two mean
@@ -234,6 +253,83 @@ namespace FleetWise.Controllers
             }
 
             return Ok();
+        }
+
+        /// <summary>
+        /// Refuses cells booking a bus or a driver that cannot take the work.
+        /// </summary>
+        /// <remarks>
+        /// The dropdowns already withhold a grounded or retired bus, and a driver whose
+        /// account is closed, but they were filled when the page loaded. This is the same
+        /// question asked of the fleet as it stands at the moment of saving.
+        ///
+        /// Unlike a double booking, none of this can be forced past: the answer is not that
+        /// the schedule is awkward but that the bus or the driver is unavailable.
+        /// </remarks>
+        private async Task<List<object>> RefuseUnusableAsync(
+            List<(ScheduleCellInput cell, bool locked)> effective)
+        {
+            var booked = effective
+                .Where(e => !e.locked
+                         && !string.IsNullOrEmpty(e.cell.VehicleId)
+                         && e.cell.DriverId != 0)
+                .Select(e => e.cell)
+                .ToList();
+
+            var refused = new List<object>();
+            if (booked.Count == 0) return refused;
+
+            var vehicleIds = booked.Select(c => c.VehicleId).Distinct().Cast<object>().ToList();
+            var driverIds = booked.Select(c => c.DriverId).Distinct().Cast<object>().ToList();
+
+            var vehiclesTask = _supabase.From<Vehicle>()
+                .Filter("vehicle_id", Operator.In, vehicleIds).Get();
+            var driversTask = _supabase.From<UserModel>()
+                .Filter("user_id", Operator.In, driverIds).Get();
+            var availTask = _supabase.From<DriverAvailability>()
+                .Filter("user_id", Operator.In, driverIds).Get();
+
+            await Task.WhenAll(vehiclesTask, driversTask, availTask);
+
+            var vehicles = vehiclesTask.Result.Models.ToDictionary(v => v.VehicleId);
+            var drivers = driversTask.Result.Models.ToDictionary(d => d.UserId);
+            var availability = availTask.Result.Models
+                .ToDictionary(a => a.UserId, a => a.AvailabilityStatus);
+
+            void Refuse(string message, ScheduleCellInput c) => refused.Add(new
+            {
+                message,
+                cells = new[] { new { routeId = c.RouteId, shift = c.Shift, date = c.Date } },
+            });
+
+            const StringComparison OIC = StringComparison.OrdinalIgnoreCase;
+
+            foreach (var c in booked)
+            {
+                if (!vehicles.TryGetValue(c.VehicleId, out var vehicle))
+                    Refuse($"Bus {c.VehicleId} is no longer in the fleet.", c);
+                else if (vehicle.RetiredAt != null)
+                    Refuse($"Bus {c.VehicleId} has been retired.", c);
+                else if (vehicle.OutOfService)
+                    Refuse($"Bus {c.VehicleId} is out of service and cannot be booked.", c);
+
+                if (!drivers.TryGetValue(c.DriverId, out var driver) || driver.RoleId != DriverRoleId)
+                {
+                    Refuse("That driver is no longer on the roster.", c);
+                    continue;
+                }
+
+                var name = $"{driver.FirstName} {driver.LastName}".Trim();
+                if (name.Length == 0) name = $"Driver #{driver.UserId}";
+
+                if (!string.Equals(driver.AccountStatus, "Activated", OIC))
+                    Refuse($"{name}'s account is no longer active.", c);
+                else if (availability.TryGetValue(c.DriverId, out var status)
+                      && string.Equals(status, "Unavailable", OIC))
+                    Refuse($"{name} is marked unavailable.", c);
+            }
+
+            return refused;
         }
 
         /// <summary>
