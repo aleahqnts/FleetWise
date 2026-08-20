@@ -1,4 +1,4 @@
-@model FleetWise.Models.VerifyResetCodeViewModel
+﻿@model FleetWise.Models.VerifyResetCodeViewModel
 @{
     Layout = "~/Views/Shared/_LoginLayout.cshtml";
 }
@@ -27,7 +27,9 @@
 
             <form asp-action="VerifyResetCode" asp-controller="Home" method="post">
                 @Html.AntiForgeryToken()
-                @if (!ViewData.ModelState.IsValid)
+                @* Only a whole-form error belongs here. Field errors show under their own field,
+                   and asking for them here painted an empty panel. *@
+                @if (ViewData.ModelState[string.Empty]?.Errors.Count > 0)
                 {
                     <div class="error-message">
                         @Html.ValidationSummary(true)

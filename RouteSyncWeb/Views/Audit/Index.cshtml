@@ -88,7 +88,7 @@
             // No id means the database saw only the shared service key, which is the whole
             // reason the web writes its own rows.
             "admin" when e.ActorId is null => "Server",
-            "admin" when hasDashboardRole => $"{role} #{e.ActorId}",
+            "admin" when hasDashboardRole => $"{role} {e.ActorId}",
             // Role unknown (the early login rows, written before the role was carried).
             // Plain "Dashboard": an id with no privilege next to it says less than the
             // summary line already does, and invites being read as a rank.
@@ -97,9 +97,9 @@
             // row a driver's. A "user" row without it belongs to someone whose role
             // was not recorded, and naming them a driver would be a guess: the
             // password reset serves dashboard staff through the same endpoints.
-            "user" when role == "app_driver" => e.ActorId is null ? "Driver" : $"Driver #{e.ActorId}",
-            "user" when hasDashboardRole => $"{role} #{e.ActorId}",
-            "user" => e.ActorId is null ? "Someone" : $"User #{e.ActorId}",
+            "user" when role == "app_driver" => e.ActorId is null ? "Driver" : $"Driver {e.ActorId}",
+            "user" when hasDashboardRole => $"{role} {e.ActorId}",
+            "user" => e.ActorId is null ? "Someone" : $"User {e.ActorId}",
             "device" => e.ActorId ?? "Camera",
             "anon" => "Not signed in",
             _ => "System",

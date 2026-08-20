@@ -1,4 +1,4 @@
-using FleetWise.Models;
+﻿using FleetWise.Models;
 using FleetWise.Services;
 using FleetWise.ViewModels;
 using Microsoft.AspNetCore.Authorization;
@@ -348,7 +348,7 @@ namespace FleetWise.Controllers
                 }
 
                 var name = $"{driver.FirstName} {driver.LastName}".Trim();
-                if (name.Length == 0) name = $"Driver #{driver.UserId}";
+                if (name.Length == 0) name = $"Driver {driver.UserId}";
 
                 if (!string.Equals(driver.AccountStatus, "Activated", OIC))
                     Refuse($"{name}'s account is no longer active.", c);
