@@ -130,8 +130,79 @@
            the status is already on the header badge. *@
         @if (Model.OpenIncident is not null)
         {
-            <div class="vh-detail-row"><strong>@Model.OpenIncident.Summary</strong></div>
-            <div class="vh-tl-date">Reported @Model.OpenIncident.Date</div>
+            @* The order is named by its date, not by one of its faults: the list below
+               is what it actually holds. *@
+            <div class="vh-tl-date">Opened @Model.OpenIncident.Date</div>
+
+            @* The faults being worked. Open ones lead, since they are the work left. *@
+            @if (Model.OpenOrderItems.Count > 0)
+            {
+                <ul class="vh-items">
+                    @foreach (var item in Model.OpenOrderItems)
+                    {
+                        <li class="@(item.IsOpen ? "vh-item--open" : "vh-item--closed")">
+                            <span class="vh-item-mark">@(item.IsOpen ? "○" : "✓")</span>
+                            <span class="vh-item-label">@item.Label</span>
+                            @if (item.IsCritical)
+                            {
+                                <span class="vh-item-crit" title="Grounds the bus until it is fixed">Critical</span>
+                            }
+                            @if (!item.IsOpen)
+                            {
+                                <span class="vh-item-outcome">@item.Outcome</span>
+                            }
+                        </li>
+                        @if (!item.IsOpen && !string.IsNullOrWhiteSpace(item.Note))
+                        {
+                            <li class="vh-item-note">@item.Note</li>
+                        }
+                    }
+                </ul>
+                <div class="vh-item-summary">
+                    @if (Model.OpenItemCount == 0)
+                    {
+                        <text>Everything on this order is closed.</text>
+                    }
+                    else
+                    {
+                        <text>@Model.OpenItemCount of @Model.OpenOrderItems.Count still open.</text>
+                    }
+                </div>
+
+                <button type="button" class="vh-btn vh-btn--primary vh-btn--sm"
+                        onclick="vhOpenItems(@Model.OpenLogId)">Update Maintenance</button>
+
+                @* Rendered with the details and cloned into the update dialog, so both
+                   read from one list. *@
+                <template id="vhItemsSource">
+                    @foreach (var item in Model.OpenOrderItems)
+                    {
+                        var state = item.IsOpen ? "open" : item.Outcome == "Fixed" ? "fixed" : "dismissed";
+                        <div class="vh-item-edit" data-item-id="@item.ItemId" data-state="@state">
+                            <div class="vh-item-edit-top">
+                                <label class="vh-item-check">
+                                    <input type="checkbox" checked="@(state == "fixed")"
+                                           onchange="vhItemsTick(this.closest('.vh-item-edit'))" />
+                                    <span class="vh-item-label">@item.Label</span>
+                                </label>
+                                @if (item.IsCritical)
+                                {
+                                    <span class="vh-item-crit" title="Can only be closed by fixing it">Critical</span>
+                                }
+                                else
+                                {
+                                    <button type="button" class="vh-item-dismiss"
+                                            onclick="vhItemsDismiss(this.closest('.vh-item-edit'))">Not an issue</button>
+                                }
+                            </div>
+                            <div class="vh-item-why" style="display:none;">
+                                <input type="text" class="vh-form-input" maxlength="200"
+                                       value="@item.Note" placeholder="Why was this not an issue?" />
+                            </div>
+                        </div>
+                    }
+                </template>
+            }
 
             @if (Model.IncidentThreads.Count > 0)
             {
@@ -153,13 +224,6 @@
                 }
             }
 
-            @if (Model.OpenLogId.HasValue)
-            {
-                <div class="vh-note-form">
-                    <textarea id="vhNoteInput" class="vh-form-input" rows="2" placeholder="Add a comment or note about this issue…"></textarea>
-                    <button type="button" class="vh-btn vh-btn--primary" onclick="vhAddNote(@Model.OpenLogId)">Add Note</button>
-                </div>
-            }
         }
         else
         {
@@ -239,11 +303,27 @@
 
     @* History: everything recorded against this bus, whether or not an incident was
        involved, so retiring, grounding and returning it all appear in one place. *@
-    <div class="vh-section-header"><span>History</span></div>
+    <div class="vh-section-header">
+        <span>History</span>
+        @if (Model.History.Count > 5)
+        {
+            <span class="vh-hist-controls">
+                Show
+                <select id="vhHistSize" class="vh-form-input vh-hist-size" onchange="vhHistoryShow(this.value)">
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="0">All</option>
+                </select>
+            </span>
+        }
+    </div>
     <div class="vh-section-body">
         @if (Model.History.Count > 0)
         {
-            <ul class="vh-history">
+            @* Only the most recent few are shown, since a long-serving bus carries more
+               entries than anyone reads at once. *@
+            <ul class="vh-history" id="vhHistoryList">
                 @foreach (var h in Model.History)
                 {
                     <li class="@(h.Refused ? "vh-history--refused" : "")">
@@ -252,6 +332,7 @@
                     </li>
                 }
             </ul>
+            <div class="vh-hist-more" id="vhHistoryMore"></div>
         }
         else
         {

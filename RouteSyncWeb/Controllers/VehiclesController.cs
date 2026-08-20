@@ -113,6 +113,189 @@ namespace FleetWise.Controllers
 
 
 
+
+
+        /// <summary>One item of a maintenance order, as posted by the update dialog.</summary>
+        public sealed class MaintenanceItemUpdate
+        {
+            public long ItemId { get; set; }
+            public string State { get; set; } = "open";
+            public string? Note { get; set; }
+        }
+
+        /// <summary>
+        /// Records progress on a maintenance order, and closes it when nothing is left.
+        /// </summary>
+        /// <remarks>
+        /// Closing un-grounds the bus, which is why it happens on an administrator saving
+        /// this dialog rather than on a checkbox: putting a bus back on the road is a
+        /// decision someone makes, not a consequence of a tick count.
+        ///
+        /// A critical fault can only be closed by fixing it. Dismissing one would return a
+        /// bus to service on an opinion that the fault was never real, so the database
+        /// refuses it as well.
+        /// </remarks>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateMaintenanceItems(int logId, string updates, string? note)
+        {
+            if (logId <= 0) return BadRequest("Invalid order.");
+
+            List<MaintenanceItemUpdate>? posted;
+            try
+            {
+                posted = System.Text.Json.JsonSerializer.Deserialize<List<MaintenanceItemUpdate>>(
+                    updates ?? "[]",
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch
+            {
+                return BadRequest("Could not read the update.");
+            }
+            var remark = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+            if ((posted is null || posted.Count == 0) && remark is null)
+                return BadRequest("Nothing to update.");
+            posted ??= new List<MaintenanceItemUpdate>();
+
+            var logResp = await _supabase.From<MaintenanceLog>()
+                .Filter("log_id", Postgrest.Constants.Operator.Equals, logId.ToString())
+                .Get();
+            var order = logResp.Models.FirstOrDefault();
+            if (order is null) return NotFound();
+            if (order.ResolvedAt != null) return BadRequest("This order is already closed.");
+
+            var itemResp = await _supabase.From<MaintenanceItem>()
+                .Filter("log_id", Postgrest.Constants.Operator.Equals, logId.ToString())
+                .Get();
+            var items = itemResp.Models.ToDictionary(i => i.ItemId);
+
+            var (uid, uname) = CurrentUser();
+            var fixedLabels = new List<string>();
+            var dismissedLabels = new List<string>();
+
+            foreach (var change in posted)
+            {
+                if (!items.TryGetValue(change.ItemId, out var item)) continue;
+
+                var state = (change.State ?? "open").Trim().ToLowerInvariant();
+                if (state is not ("open" or "fixed" or "dismissed"))
+                    return BadRequest($"\"{item.Label}\" was given an outcome that does not exist.");
+
+                if (state == "dismissed")
+                {
+                    if (item.IsCritical)
+                        return BadRequest($"\"{item.Label}\" grounds the bus, so it can only be closed by fixing it.");
+                    if (string.IsNullOrWhiteSpace(change.Note))
+                        return BadRequest($"Say why \"{item.Label}\" was not an issue.");
+                }
+
+                if (string.Equals(item.State, state, OIC)) continue;
+
+                item.State = state;
+                item.Note = state == "dismissed" ? change.Note!.Trim() : null;
+                item.ClosedAt = state == "open" ? null : PhClock.Now;
+                item.ClosedBy = state == "open" ? null : uname;
+                await _supabase.From<MaintenanceItem>().Update(item);
+
+                if (state == "fixed") fixedLabels.Add(item.Label);
+                else if (state == "dismissed") dismissedLabels.Add(item.Label);
+            }
+
+            // Read back rather than trusting the loop, so a concurrent change cannot leave
+            // an order closed with work still on it.
+            var remaining = (await _supabase.From<MaintenanceItem>()
+                    .Filter("log_id", Postgrest.Constants.Operator.Equals, logId.ToString())
+                    .Get()).Models
+                .Count(i => string.Equals(i.State, "open", OIC));
+
+            var summary = new List<string>();
+            if (fixedLabels.Count > 0) summary.Add($"Fixed: {string.Join(", ", fixedLabels)}");
+            if (dismissedLabels.Count > 0) summary.Add($"Not an issue: {string.Join(", ", dismissedLabels)}");
+
+            var changedNothing = summary.Count == 0;
+            if (changedNothing && remark is null) return BadRequest("Nothing to update.");
+
+            // A save that only carries a remark is progress on work still under way, and
+            // reads as a comment. One that closes faults reports what it closed.
+            await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
+            {
+                LogId = logId,
+                AuthorId = uid,
+                AuthorName = uname,
+                Action = changedNothing ? "Comment"
+                       : remaining == 0 ? "Maintenance Complete"
+                       : "Maintenance Update",
+                Note = string.Join(" ", new[] { string.Join(". ", summary), remark }
+                    .Where(part => !string.IsNullOrWhiteSpace(part))),
+                CreatedAt = PhClock.NowForDb,
+            });
+
+            // A remark on its own leaves the order exactly as it was.
+            if (remaining == 0 && !changedNothing)
+            {
+                order.ResolvedAt = PhClock.Now;
+                order.MaintenanceStatus = "No Issues";
+                if (string.IsNullOrWhiteSpace(order.VerifiedBy)) order.VerifiedBy = uname;
+                await _supabase.From<MaintenanceLog>().Update(order);
+
+                var vResp = await _supabase.From<Vehicle>()
+                    .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, order.VehicleId)
+                    .Get();
+                var vehicle = vResp.Models.FirstOrDefault();
+                if (vehicle != null)
+                {
+                    vehicle.OutOfService = false;
+                    if (string.Equals(vehicle.VehicleStatus?.Trim(), "Flagged", OIC))
+                        vehicle.VehicleStatus = "Ready to Deploy";
+                    vehicle.LastMaintenanceDate = PhClock.Today;
+                    vehicle.UpdatedAt = PhClock.Now;
+                    await _supabase.From<Vehicle>().Update(vehicle);
+                }
+            }
+
+            await _audit.WriteAsync(
+                remaining == 0 && !changedNothing ? "maintenance_completed" : "maintenance_updated",
+                remaining == 0 && !changedNothing
+                    ? $"completed maintenance on bus {order.VehicleId}"
+                        + (summary.Count > 0 ? $" ({string.Join("; ", summary)})" : "")
+                    : $"updated maintenance on bus {order.VehicleId}"
+                        + (summary.Count > 0 ? $" ({string.Join("; ", summary)})" : "")
+                        + $", {remaining} still open",
+                "vehicles", order.VehicleId);
+
+            return Ok();
+        }
+
+        /// <summary>The faults on one order, still open ones first.</summary>
+        /// <remarks>
+        /// Open items lead because they are the work left to do. Within each group the
+        /// order is by criticality then by name, so what grounds the bus reads first.
+        /// </remarks>
+        private async Task<List<MaintenanceItemLineViewModel>> LoadOrderItemsAsync(int logId)
+        {
+            var response = await _supabase.From<MaintenanceItem>()
+                .Filter("log_id", Postgrest.Constants.Operator.Equals, logId.ToString())
+                .Get();
+
+            return response.Models
+                .Select(i =>
+                {
+                    var open = string.Equals(i.State, "open", OIC);
+                    return new MaintenanceItemLineViewModel(
+                        i.ItemId,
+                        i.Label ?? "",
+                        i.IsCritical,
+                        open,
+                        open ? "" : string.Equals(i.State, "fixed", OIC) ? "Fixed" : "Not an issue",
+                        i.ClosedBy ?? "",
+                        i.Note ?? "");
+                })
+                .OrderByDescending(i => i.IsOpen)
+                .ThenByDescending(i => i.IsCritical)
+                .ThenBy(i => i.Label, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         /// <summary>Everything recorded against one bus, newest first.</summary>
         /// <remarks>
         /// The audit trail already holds every action taken on a vehicle and who took it,
@@ -259,6 +442,9 @@ namespace FleetWise.Controllers
             var current = logs.FirstOrDefault(l => l.ResolvedAt == null);
             vm.OpenIncident = current is null ? null : FormatMaintenanceEntry(current);
             vm.HasMaintenance = current is not null;
+
+            if (current is not null)
+                vm.OpenOrderItems = await LoadOrderItemsAsync(current.LogId);
 
             vm.History = await BuildHistoryAsync(id);
 
@@ -432,26 +618,6 @@ namespace FleetWise.Controllers
 
         // Flag review actions (from the View Vehicle modal).
 
-        /// <summary>Adds a comment to an incident's thread.</summary>
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AddNote(int logId, string note)
-        {
-            if (logId <= 0 || string.IsNullOrWhiteSpace(note))
-                return BadRequest("A note is required.");
-
-            var (uid, uname) = CurrentUser();
-            await _supabase.From<MaintenanceNote>().Insert(new MaintenanceNote
-            {
-                LogId = logId,
-                AuthorId = uid,
-                AuthorName = uname,
-                Action = "Comment",
-                Note = note.Trim(),
-                CreatedAt = PhClock.NowForDb,
-            });
-            return Ok();
-        }
 
         /// <summary>
         /// Resolves an incident: closes every open log on the bus, clears the flag and the

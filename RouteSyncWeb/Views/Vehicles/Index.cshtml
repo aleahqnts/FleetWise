@@ -133,6 +133,24 @@
 @await Html.PartialAsync("_EditVehicleModal")
 @await Html.PartialAsync("_CameraCalibrateModal")
 
+@* The maintenance update dialog, opened from the vehicle details. Each open fault is
+   given an outcome; saving with none left open closes the order and un-grounds the bus. *@
+<div id="vhItemsModal" class="vh-action-overlay" style="display:none;" data-dialog-close="vhItemsCancel">
+    <div class="vh-action-box vh-action-box--wide">
+        <h3 class="vh-action-title">Update Maintenance</h3>
+        <p class="vh-action-desc" id="vhItemsDesc"></p>
+        <p id="vhItemsError" class="vh-action-error" style="display:none;"></p>
+        <div id="vhItemsList" class="vh-items-edit"></div>
+        <textarea id="vhItemsNote" class="vh-form-input vh-action-note" rows="2"
+                  placeholder="Note (optional): progress, parts on order, who is working on it…"></textarea>
+        <p id="vhItemsFoot" class="vh-item-summary"></p>
+        <div class="vh-action-btns">
+            <button type="button" class="vh-btn vh-btn--outline" onclick="vhItemsCancel()">Cancel</button>
+            <button type="button" class="vh-btn vh-btn--primary" id="vhItemsSave">Save</button>
+        </div>
+    </div>
+</div>
+
 @* The inspection checklist, opened from the vehicle details. It sits beside that
    dialog rather than inside it, so closing one never disturbs the other. *@
 <div class="modal fade vh-modal" id="inspectionChecklistModal" tabindex="-1"
@@ -184,6 +202,125 @@
 <script>
     // Copies the checklist built with the vehicle details into its own dialog. The
     // markup is cloned rather than rebuilt, so the two always agree.
+    // The open order being edited, and the outcome chosen for each of its items.
+    let vhItemsLogId = null;
+
+    function vhOpenItems(logId) {
+        const source = document.getElementById('vhItemsSource');
+        if (!source) return;
+
+        vhItemsLogId = logId;
+        vhItemsError('');
+        document.getElementById('vhItemsNote').value = '';
+        document.getElementById('vhItemsNote').oninput = vhItemsFoot;
+        document.getElementById('vhItemsList').replaceChildren(source.content.cloneNode(true));
+        // Each row is settled once on open, so an item already called a misreport shows
+        // the reason it was given.
+        // Each row remembers how it arrived, so the dialog can tell whether anything
+        // has actually moved.
+        document.querySelectorAll('#vhItemsList .vh-item-edit').forEach(function (row) {
+            row.dataset.initial = row.dataset.state;
+            vhItemsChanged(row);
+        });
+        vhItemsFoot();
+        document.getElementById('vhItemsModal').style.display = 'flex';
+    }
+
+    function vhItemsCancel() {
+        document.getElementById('vhItemsModal').style.display = 'none';
+        window.focusFrontDialog();
+    }
+
+    function vhItemsError(message) {
+        const el = document.getElementById('vhItemsError');
+        el.textContent = message;
+        el.style.display = message ? 'block' : 'none';
+    }
+
+    // Each row carries its own outcome. Ticking closes a fault as fixed; calling it a
+    // misreport is a separate choice, offered only where the fault does not ground the bus.
+    function vhItemsTick(row) {
+        row.dataset.state = row.querySelector('input[type=checkbox]').checked ? 'fixed' : 'open';
+        vhItemsChanged(row);
+    }
+
+    function vhItemsDismiss(row) {
+        const dismissing = row.dataset.state !== 'dismissed';
+        row.dataset.state = dismissing ? 'dismissed' : 'open';
+        row.querySelector('input[type=checkbox]').checked = false;
+        vhItemsChanged(row);
+        if (dismissing) row.querySelector('.vh-item-why input').focus();
+    }
+
+    // A reason is asked for only when a fault is being called a misreport, and the count
+    // below says what saving now would do.
+    function vhItemsChanged(row) {
+        row.querySelector('.vh-item-why').style.display =
+            row.dataset.state === 'dismissed' ? 'block' : 'none';
+        vhItemsFoot();
+    }
+
+    function vhItemsFoot() {
+        const rows = Array.from(document.querySelectorAll('#vhItemsList .vh-item-edit'));
+        const left = rows.filter(r => r.dataset.state === 'open').length;
+        const moved = rows.some(r => r.dataset.state !== r.dataset.initial);
+        const note = document.getElementById('vhItemsNote').value.trim();
+
+        // Saving with nothing moved and nothing written would record an empty entry.
+        document.getElementById('vhItemsSave').disabled = !moved && !note;
+
+        // Nothing to say until something has moved: an unusable Save says it already.
+        document.getElementById('vhItemsFoot').textContent =
+            !moved && !note ? ''
+            : left === 0 ? 'Saving with nothing open closes this order and returns the bus to service.'
+            : left + ' of ' + rows.length + ' would stay open.';
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const save = document.getElementById('vhItemsSave');
+        if (!save) return;
+
+        save.addEventListener('click', async function () {
+            const updates = Array.from(document.querySelectorAll('#vhItemsList .vh-item-edit'))
+                .map(function (row) {
+                    return {
+                        itemId: Number(row.getAttribute('data-item-id')),
+                        state: row.dataset.state,
+                        note: row.querySelector('.vh-item-why input').value.trim()
+                    };
+                });
+
+            save.disabled = true;
+            try {
+                const r = await vhPostResult('@Url.Action("UpdateMaintenanceItems", "Vehicles")',
+                    {
+                        logId: vhItemsLogId,
+                        updates: JSON.stringify(updates),
+                        note: document.getElementById('vhItemsNote').value.trim()
+                    });
+                if (r.ok) { vhItemsCancel(); vhReloadModal(); loadVehicleRows(); }
+                else { vhItemsError(r.message || 'Could not save this update.'); }
+            } finally {
+                save.disabled = false;
+            }
+        });
+    });
+
+    // History is rendered in full and trimmed here, so changing how much is shown costs
+    // no round trip.
+    function vhHistoryShow(size) {
+        const list = document.getElementById('vhHistoryList');
+        if (!list) return;
+
+        const rows = Array.from(list.children);
+        const limit = Number(size) || rows.length;
+        rows.forEach(function (row, i) { row.style.display = i < limit ? '' : 'none'; });
+
+        const more = document.getElementById('vhHistoryMore');
+        const hidden = rows.length - Math.min(limit, rows.length);
+        if (more) more.textContent = hidden > 0 ? hidden + ' older entries hidden.' : '';
+    }
+
     function vhOpenChecklist() {
         const source = document.getElementById('vhChecklistSource');
         const body = document.getElementById('vhChecklistBody');
@@ -234,7 +371,11 @@
                 if (!response.ok) throw new Error();
                 return response.text();
             })
-            .then(function (html) { content.innerHTML = html; })
+            .then(function (html) {
+                content.innerHTML = html;
+                // The panel arrives with every entry rendered; only the newest few show.
+                vhHistoryShow(5);
+            })
             .catch(function () {
                 content.innerHTML = '<div class="vh-modal-loading vh-modal-error">Failed to load vehicle details.</div>';
             });
@@ -289,15 +430,6 @@
     }
 
     function vhReloadModal() { loadVehicleDetails(window.__vhCurrentVehicle); }
-
-    async function vhAddNote(logId) {
-        const ta = document.getElementById('vhNoteInput');
-        const note = ta ? ta.value.trim() : '';
-        if (!note) { if (ta) ta.focus(); return; }
-        if (await vhPost('@Url.Action("AddNote", "Vehicles")', { logId: logId, note: note })) {
-            vhReloadModal();
-        } else { alert('Failed to add note.'); }
-    }
 
     function vhResolve(logId) {
         vhOpenAction({
@@ -577,6 +709,153 @@
        separate sheet rather than part of the dialog underneath. */
     #inspectionChecklistModal .modal-content {
         box-shadow: 0 24px 60px rgba(15, 30, 60, 0.28);
+    }
+
+    /* The faults on the open order. */
+    .vh-items {
+        list-style: none;
+        margin: 10px 0 0;
+        padding: 0;
+    }
+
+        .vh-items li {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 7px 0;
+            font-size: 0.85rem;
+            color: #2D3748;
+        }
+
+            .vh-items li + li { border-top: 1px solid #F4F6F8; }
+
+    .vh-item-mark {
+        width: 16px;
+        text-align: center;
+        font-weight: 700;
+        flex: none;
+    }
+
+    .vh-item--open .vh-item-mark { color: #C99A2E; }
+
+    .vh-item--closed {
+        color: #9AA3B2;
+    }
+
+        .vh-item--closed .vh-item-mark { color: #27AE60; }
+
+        .vh-item--closed .vh-item-label { text-decoration: line-through; }
+
+    .vh-item-label { flex: 1; }
+
+    .vh-item-crit {
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: #FDF3E3;
+        color: #B87A15;
+        font-size: 0.66rem;
+        font-weight: 700;
+        flex: none;
+    }
+
+    .vh-item-outcome {
+        font-size: 0.72rem;
+        color: #9AA3B2;
+        flex: none;
+    }
+
+    .vh-item-note {
+        padding: 0 0 7px 25px !important;
+        font-size: 0.76rem;
+        color: #9AA3B2;
+        border-top: none !important;
+    }
+
+    .vh-item-summary {
+        margin-top: 8px;
+        font-size: 0.78rem;
+        color: #6B7280;
+    }
+
+    .vh-items-edit {
+        max-height: 340px;
+        overflow-y: auto;
+        margin-bottom: 12px;
+    }
+
+    .vh-item-edit {
+        padding: 10px 2px;
+        border-bottom: 1px solid #F4F6F8;
+    }
+
+    .vh-item-edit-top {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .vh-item-check {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+        cursor: pointer;
+    }
+
+        .vh-item-check input {
+            width: 17px;
+            height: 17px;
+            flex: none;
+            accent-color: #27AE60;
+            cursor: pointer;
+        }
+
+    .vh-item-dismiss {
+        border: none;
+        background: none;
+        padding: 0;
+        font-size: 0.74rem;
+        color: #9AA3B2;
+        cursor: pointer;
+        flex: none;
+        white-space: nowrap;
+    }
+
+        .vh-item-dismiss:hover { color: #C0392B; }
+
+    .vh-item-edit[data-state="fixed"] .vh-item-label { text-decoration: line-through; color: #9AA3B2; }
+
+    .vh-item-edit[data-state="dismissed"] .vh-item-label { text-decoration: line-through; color: #9AA3B2; }
+
+    .vh-item-edit[data-state="dismissed"] .vh-item-dismiss { color: #C0392B; font-weight: 600; }
+
+    .vh-item-why {
+        margin-top: 8px;
+        padding-left: 27px;
+    }
+
+    .vh-hist-controls {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 0.74rem;
+        font-weight: 400;
+        color: #9AA3B2;
+        text-transform: none;
+        letter-spacing: normal;
+    }
+
+    .vh-hist-size {
+        width: auto;
+        padding: 3px 6px;
+        font-size: 0.74rem;
+    }
+
+    .vh-hist-more {
+        margin-top: 8px;
+        font-size: 0.74rem;
+        color: #9AA3B2;
     }
 
     /* Everything recorded against a bus, newest first. */
@@ -1251,6 +1530,12 @@
     /* Action overlay (schedule maintenance / out of service). */
     .vh-action-overlay { position: fixed; inset: 0; background: rgba(13,28,40,.5); z-index: 4000; display: flex; align-items: center; justify-content: center; padding: 24px; }
     .vh-action-box { background: #fff; border-radius: 14px; width: 100%; max-width: 440px; padding: 22px; box-shadow: 0 14px 44px rgba(0,0,0,.28); font-family: 'Segoe UI', sans-serif; }
+    .vh-action-box--wide { max-width: 620px; }
+
+    .vh-btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
     .vh-action-title { margin: 0 0 6px; font-size: 1.1rem; font-weight: 800; color: var(--vh-navy); }
     .vh-action-desc { margin: 0 0 14px; font-size: 0.85rem; color: var(--vh-muted); line-height: 1.45; }
     .vh-action-error {
