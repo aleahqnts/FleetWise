@@ -8,12 +8,11 @@ namespace FleetWise.Models;
 /// One fault being worked under a maintenance order.
 /// </summary>
 /// <remarks>
-/// The order says a bus is in the shop; these say what is actually wrong with it.
-/// One row per fault, however many times it is reported, so each can be closed on
-/// its own and the list always describes the bus as it stands.
+/// One row per fault however often it is reported, so each closes on its own and the list
+/// describes the bus as it stands.
 ///
-/// Criticality comes from checklist_items and decides whether the fault grounds the
-/// bus. An item typed by hand carries none.
+/// Criticality comes from checklist_items and decides whether the fault grounds the bus.
+/// A hand-typed item carries none.
 /// </remarks>
 [Table("maintenance_items")]
 public class MaintenanceItem : BaseModel

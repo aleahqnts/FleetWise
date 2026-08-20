@@ -608,9 +608,9 @@
                 if (logId !== null && logId !== undefined) params.logId = logId;
                 if (note) params.note = note;
                 params.maintenanceStatus = maint ? 'Under Repair' : 'Needs Attention';
-                if (await vhPost('@Url.Action("SetServiceState", "Vehicles")', params)) {
-                    vhActionCancel(); vhReloadModal(); loadVehicleRows();
-                } else { alert('Failed to update service state.'); }
+                const r = await vhPostResult('@Url.Action("SetServiceState", "Vehicles")', params);
+                if (r.ok) { vhActionCancel(); vhReloadModal(); loadVehicleRows(); }
+                else { vhActionError(r.message || 'Could not update the service state.'); }
             }
         });
     }
@@ -627,9 +627,9 @@
                 const params = { vehicleId: vehicleId, outOfService: outOfService };
                 if (logId !== null && logId !== undefined) params.logId = logId;
                 if (note) params.note = note;
-                if (await vhPost('@Url.Action("SetServiceState", "Vehicles")', params)) {
-                    vhActionCancel(); vhReloadModal(); loadVehicleRows();
-                } else { alert('Failed to update service state.'); }
+                const r = await vhPostResult('@Url.Action("SetServiceState", "Vehicles")', params);
+                if (r.ok) { vhActionCancel(); vhReloadModal(); loadVehicleRows(); }
+                else { vhActionError(r.message || 'Could not update the service state.'); }
             }
         });
     }

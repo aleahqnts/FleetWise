@@ -15,10 +15,12 @@ namespace FleetWise.Services
 
         public async Task<AuthenticatedUser?> ValidateAsync(string email, string password)
         {
-            var usersResponse = await _supabase
+            // Sign-in is the first call after an idle spell, so it is the one that meets
+            // a connection the far end has already closed.
+            var usersResponse = await Transient.RunAsync(() => _supabase
                 .From<UserModel>()
                 .Filter("email_address", Postgrest.Constants.Operator.Equals, email)
-                .Get();
+                .Get());
 
             var user = usersResponse.Models.FirstOrDefault();
             if (user is null || user.PasswordHash is null || user.AccountStatus != "Activated")

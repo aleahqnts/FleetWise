@@ -1,15 +1,8 @@
-// Transactional email for RouteSync edge functions, sent through Brevo's HTTP API.
+// Transactional email through Brevo's HTTP API. HTTP rather than SMTP because edge
+// functions have no raw TCP sockets.
 //
-// HTTP rather than SMTP because edge functions have no raw TCP sockets. Brevo
-// also allows a single verified sender address, so no DNS records are needed to
-// start sending to real recipients.
-//
-// Function secrets:
-//   BREVO_API_KEY       required, from the Brevo dashboard (SMTP & API > API keys)
-//   BREVO_SENDER_EMAIL  required, must be a verified sender in Brevo
-//   BREVO_SENDER_NAME   optional, defaults to RouteSync
-//
-//   supabase secrets set BREVO_API_KEY=... BREVO_SENDER_EMAIL=...
+// Secrets: BREVO_API_KEY, BREVO_SENDER_EMAIL (must match a verified Brevo sender
+// exactly, including case), and optional BREVO_SENDER_NAME.
 
 const ENDPOINT = "https://api.brevo.com/v3/smtp/email";
 
