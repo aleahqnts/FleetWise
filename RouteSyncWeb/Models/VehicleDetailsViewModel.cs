@@ -32,8 +32,18 @@ namespace FleetWise.Models
         public bool HasMaintenance { get; set; }
         /// <summary>The maintenance badge: no issues, needs attention, or under repair.</summary>
         public string CurrentStatus { get; set; } = "No Issues";
-        /// <summary>Maintenance timeline, newest first: when, what the issue was, and the outcome.</summary>
-        public List<MaintenanceEntryViewModel> MaintenanceEntries { get; set; } = new();
+        /// <summary>The incident still open, if there is one. Resolved ones belong to history.</summary>
+        public MaintenanceEntryViewModel? OpenIncident { get; set; }
+
+        /// <summary>
+        /// Everything that has happened to this bus, newest first.
+        /// </summary>
+        /// <remarks>
+        /// Built from the audit trail rather than from incident notes, because notes hang
+        /// off an incident and the things an operator most wants to look back on, retiring
+        /// a bus, grounding it, returning it, happen without one.
+        /// </remarks>
+        public List<VehicleHistoryEntryViewModel> History { get; set; } = new();
 
         // Flag review / actions.
         /// <summary>Whether the bus is grounded, which prevents dispatch assigning it.</summary>
@@ -87,6 +97,9 @@ namespace FleetWise.Models
 
     /// <summary>One inspected item and whether it passed.</summary>
     public sealed record InspectionResultViewModel(string Item, bool Passed, bool IsCritical);
+
+    /// <summary>One thing that happened to a bus, as recorded in the audit trail.</summary>
+    public sealed record VehicleHistoryEntryViewModel(string When, string Who, string What, bool Refused);
 
     /// <summary>One entry in an incident's thread.</summary>
     public class VehicleNoteViewModel

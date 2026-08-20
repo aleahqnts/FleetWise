@@ -69,24 +69,6 @@
         </div>
     </a>
 
-    @* Shown only once a bus has left the fleet, since an empty card teaches nothing. *@
-    @if (Model.RetiredVehicles > 0)
-    {
-        <a href="@Url.Action("Index", new { status = "Retired" })"
-           class="vh-card vh-card--click @(Model.SelectedStatus == "Retired" ? "vh-card--active" : "")"
-           title="Show buses that have left the fleet">
-            <div class="vh-card-icon vh-card-icon--slate">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 8v13H3V8" /><path d="M1 3h22v5H1z" /><path d="M10 12h4" />
-                </svg>
-            </div>
-            <div class="vh-card-text">
-                <span class="vh-card-label">Retired</span>
-                <span class="vh-card-value">@Model.RetiredVehicles</span>
-            </div>
-        </a>
-    }
 </div>
 
 @* TOOLBAR *@
@@ -171,10 +153,11 @@
 
 @* Shared action overlay for scheduling maintenance and taking a bus out of service. Not
    Bootstrap) so it stacks above the View modal without nesting issues. *@
-<div id="vhActionModal" class="vh-action-overlay" style="display:none;">
+<div id="vhActionModal" class="vh-action-overlay" data-dialog-close="vhActionCancel" style="display:none;">
     <div class="vh-action-box">
         <h3 id="vhActionTitle" class="vh-action-title"></h3>
         <p id="vhActionDesc" class="vh-action-desc"></p>
+        <p id="vhActionError" class="vh-action-error" style="display:none;"></p>
         <textarea id="vhActionNote" class="vh-form-input vh-action-note" rows="3" placeholder="Reason / details…"></textarea>
         <label id="vhActionMaintWrap" class="vh-action-maint" style="display:none;">
             <input type="checkbox" id="vhActionMaint" /> Send to maintenance (Under Repair)
@@ -201,13 +184,6 @@
 <script>
     // Copies the checklist built with the vehicle details into its own dialog. The
     // markup is cloned rather than rebuilt, so the two always agree.
-    document.addEventListener('DOMContentLoaded', function () {
-        const details = document.getElementById('viewVehicleModal');
-        if (details) {
-            details.addEventListener('shown.bs.modal', function () { details.focus(); });
-        }
-    });
-
     function vhOpenChecklist() {
         const source = document.getElementById('vhChecklistSource');
         const body = document.getElementById('vhChecklistBody');
@@ -215,14 +191,6 @@
         if (!source || !body || !dialog) return;
 
         body.replaceChildren(source.content.cloneNode(true));
-
-        if (!dialog.dataset.returnsFocus) {
-            dialog.dataset.returnsFocus = '1';
-            dialog.addEventListener('hidden.bs.modal', function () {
-                const details = document.getElementById('viewVehicleModal');
-                if (details && details.classList.contains('show')) details.focus();
-            });
-        }
 
         bootstrap.Modal.getOrCreateInstance(dialog).show();
     }
@@ -311,6 +279,15 @@
         return res.ok;
     }
 
+    async function vhPostResult(url, params) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'RequestVerificationToken': vhToken(), 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(params)
+        });
+        return { ok: res.ok, message: res.ok ? '' : (await res.text()) };
+    }
+
     function vhReloadModal() { loadVehicleDetails(window.__vhCurrentVehicle); }
 
     async function vhAddNote(logId) {
@@ -343,6 +320,7 @@
         const ta = document.getElementById('vhActionNote'); ta.value = '';
         document.getElementById('vhActionMaintWrap').style.display = opts.showMaint ? 'flex' : 'none';
         document.getElementById('vhActionMaint').checked = !!opts.maintDefault;
+        vhActionError('');
         const btn = document.getElementById('vhActionConfirm');
         btn.textContent = opts.confirmLabel || 'Confirm';
         btn.className = 'vh-btn ' + (opts.danger ? 'vh-btn--danger' : 'vh-btn--primary');
@@ -366,7 +344,19 @@
         document.getElementById('vhActionModal').style.display = 'flex';
         setTimeout(function () { ta.focus(); }, 50);
     }
-    function vhActionCancel() { document.getElementById('vhActionModal').style.display = 'none'; }
+    function vhActionCancel() {
+        document.getElementById('vhActionModal').style.display = 'none';
+        // Hands the keyboard back to whatever is still open behind it.
+        window.focusFrontDialog();
+    }
+
+    function vhActionError(message) {
+        const el = document.getElementById('vhActionError');
+        el.textContent = message;
+        el.style.display = message ? 'block' : 'none';
+    }
+
+
 
     function vhScheduleMaintenance(vehicleId) {
         vhOpenAction({
@@ -379,6 +369,43 @@
                 } else { alert('Failed to schedule maintenance.'); }
             }
         });
+    }
+
+    // Retiring and restoring go through the same overlay as the other vehicle
+    // actions, and take their reason from its note field.
+    function vhRetire(vehicleId) {
+        vhOpenAction({
+            title: 'Retire Bus',
+            desc: 'For a bus that is not coming back: sold, scrapped or written off. It leaves the registry and every assignment list. Its history is kept and this can be undone.',
+            confirmLabel: 'Retire Bus', danger: true,
+            onConfirm: async function (note) {
+                const r = await vhPostResult('@Url.Action("SetRetired", "Vehicles")',
+                    { vehicleId: vehicleId, retired: true, reason: note });
+                if (r.ok) { vhActionCancel(); vhCloseEdit(); loadVehicleRows(); }
+                else { vhActionError(r.message || 'Could not retire this bus.'); }
+            }
+        });
+    }
+
+    function vhRestore(vehicleId) {
+        vhOpenAction({
+            title: 'Restore Bus',
+            desc: 'Brings the bus back to the registry. It returns out of service, so its roadworthiness is decided separately.',
+            confirmLabel: 'Restore Bus',
+            onConfirm: async function () {
+                const r = await vhPostResult('@Url.Action("SetRetired", "Vehicles")',
+                    { vehicleId: vehicleId, retired: false });
+                if (r.ok) { vhActionCancel(); vhCloseEdit(); loadVehicleRows(); }
+                else { vhActionError(r.message || 'Could not restore this bus.'); }
+            }
+        });
+    }
+
+    // The listing behind the dialog changes, so the edit view it was opened from is
+    // closed rather than left describing a stale row.
+    function vhCloseEdit() {
+        const edit = document.getElementById('editVehicleModal');
+        if (edit) bootstrap.Modal.getOrCreateInstance(edit).hide();
     }
 
     function vhMarkOutOfService(vehicleId, logId) {
@@ -523,7 +550,6 @@
 
     .vh-card-icon--green { background: #E8F8EE; color: #27AE60; }
     .vh-card-icon--red   { background: #FDECEC; color: #E53E3E; }
-    .vh-card-icon--slate { background: #EEF1F5; color: #64748B; }
 
     .vh-form-input--fixed {
         background: #F4F6F8;
@@ -551,6 +577,33 @@
        separate sheet rather than part of the dialog underneath. */
     #inspectionChecklistModal .modal-content {
         box-shadow: 0 24px 60px rgba(15, 30, 60, 0.28);
+    }
+
+    /* Everything recorded against a bus, newest first. */
+    .vh-history {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+        .vh-history li {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 9px 0;
+            font-size: 0.84rem;
+            color: #2D3748;
+        }
+
+            .vh-history li + li { border-top: 1px solid #F4F6F8; }
+
+    .vh-history-meta {
+        font-size: 0.74rem;
+        color: #9AA3B2;
+    }
+
+    .vh-history--refused .vh-history-what {
+        color: #9B2C2C;
     }
 
     /* Inspection checklist, one line per item with how it was marked. */
@@ -1200,6 +1253,16 @@
     .vh-action-box { background: #fff; border-radius: 14px; width: 100%; max-width: 440px; padding: 22px; box-shadow: 0 14px 44px rgba(0,0,0,.28); font-family: 'Segoe UI', sans-serif; }
     .vh-action-title { margin: 0 0 6px; font-size: 1.1rem; font-weight: 800; color: var(--vh-navy); }
     .vh-action-desc { margin: 0 0 14px; font-size: 0.85rem; color: var(--vh-muted); line-height: 1.45; }
+    .vh-action-error {
+        background: #FDECEC;
+        border: 1px solid #F5B5B5;
+        color: #9B2C2C;
+        border-radius: 8px;
+        padding: 9px 12px;
+        font-size: 0.82rem;
+        margin: 0 0 12px;
+    }
+
     .vh-action-note { width: 100%; resize: vertical; }
     .vh-action-maint { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: var(--vh-text); cursor: pointer; }
     .vh-action-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }

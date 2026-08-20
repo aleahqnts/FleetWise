@@ -6,7 +6,7 @@
 @{
     var editModel = ViewBag.EditVehicleModel as FleetWise.Models.EditVehicleViewModel;
 }
-<div class="modal fade vh-modal" id="editVehicleModal" tabindex="-1" aria-labelledby="editVehicleModalLabel" aria-hidden="true">
+<div class="modal fade vh-modal" id="editVehicleModal" tabindex="-1" data-bs-focus="false" aria-labelledby="editVehicleModalLabel" aria-hidden="true">
     <div class="modal-dialog vh-modal-sm">
         <div class="modal-content" id="editVehicleContent">
             @if (editModel != null)

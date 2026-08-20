@@ -284,7 +284,7 @@
 </div>
 
 @* Report Generation Modal. *@
-<div id="reportGenModal" class="rg-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="rgModalTitle">
+<div id="reportGenModal" data-dialog-close="closeReportModal" class="rg-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="rgModalTitle">
     <div class="rg-modal">
 
         @* Header *@
@@ -422,7 +422,7 @@
 </div>
 
 @* Daily Trip Report Modal. *@
-<div id="tripModal" class="tr-modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="tripModalTitle">
+<div id="tripModal" data-dialog-close="closeTripModal" class="tr-modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="tripModalTitle">
     <div class="tr-modal">
         <div class="tr-modal-header">
             <h3 class="tr-modal-title" id="tripModalTitle">Daily Trip Report</h3>
