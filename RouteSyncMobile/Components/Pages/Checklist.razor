@@ -31,9 +31,8 @@ else if (submitted)
             </div>
             <h2>Trip Blocked</h2>
             <p class="confirm-sub">
-                A critical item failed, so this bus has been taken out of service and the
-                trip cannot start. Your operator has been notified and will reassign a bus
-                or cancel the trip. Wait for an update on your home screen.
+                This bus is out of service and cannot be driven. Your operator has been
+                told. Wait on your home screen.
             </p>
         }
         else if (hasDefects)
@@ -285,9 +284,7 @@ else
 
             blocked = r.Blocked;
             hasDefects = !blocked && r.Failed.Count > 0;
-            reportedIssues = r.Failed
-                .Select(label => r.Critical.Contains(label) ? $"{label} (critical)" : label)
-                .ToList();
+            reportedIssues = r.Failed;
 
             submitted = true;
         }

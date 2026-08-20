@@ -60,9 +60,12 @@ namespace FleetWise.Controllers
             // Active Trips.
             int activeTrips = todayTrips.Count(t => t.TripStatus == "Active");
 
-            // Revenue.
-            decimal todayRevenue = todayTrips.Sum(t => t.EstimatedRevenue);
-            decimal yesterdayRevenue = yesterdayTrips.Sum(t => t.EstimatedRevenue);
+            static bool Earned(Trip t) => t.TripStatus == "Completed";
+
+            // Revenue, from finished trips only. The column is written when a trip
+            // completes, so counting every row trusts the value over the trip's state.
+            decimal todayRevenue = todayTrips.Where(Earned).Sum(t => t.EstimatedRevenue);
+            decimal yesterdayRevenue = yesterdayTrips.Where(Earned).Sum(t => t.EstimatedRevenue);
 
             // Passenger Count (from trips.total_boarded).
             var todayTripIds = todayTrips.Select(t => t.TripId).ToHashSet();
