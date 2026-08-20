@@ -203,9 +203,6 @@
         <p id="vhActionDesc" class="vh-action-desc"></p>
         <p id="vhActionError" class="vh-action-error" style="display:none;"></p>
         <textarea id="vhActionNote" class="vh-form-input vh-action-note" rows="3" placeholder="Reason / details…"></textarea>
-        <label id="vhActionMaintWrap" class="vh-action-maint" style="display:none;">
-            <input type="checkbox" id="vhActionMaint" /> Send to maintenance (Under Repair)
-        </label>
         <div class="vh-action-btns">
             <button type="button" class="vh-btn vh-btn--outline" onclick="vhActionCancel()">Cancel</button>
             <button type="button" class="vh-btn vh-btn--primary" id="vhActionConfirm">Confirm</button>
@@ -464,8 +461,6 @@
         document.getElementById('vhActionTitle').textContent = opts.title;
         document.getElementById('vhActionDesc').textContent = opts.desc || '';
         const ta = document.getElementById('vhActionNote'); ta.value = '';
-        document.getElementById('vhActionMaintWrap').style.display = opts.showMaint ? 'flex' : 'none';
-        document.getElementById('vhActionMaint').checked = !!opts.maintDefault;
         vhActionError('');
         const btn = document.getElementById('vhActionConfirm');
         btn.textContent = opts.confirmLabel || 'Confirm';
@@ -478,8 +473,7 @@
             btn.disabled = true;
             try {
                 const note = ta.value.trim();
-                const maint = document.getElementById('vhActionMaint').checked;
-                await opts.onConfirm(note, maint);
+                await opts.onConfirm(note);
             } finally {
                 // On success the overlay is hidden by onConfirm; re-enable so a failed
                 // attempt can be retried.
@@ -601,13 +595,12 @@
     function vhMarkOutOfService(vehicleId, logId) {
         vhOpenAction({
             title: 'Take Out of Service',
-            desc: 'The bus stays flagged and cannot be deployed until it is returned to service or resolved.',
-            confirmLabel: 'Mark Out of Service', danger: true, showMaint: true,
-            onConfirm: async function (note, maint) {
+            desc: 'The bus is flagged and cannot be deployed until it is returned to service or resolved.',
+            confirmLabel: 'Mark Out of Service', danger: true,
+            onConfirm: async function (note) {
                 const params = { vehicleId: vehicleId, outOfService: true };
                 if (logId !== null && logId !== undefined) params.logId = logId;
                 if (note) params.note = note;
-                params.maintenanceStatus = maint ? 'Under Repair' : 'Needs Attention';
                 const r = await vhPostResult('@Url.Action("SetServiceState", "Vehicles")', params);
                 if (r.ok) { vhActionCancel(); vhReloadModal(); loadVehicleRows(); }
                 else { vhActionError(r.message || 'Could not update the service state.'); }
@@ -619,7 +612,7 @@
         vhOpenAction({
             title: outOfService ? 'Take Out of Service' : 'Return to Service',
             desc: outOfService
-                ? 'The bus stays flagged and cannot be deployed until it is returned to service or resolved.'
+                ? 'The bus is flagged and cannot be deployed until it is returned to service or resolved.'
                 : 'Return this bus to service so dispatch can assign it again. Add a note (optional).',
             confirmLabel: outOfService ? 'Mark Out of Service' : 'Return to Service',
             danger: outOfService,
@@ -1607,7 +1600,6 @@
     }
 
     .vh-action-note { width: 100%; resize: vertical; }
-    .vh-action-maint { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.85rem; color: var(--vh-text); cursor: pointer; }
     .vh-action-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 
     .vh-oos-banner {

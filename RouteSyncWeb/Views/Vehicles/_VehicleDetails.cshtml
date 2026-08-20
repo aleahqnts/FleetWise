@@ -231,72 +231,82 @@
         }
     </div>
 
-    @* Flag Review / Actions *@
-    @if (Model.OpenLogId.HasValue || Model.OutOfService || Model.IncidentThreads.Count > 0)
-    {
-        <div class="vh-section-header">
-            <span>Flag Review</span>
+    @* Service Status / Actions. Always shown, because a bus is grounded for reasons
+       that never involve a flag, and this is the only place that can be done. *@
+    <div class="vh-section-header">
+        <span>Service Status</span>
+        @if (Model.OutOfService)
+        {
+            <span class="vh-section-badge vh-badge--oos">Out of Service</span>
+        }
+        else if (Model.OpenLogId.HasValue)
+        {
+            <span class="vh-section-badge vh-badge--flagged">Flagged</span>
+        }
+        else
+        {
+            <span class="vh-section-badge vh-badge--ok">In Service</span>
+        }
+    </div>
+    <div class="vh-section-body">
+        @if (Model.OutOfService)
+        {
+            @if (Model.OpenIncidentCritical)
+            {
+                <div class="vh-oos-banner">
+                    Grounded by a failed inspection: <strong>@Model.OpenIncidentSummary</strong>.
+                    Any trip on this bus is blocked until it returns to service. Reassign the
+                    trip to another bus from Dispatch, or cancel it, if the repair will not be
+                    done in time.
+                </div>
+            }
+            else
+            {
+                <div class="vh-oos-banner">This bus is <strong>Out of Service</strong>. Dispatch cannot assign it.</div>
+            }
+        }
+
+        <p class="vh-action-hint">
             @if (Model.OutOfService)
             {
-                <span class="vh-section-badge vh-badge--oos">Out of Service</span>
+                <text>
+                    <strong>Return to Service</strong> un-grounds the bus while leaving its
+                    faults open, for one that is usable but still being watched. Work is
+                    closed under <strong>Update Maintenance</strong> above, which returns
+                    the bus once nothing is left. The driver submits a fresh inspection
+                    either way before a trip can start.
+                </text>
             }
             else if (Model.OpenLogId.HasValue)
             {
-                <span class="vh-section-badge vh-badge--flagged">Flagged</span>
+                <text>
+                    <strong>Mark Out of Service</strong> grounds the bus, which blocks
+                    every trip assigned to it. Faults are closed under
+                    <strong>Update Maintenance</strong> above.
+                </text>
             }
-        </div>
-        <div class="vh-section-body">
+            else
+            {
+                <text>
+                    <strong>Mark Out of Service</strong> grounds the bus, which blocks every
+                    trip assigned to it. The reason given opens a maintenance order and
+                    becomes the first thing on it. To book the bus into the workshop
+                    instead, use <strong>Schedule Maintenance</strong> above.
+                </text>
+            }
+        </p>
+
+        <div class="vh-review-actions">
             @if (Model.OutOfService)
             {
-                @if (Model.OpenIncidentCritical)
-                {
-                    <div class="vh-oos-banner">
-                        Grounded by a failed inspection: <strong>@Model.OpenIncidentSummary</strong>.
-                        Any trip on this bus is blocked until it returns to service. Reassign the
-                        trip to another bus from Dispatch, or cancel it, if the repair will not be
-                        done in time.
-                    </div>
-                }
-                else
-                {
-                    <div class="vh-oos-banner">This bus is <strong>Out of Service</strong>. Dispatch cannot assign it.</div>
-                }
+                <button type="button" class="vh-btn vh-btn--outline" onclick="vhSetService('@Model.VehicleId', false, @(Model.OpenLogId?.ToString() ?? "null"))">Return to Service</button>
             }
-
-            <p class="vh-action-hint">
-                @if (Model.OutOfService)
-                {
-                    <text>
-                        <strong>Return to Service</strong> un-grounds the bus while leaving its
-                        faults open, for one that is usable but still being watched. Work is
-                        closed under <strong>Update Maintenance</strong> above, which returns
-                        the bus once nothing is left. The driver submits a fresh inspection
-                        either way before a trip can start.
-                    </text>
-                }
-                else
-                {
-                    <text>
-                        <strong>Mark Out of Service</strong> grounds the bus, which blocks
-                        every trip assigned to it. Faults are closed under
-                        <strong>Update Maintenance</strong> above.
-                    </text>
-                }
-            </p>
-
-            <div class="vh-review-actions">
-                @if (Model.OutOfService)
-                {
-                    <button type="button" class="vh-btn vh-btn--outline" onclick="vhSetService('@Model.VehicleId', false, @(Model.OpenLogId?.ToString() ?? "null"))">Return to Service</button>
-                }
-                else
-                {
-                    <button type="button" class="vh-btn vh-btn--danger" onclick="vhMarkOutOfService('@Model.VehicleId', @(Model.OpenLogId?.ToString() ?? "null"))">Mark Out of Service</button>
-                }
-            </div>
-
+            else
+            {
+                <button type="button" class="vh-btn vh-btn--danger" onclick="vhMarkOutOfService('@Model.VehicleId', @(Model.OpenLogId?.ToString() ?? "null"))">Mark Out of Service</button>
+            }
         </div>
-    }
+    </div>
 
     @* The work an administrator can book, cloned into the schedule dialog. *@
     <template id="vhCatalogueSource">

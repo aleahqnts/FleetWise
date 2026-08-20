@@ -757,7 +757,7 @@ namespace FleetWise.Controllers
         /// <summary>Grounds a bus so dispatch cannot assign it, or returns it to service.</summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> SetServiceState(string vehicleId, bool outOfService, int? logId, string? note, string? maintenanceStatus)
+        public async Task<IActionResult> SetServiceState(string vehicleId, bool outOfService, int? logId, string? note)
         {
             if (string.IsNullOrWhiteSpace(vehicleId)) return BadRequest("Vehicle required.");
 
@@ -769,10 +769,6 @@ namespace FleetWise.Controllers
 
             var (uid, uname) = CurrentUser();
             int? effectiveLog = logId;
-
-            // The nature of the incident: under repair when sent to maintenance, otherwise
-            // needs attention.
-            var ms = string.Equals(maintenanceStatus?.Trim(), "Under Repair", OIC) ? "Under Repair" : "Needs Attention";
 
             if (!outOfService)
             {
@@ -790,9 +786,10 @@ namespace FleetWise.Controllers
 
             if (outOfService)
             {
-                // One order carries the grounding, whether the bus already had faults or
-                // not, and a bus booked into the shop is promoted to under repair.
-                var order = await OpenOrderForAsync(vehicleId, ms);
+                // One order carries the grounding, whether the bus already had faults
+                // or not. Booking it into the workshop is Schedule Maintenance, which is
+                // what promotes the order to under repair.
+                var order = await OpenOrderForAsync(vehicleId, "Needs Attention");
                 if (order is null) return BadRequest("Could not open a maintenance order.");
 
                 var hasItems = (await _supabase.From<MaintenanceItem>()
@@ -833,7 +830,7 @@ namespace FleetWise.Controllers
             await _audit.WriteAsync(
                 outOfService ? "vehicle_grounded" : "vehicle_returned",
                 outOfService
-                    ? $"took bus {vehicleId} out of service ({ms}){reason}"
+                    ? $"took bus {vehicleId} out of service{reason}"
                     : $"returned bus {vehicleId} to service{reason}",
                 "vehicles", vehicleId);
 
