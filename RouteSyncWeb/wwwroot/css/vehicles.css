@@ -1313,6 +1313,25 @@
             max-width: none;
             width: 100%;
             max-height: 92vh;
+            overflow-y: auto;
             border-radius: 16px 16px 0 0;
+        }
+    }
+
+    @media (max-width: 599px) {
+
+        /* Rows and headings ran to the edge of a full-width sheet, so the text sat
+           against the frame with nothing around it. */
+        .vh-section-header,
+        .vh-detail-row,
+        .vh-detail-pair,
+        .vh-modal-body > * {
+            padding-left: 16px;
+            padding-right: 16px;
+        }
+
+        .vh-detail-row {
+            padding-top: 10px;
+            padding-bottom: 10px;
         }
     }

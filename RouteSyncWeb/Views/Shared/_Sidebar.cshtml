@@ -158,82 +158,83 @@
                 </svg>
             </button>
         </form>
-    </div>
-
-</aside>
 
 @*
     Touch navigation.
 
-    The rail above opens on hover to show what its icons mean, which a finger cannot do.
-    This is the same destinations as a fan of labelled buttons around a thumb-height
-    control, and only one of the two is ever present: see the (hover: none) query in
-    sidebar.css.
+    The rail above opens on hover to show what its icons mean, which a finger
+    cannot do. This is the same destinations as a bar across the foot of the
+    screen, and only one of the two is ever present: see the (hover: none) query
+    in sidebar.css.
 
-    Each button's place on the arc is worked out here rather than in CSS, because the
-    number of destinations depends on what the signed-in role may see. The radius stays in
-    CSS so a narrow screen can pull the arc in without the angles being recomputed.
+    Four destinations sit in the bar and the rest live behind More, along with
+    the account and the way out. Which four depends on what the signed-in role
+    may see, so the split is worked out here rather than written down twice.
 *@
 @{
-    var fanItems = navItems.Where(i => User.HasClaim("perm", i.Perm)).ToList();
+    var touchItems = navItems.Where(i => User.HasClaim("perm", i.Perm)).ToList();
 
-    // A short arc for a few buttons, a wider one as they are added, so the gap between
-    // neighbours stays roughly even however many a role is granted.
-    double fanSpread = fanItems.Count <= 3 ? 90 : fanItems.Count <= 5 ? 130 : 160;
-    double fanStart  = 270 - fanSpread / 2;
-    double fanStep   = fanItems.Count > 1 ? fanSpread / (fanItems.Count - 1) : 0;
-
-    string Round(double v) => v.ToString("0.####", CultureInfo.InvariantCulture);
+    // Order of use for someone standing at a terminal, not the order of the rail.
+    var barOrder = new[] { "Dashboard", "Dispatch", "FleetMap", "Vehicles" };
+    var barItems = touchItems.Where(i => barOrder.Contains(i.Controller))
+                             .OrderBy(i => Array.IndexOf(barOrder, i.Controller))
+                             .ToList();
+    var moreItems = touchItems.Except(barItems).ToList();
 }
 
-<div class="fw-fan" id="fwFan">
+<nav class="fw-bar" id="fwBar" aria-label="Main navigation">
+    @foreach (var item in barItems)
+    {
+        var active = IsActive(item.Controller, item.Action);
+        <a asp-controller="@item.Controller" asp-action="@item.Action"
+           class="fw-bar__link @(active ? "fw-bar__link--active" : "")"
+           aria-current="@(active ? "page" : null)">
+            <span class="fw-bar__icon" aria-hidden="true">@NavIcon(item.IconKey)</span>
+            <span class="fw-bar__label">@item.Short</span>
+        </a>
+    }
 
-    @* Covers the page while the fan is open, and closes it when tapped. *@
-    <div class="fw-fan__backdrop" id="fwFanBackdrop"></div>
+    <button type="button" class="fw-bar__link fw-bar__more" id="fwMoreBtn"
+            aria-expanded="false" aria-controls="fwSheet">
+        <span class="fw-bar__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="7" x2="20" y2="7" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="17" x2="20" y2="17" />
+            </svg>
+        </span>
+        <span class="fw-bar__label">More</span>
+    </button>
+</nav>
 
-    <ul class="fw-fan__list" id="fwFanList">
-        @for (int i = 0; i < fanItems.Count; i++)
+<div class="fw-sheet-backdrop" id="fwSheetBackdrop"></div>
+
+<div class="fw-sheet" id="fwSheet" role="dialog" aria-modal="true" aria-label="More">
+    <div class="fw-sheet__grip"></div>
+
+    <div class="fw-sheet__account">
+        <span class="fw-sheet__who">
+            <span class="fw-sheet__name">@User.Identity?.Name</span>
+            <span class="fw-sheet__role">@User.FindFirst(ClaimTypes.Role)?.Value</span>
+        </span>
+        <form asp-controller="Home" asp-action="Logout" method="post">
+            <button type="submit" class="fw-sheet__logout">Sign out</button>
+        </form>
+    </div>
+
+    <ul class="fw-sheet__list">
+        @foreach (var item in moreItems)
         {
-            var item  = fanItems[i];
-            var angle = (fanStart + i * fanStep) * Math.PI / 180;
             var active = IsActive(item.Controller, item.Action);
-            <li class="fw-fan__item"
-                style="--fan-x:@Round(Math.Cos(angle)); --fan-y:@Round(Math.Sin(angle)); --fan-i:@i">
-                <a asp-controller="@item.Controller"
-                   asp-action="@item.Action"
-                   class="fw-fan__link @(active ? "fw-fan__link--active" : "")"
-                   aria-current="@(active ? "page" : null)"
-                   tabindex="-1">
-                    <span class="fw-fan__icon" aria-hidden="true">@NavIcon(item.IconKey)</span>
-                    <span class="fw-fan__label">@item.Short</span>
+            <li>
+                <a asp-controller="@item.Controller" asp-action="@item.Action"
+                   class="fw-sheet__link @(active ? "fw-sheet__link--active" : "")"
+                   aria-current="@(active ? "page" : null)" tabindex="-1">
+                    <span class="fw-sheet__icon" aria-hidden="true">@NavIcon(item.IconKey)</span>
+                    @item.Label
                 </a>
             </li>
         }
     </ul>
-
-    @* Who is signed in, and the only way off the phone. The rail keeps both behind hover. *@
-    <div class="fw-fan__account" id="fwFanAccount">
-        <span class="fw-fan__who">
-            <span class="fw-fan__name">@User.Identity?.Name</span>
-            <span class="fw-fan__role">@User.FindFirst(ClaimTypes.Role)?.Value</span>
-        </span>
-        <form asp-controller="Home" asp-action="Logout" method="post">
-            <button type="submit" class="fw-fan__logout">Sign out</button>
-        </form>
-    </div>
-
-    <button type="button" class="fw-fan__toggle" id="fwFanToggle"
-            aria-expanded="false" aria-controls="fwFanList" aria-label="Open navigation">
-        <svg class="fw-fan__toggle-open" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="4" y1="7" x2="20" y2="7" />
-            <line x1="4" y1="12" x2="20" y2="12" />
-            <line x1="4" y1="17" x2="20" y2="17" />
-        </svg>
-        <svg class="fw-fan__toggle-close" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="6" y1="6" x2="18" y2="18" />
-            <line x1="18" y1="6" x2="6" y2="18" />
-        </svg>
-    </button>
 </div>

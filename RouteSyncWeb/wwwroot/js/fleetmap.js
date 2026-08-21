@@ -89,6 +89,11 @@
     var legendEl = document.getElementById('fmLegend');
     var legendToggle = document.getElementById('fmLegendToggle');
 
+    if (legendToggle && legendEl && window.matchMedia('(hover: none) and (pointer: coarse)').matches) {
+        legendToggle.setAttribute('aria-expanded', 'false');
+        legendEl.hidden = true;
+    }
+
     if (legendToggle && legendEl) {
         legendToggle.addEventListener('click', function () {
             var open = legendToggle.getAttribute('aria-expanded') === 'true';

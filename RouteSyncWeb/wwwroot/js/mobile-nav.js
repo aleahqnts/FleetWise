@@ -1,54 +1,51 @@
-// Opens and closes the touch navigation fan.
+// Opens and closes the More sheet on the touch navigation bar.
 //
-// The arc itself is CSS. This only holds the open state and keeps the parts that
-// cannot be expressed in a stylesheet honest: what a screen reader is told, what the
-// keyboard can reach, and what the back button does.
+// The bar itself is markup and CSS and needs nothing from here. This holds the open
+// state of the sheet and the parts a stylesheet cannot express: what a screen reader
+// is told, what the keyboard can reach, and what the back gesture does.
 (function () {
-    var fan = document.getElementById('fwFan');
-    if (!fan) return;
+    var sheet = document.getElementById('fwSheet');
+    if (!sheet) return;
 
-    var toggle   = document.getElementById('fwFanToggle');
-    var list     = document.getElementById('fwFanList');
-    var backdrop = document.getElementById('fwFanBackdrop');
-    var links    = list ? list.querySelectorAll('.fw-fan__link') : [];
+    var button = document.getElementById('fwMoreBtn');
+    var backdrop = document.getElementById('fwSheetBackdrop');
+    var links = sheet.querySelectorAll('.fw-sheet__link, .fw-sheet__logout');
+
+    function isOpen() { return sheet.classList.contains('fw-sheet--open'); }
 
     function setOpen(open) {
-        fan.classList.toggle('fw-fan--open', open);
-        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-        toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+        sheet.classList.toggle('fw-sheet--open', open);
+        backdrop.classList.toggle('fw-sheet-backdrop--open', open);
+        button.setAttribute('aria-expanded', open ? 'true' : 'false');
 
-        // A closed fan must not be a set of invisible links sitting over the page.
-        // CSS hides both panels with visibility, which keeps them out of the
-        // accessibility tree and untappable; the links still need their own tab stop
-        // taken away, since the list itself stays visible behind the button.
+        // The sheet stays in the page when closed so it can slide, so its links have
+        // to be taken out of the tab order by hand.
         links.forEach(function (a) { a.tabIndex = open ? 0 : -1; });
-
         if (open && links.length) links[0].focus();
     }
 
-    function isOpen() { return fan.classList.contains('fw-fan--open'); }
+    button.addEventListener('click', function () {
+        var opening = !isOpen();
+        setOpen(opening);
+        // A phone's back gesture should close the sheet before it leaves the page,
+        // which is what someone who opened it by accident expects.
+        if (opening) history.pushState({ fwSheet: true }, '');
+    });
 
-    toggle.addEventListener('click', function () { setOpen(!isOpen()); });
     backdrop.addEventListener('click', function () { setOpen(false); });
 
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && isOpen()) {
             setOpen(false);
-            toggle.focus();
+            button.focus();
         }
-    });
-
-    // A phone's back gesture should close the fan before it leaves the page, which is
-    // what someone who opened it by accident expects it to do.
-    toggle.addEventListener('click', function () {
-        if (isOpen()) history.pushState({ fwFan: true }, '');
     });
 
     window.addEventListener('popstate', function () {
         if (isOpen()) setOpen(false);
     });
 
-    // Returning to a page from the back/forward cache restores the markup as it was
-    // left, so an open fan would come back open over a page nobody navigated to.
+    // Coming back to a page from the back/forward cache restores the markup as it was
+    // left, so an open sheet would return open over a page nobody navigated to.
     window.addEventListener('pageshow', function () { setOpen(false); });
 })();
