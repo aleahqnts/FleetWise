@@ -23,5 +23,14 @@ WORKDIR /app
 COPY --from=build /app .
 # Containers get the port from the platform; 8080 is the common default for the ones above.
 ENV ASPNETCORE_URLS=http://+:8080
+
+# Read appsettings.json once at startup instead of watching it for edits.
+#
+# Watching is the default, and it opens a file system watcher per settings file. A container
+# is allotted very few of those, and running out crashes the process inside the watcher
+# rather than raising an error, leaving a segmentation fault with no message. Nothing rereads
+# configuration after startup anyway, so a deploy is what picks up a change.
+ENV DOTNET_hostBuilder__reloadConfigOnChange=false
+
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "FleetWise.dll"]
