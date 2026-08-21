@@ -4,6 +4,37 @@
     var DEFAULT_ZOOM = 16;
     var POLL_INTERVAL_MS = 5000;
 
+    // The filter panel on a phone. It is one class on the bar; the panel itself and
+    // the button that opens it only exist at that width, so this does nothing on a
+    // screen wide enough to show the filters inline.
+    (function () {
+        var toggle = document.getElementById('fmFilterToggle');
+        var bar = document.querySelector('.fm-topbar');
+        if (!toggle || !bar) return;
+
+        function setOpen(open) {
+            bar.classList.toggle('fm-topbar--filters', open);
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+
+        toggle.addEventListener('click', function () {
+            setOpen(!bar.classList.contains('fm-topbar--filters'));
+        });
+
+        // Picking a filter has done what the panel was opened for.
+        document.getElementById('fmFilters').addEventListener('change', function () {
+            setOpen(false);
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!bar.contains(e.target)) setOpen(false);
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') setOpen(false);
+        });
+    })();
+
     // Distinct route colors, assigned deterministically by routeId so a route always
     // keeps the same color and any number of routes is supported (Route 1 = blue,
     // Route 2 = orange, …). Cycles if there are more routes than colors.
@@ -443,7 +474,16 @@
 
             loadStops(null);
             fetchPositions();
-            setInterval(fetchPositions, POLL_INTERVAL_MS);
+            setInterval(function () {
+                // A hidden tab is nobody looking. Skipping the request costs a
+                // few seconds of staleness on return, which the visibility
+                // handler below closes immediately.
+                if (document.hidden) return;
+                fetchPositions();
+            }, POLL_INTERVAL_MS);
+            document.addEventListener('visibilitychange', function () {
+                if (!document.hidden) fetchPositions();
+            });
         })
         .catch(err => console.error('Failed to load routes:', err));
 })();

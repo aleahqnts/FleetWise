@@ -1,4 +1,4 @@
-/* This page opts out of the page transition. The map is a bare grey rectangle until
+﻿/* This page opts out of the page transition. The map is a bare grey rectangle until
    its tiles arrive, so crossing into it holds that emptiness on screen and crossing
    out of it fades a map that is already drawn. A plain load reads better.
 
@@ -630,3 +630,121 @@
         opacity: .45;
         cursor: default;
     }
+
+/* ===========================================================================
+   Phone.
+
+   The map is the page, so it takes the whole viewport under the bar and every
+   control floats on top of it. The two filters do not fit beside the search box
+   in a 56px bar, so they move behind a button and open over the map.
+   =========================================================================== */
+
+.fm-filter-toggle {
+    display: none;
+}
+
+@media (max-width: 599px) {
+
+    /* No sidebar to sit beside, and the bar above is 56px rather than 80px. */
+    .fm-page {
+        top: 56px;
+        left: 0;
+    }
+
+    .fm-topbar {
+        gap: 8px;
+    }
+
+    .fm-search-wrap {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .fm-search-input {
+        width: 100%;
+    }
+
+    .fm-filter-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+        min-height: 40px;
+        padding: 0 12px;
+        border: 1px solid var(--fm-border);
+        border-radius: 10px;
+        background: var(--fm-white);
+        color: var(--fm-text);
+        font-size: .8rem;
+        font-weight: 600;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .fm-filters {
+        display: none;
+        position: fixed;
+        top: 56px;
+        left: 0;
+        right: 0;
+        z-index: 1200;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding: 14px 16px 16px;
+        background: var(--fm-white);
+        border-bottom: 1px solid var(--fm-border);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, .14);
+    }
+
+    .fm-topbar--filters .fm-filters {
+        display: flex;
+    }
+
+    .fm-filter {
+        justify-content: space-between;
+    }
+
+    .fm-select-wrap {
+        flex: 1;
+        max-width: 60%;
+    }
+
+    .fm-select {
+        width: 100%;
+    }
+
+    /* Bus detail arrives from the bottom, where a thumb is, instead of taking a
+       third of the width off the side of a map that has none to spare. */
+    .fm-panel {
+        top: auto;
+        right: 0;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        max-height: 68vh;
+        /* Over the navigation button, which sits at the foot of every screen.
+           Beneath it, the button would float on top of the bus being read. */
+        z-index: 1300;
+        border-radius: 16px 16px 0 0;
+        padding: 18px 0;
+        transform: translateY(100%);
+    }
+
+    .fm-panel--open {
+        transform: translateY(0);
+    }
+
+    /* Clear of the navigation button, which sits at the foot of the screen. */
+    .fm-legend {
+        left: 12px;
+        bottom: 92px;
+        max-width: 172px;
+        padding: 8px 10px 10px;
+    }
+
+    /* The map has no sidebar to clear any more. */
+    .fm-fit-btn {
+        left: 12px;
+        top: 12px;
+    }
+}
