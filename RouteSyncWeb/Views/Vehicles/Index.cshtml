@@ -111,7 +111,7 @@
     </div>
 
     <div class="vh-table-wrap">
-        <table class="vh-table rs-cards">
+        <table class="vh-table rs-cards rs-collapse">
             <thead>
                 <tr>
                     <th>Vehicle ID</th>
@@ -674,7 +674,16 @@
 </script>
 
 @section TopbarContent {
-    <form method="get" class="vh-filters">
+    <button type="button" class="rs-filter-toggle" data-filter-toggle="vhFilters"
+            aria-expanded="false" aria-controls="vhFilters">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 5h18M6 12h12M10 19h4" />
+        </svg>
+        Filters
+    </button>
+
+    <form method="get" class="vh-filters rs-filters" id="vhFilters">
         <input type="hidden" name="search" value="@Model.SearchTerm" />
         <div class="vh-filter">
             <label class="vh-filter-label">Route:</label>

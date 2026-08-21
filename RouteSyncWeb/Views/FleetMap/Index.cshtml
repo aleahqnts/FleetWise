@@ -15,8 +15,8 @@
             <input type="text" id="fmSearch" class="fm-search-input" placeholder="Search" />
         </div>
 
-        <button id="fmFilterToggle" class="fm-filter-toggle" type="button"
-                aria-expanded="false" aria-controls="fmFilters">
+        <button id="fmFilterToggle" class="rs-filter-toggle" type="button"
+                data-filter-toggle="fmFilters" aria-expanded="false" aria-controls="fmFilters">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round"
                  stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
@@ -25,7 +25,7 @@
             Filters
         </button>
 
-        <div class="fm-filters" id="fmFilters">
+        <div class="fm-filters rs-filters" id="fmFilters">
             <div class="fm-filter">
                 <span class="fm-filter-label">Route:</span>
                 <div class="fm-select-wrap">

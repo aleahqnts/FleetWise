@@ -350,3 +350,138 @@
         max-width: 100%;
     }
 }
+
+/* ===========================================================================
+   Filters behind a button.
+
+   A row of labelled dropdowns cannot share a 56px bar with a search box. Below
+   the breakpoint they move behind one button and open as a panel under the bar.
+
+   Shared, so every page that filters does it the same way.
+   =========================================================================== */
+
+.rs-filter-toggle {
+    display: none;
+}
+
+@media (max-width: 599px) {
+
+    .rs-filter-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+        min-height: 40px;
+        padding: 0 12px;
+        border: 1px solid #E2E8F0;
+        border-radius: 10px;
+        background: #fff;
+        color: #2D3748;
+        font-size: .8rem;
+        font-weight: 600;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .rs-filter-toggle svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    /* Written against the class twice so it outranks the page's own rule for the
+       same element, which sets display and loads after this file. */
+    .rs-filters.rs-filters {
+        display: none;
+        position: fixed;
+        top: 56px;
+        left: 0;
+        right: 0;
+        z-index: 900;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding: 14px 16px 16px;
+        background: #fff;
+        border-bottom: 1px solid #E2E8F0;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, .14);
+    }
+
+    .rs-filters.rs-filters--open {
+        display: flex;
+    }
+
+    /* Label on the left, control on the right, one row each. */
+    .rs-filters.rs-filters > * {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    /* The control, whether it is the select itself or the box drawn around it. */
+    .rs-filters.rs-filters > * > :last-child {
+        flex: 1;
+        min-width: 0;
+        max-width: 62%;
+    }
+
+    .rs-filters.rs-filters select {
+        width: 100%;
+        min-width: 0;
+    }
+}
+
+/* ===========================================================================
+   Cards that open.
+
+   A card carrying six values is a wall of text when there are twenty of them.
+   With .rs-collapse a row shows what identifies it and what can be done to it,
+   and opens for the rest.
+   =========================================================================== */
+
+@media (max-width: 599px) {
+
+    .rs-collapse tbody tr {
+        cursor: pointer;
+    }
+
+    .rs-collapse tbody tr:not(.rs-open) td:not(:first-child):not([data-label="Actions"]) {
+        display: none;
+    }
+
+    /* Nothing above the first value, since it is the card's heading now. */
+    .rs-collapse tbody tr td:first-child {
+        font-weight: 700;
+    }
+
+    .rs-collapse tbody tr td:first-child::after {
+        content: "";
+        width: 8px;
+        height: 8px;
+        margin-left: 8px;
+        border-right: 2px solid #94A3B8;
+        border-bottom: 2px solid #94A3B8;
+        transform: rotate(45deg) translate(-2px, -2px);
+        transition: transform 160ms ease;
+    }
+
+    .rs-collapse tbody tr.rs-open td:first-child::after {
+        transform: rotate(-135deg) translate(-2px, -2px);
+    }
+
+    /* Actions sit under the heading and share the width evenly. */
+    .rs-cards td[data-label="Actions"] {
+        flex-wrap: nowrap;
+    }
+
+    .rs-cards td[data-label="Actions"] button,
+    .rs-cards td[data-label="Actions"] a,
+    .rs-cards td[data-label="Actions"] > div {
+        flex: 1;
+        min-height: 40px;
+    }
+
+    .rs-cards td[data-label="Actions"] > div {
+        display: flex;
+        gap: 8px;
+    }
+}
