@@ -721,7 +721,7 @@
         left: 0;
         bottom: 0;
         width: 100%;
-        max-height: 68vh;
+        max-height: 58vh;
         /* Over the navigation button, which sits at the foot of every screen.
            Beneath it, the button would float on top of the bus being read. */
         z-index: 1300;
@@ -756,5 +756,48 @@
     .fm-fit-btn {
         left: 12px;
         top: 12px;
+    }
+}
+
+@media (max-width: 599px) {
+
+    /* The panel was typeset for a column standing the full height of a desktop
+       map. In a sheet across the bottom of a phone the same sizes read as a
+       poster, so everything comes down a step and the padding with it. */
+    .fm-panel {
+        padding: 12px 0;
+    }
+
+    .fm-panel__pad {
+        padding: 0 16px;
+    }
+
+    .fm-panel__title {
+        font-size: 1.15rem;
+        margin-bottom: 6px;
+    }
+
+    .fm-panel__meta {
+        gap: 6px;
+        font-size: .8rem;
+    }
+
+    .fm-panel__status {
+        gap: 8px;
+        font-size: .85rem;
+    }
+
+    .fm-panel__divider {
+        margin: 10px 0;
+    }
+
+    .fm-panel__driver {
+        gap: 10px;
+        padding: 10px 16px;
+    }
+
+    .fm-panel__close {
+        min-width: 44px;
+        min-height: 44px;
     }
 }
