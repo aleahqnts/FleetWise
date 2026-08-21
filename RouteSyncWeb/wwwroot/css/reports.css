@@ -668,8 +668,9 @@
     outline-offset: 2px;
     }
 
-    /* Wider than a single trip, since this one carries a table. */
-    .tr-modal--wide { max-width: 940px; }
+    /* Wider than a single trip, since this one carries a table. Written against both
+       classes so it does not depend on sitting after the rule it widens. */
+    .tr-modal.tr-modal--wide { max-width: 940px; }
 
     /* The title and the day it covers, on one line. */
     .st-head {
@@ -1287,4 +1288,29 @@
     border-right: none;
     border-bottom: 1px solid var(--rp-border);
     }
+    }
+
+    @media (max-width: 599px) {
+
+        /* Trip detail, the figure behind a summary card, and the export dialog all
+           rise from the bottom edge at full width. */
+        .tr-modal-overlay,
+        .rg-overlay {
+            padding: 0;
+            align-items: flex-end;
+        }
+
+        .tr-modal,
+        .tr-modal--wide,
+        .rg-modal {
+            max-width: none;
+            width: 100%;
+            max-height: 92vh;
+            border-radius: 16px 16px 0 0;
+        }
+
+        /* Paired facts read as one column when there is no room for two. */
+        .tr-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
     }

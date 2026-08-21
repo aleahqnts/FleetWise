@@ -623,3 +623,55 @@
         background: rgba(45, 55, 72, .18);
     }
 }
+
+/* ===========================================================================
+   Phone.
+
+   The grids above already fold to one column. What is left is the furniture
+   sized for a desk: card padding, two fixed heights, and a dialog that floats
+   near the top of a tall screen.
+   =========================================================================== */
+
+@media (max-width: 599px) {
+
+    .db-card {
+        padding: 16px 14px;
+    }
+
+    .db-title-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .db-title-tools {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    /* Both were fixed at a height that suits a wide card. Given the full width of
+       a phone they take a third of the screen each, so they come down. */
+    .db-chart-canvas {
+        height: 220px !important;
+    }
+
+    .db-map-link {
+        height: 220px;
+    }
+
+    .db-modal-overlay {
+        padding: 0;
+        align-items: flex-end;
+    }
+
+    .db-modal {
+        max-width: none;
+        width: 100%;
+        max-height: 92vh;
+        border-radius: 16px 16px 0 0;
+    }
+
+    .db-modal-body {
+        padding: 12px 14px 18px;
+    }
+}

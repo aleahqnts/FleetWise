@@ -22,6 +22,20 @@
         <button class="sch-btn-save" id="sch-save" onclick="schSave()">Save Schedule</button>
     </div>
 
+    <div class="sch-days" id="schDays" role="tablist" aria-label="Day of the week">
+        @for (int dayIndex = 0; dayIndex < Model.Days.Count; dayIndex++)
+        {
+            var day = Model.Days[dayIndex];
+            <button type="button" class="sch-day-chip" role="tab" data-day="@dayIndex"
+                    aria-selected="false">
+                <span class="sch-chip-name">@day.ToString("ddd")</span>
+                <span class="sch-chip-num">@day.ToString("d MMM")</span>
+            </button>
+        }
+        <button type="button" class="sch-day-chip sch-day-chip--all" role="tab" data-day="all"
+                aria-selected="false">All</button>
+    </div>
+
     <p class="sch-hint">Assign vehicle + driver per route, shift and day. Multiple buses per shift: use <strong>+ Add bus</strong>. Started/completed trips are locked. Conflicts (double-booking, back-to-back driver shifts) are blocked on save.</p>
 
     @foreach (var route in Model.Routes)
@@ -33,9 +47,11 @@
                     <thead>
                         <tr>
                             <th class="sch-shift-col">Shift</th>
-                            @foreach (var day in Model.Days)
+                            @for (int dayIndex = 0; dayIndex < Model.Days.Count; dayIndex++)
                             {
-                                <th class="@(day.Date == DateTime.Today ? "sch-today" : "")">
+                                var day = Model.Days[dayIndex];
+                                <th data-sch-day="@dayIndex"
+                                    class="@(day.Date == DateTime.Today ? "sch-today" : "")">
                                     <div class="sch-day-name">@day.ToString("ddd")</div>
                                     <div class="sch-day-num">@day.ToString("MMM d")</div>
                                 </th>
@@ -63,12 +79,13 @@
                                             <button type="button" class="sch-add-bus" onclick="schAddBus(this)">+ Add bus</button>
                                         </td>
                                     }
-                                    @foreach (var day in Model.Days)
+                                    @for (int dayIndex = 0; dayIndex < Model.Days.Count; dayIndex++)
                                     {
+                                        var day = Model.Days[dayIndex];
                                         Model.Cells.TryGetValue(CellKey(route.RouteId, shift, day), out var lst);
                                         var cell = lst != null && lane < lst.Count ? lst[lane] : null;
                                         var locked = cell != null && (cell.TripStatus == "Active" || cell.TripStatus == "Completed");
-                                        <td class="sch-cell-td">
+                                        <td class="sch-cell-td" data-sch-day="@dayIndex">
                                             @if (locked)
                                             {
                                                 <div class="sch-locked" data-shift="@shift" data-date="@day.ToString("yyyy-MM-dd")"
@@ -256,15 +273,59 @@
     schNarrowChoices();
 
     // Add a new bus lane (empty row) to a shift, across all 7 days.
+    // Showing one day at a time.
+    //
+    // Seven days of vehicle and driver pickers do not fit across a phone, and the
+    // week is not what someone standing at a terminal is looking at. The grid keeps
+    // its shape and every cell stays in the page, so saving still sends the whole
+    // week; the other six columns are only hidden from view.
+    //
+    // The rule lives in a stylesheet gated on width, so choosing a day changes
+    // nothing on a screen wide enough to show all seven.
+    let schDay = 'all';
+
+    function schApplyDay() {
+        document.querySelectorAll('[data-sch-day]').forEach(el => {
+            el.classList.toggle('sch-day-off',
+                schDay !== 'all' && el.dataset.schDay !== String(schDay));
+        });
+        document.querySelectorAll('.sch-day-chip').forEach(chip => {
+            const on = chip.dataset.day === String(schDay);
+            chip.classList.toggle('sch-day-chip--on', on);
+            chip.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+    }
+
+    function schSetDay(day) {
+        schDay = day;
+        schApplyDay();
+    }
+
+    (function () {
+        const bar = document.getElementById('schDays');
+        if (!bar) return;
+        bar.addEventListener('click', e => {
+            const chip = e.target.closest('.sch-day-chip');
+            if (chip) schSetDay(chip.dataset.day === 'all' ? 'all' : Number(chip.dataset.day));
+        });
+
+        // Opens on today when today is in the week being shown, since that is the day
+        // a dispatcher in the field is working. Any other week opens on its first day.
+        const today = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Manila' }).split(',')[0];
+        const i = SCH_DAYS.indexOf(today);
+        schSetDay(i >= 0 ? i : 0);
+    })();
+
     function schAddBus(btn) {
         const tbody = btn.closest('.sch-shift-body');
         const route = tbody.dataset.route;
         const shift = tbody.dataset.shift;
 
         const tr = document.createElement('tr');
-        SCH_DAYS.forEach(date => {
+        SCH_DAYS.forEach((date, dayIndex) => {
             const td = document.createElement('td');
             td.className = 'sch-cell-td';
+            td.dataset.schDay = dayIndex;
             const cell = document.createElement('div');
             cell.className = 'sch-cell';
             cell.dataset.route = route;
@@ -278,6 +339,7 @@
             tr.appendChild(td);
         });
         tbody.appendChild(tr);
+        schApplyDay();
         schNarrowChoices();
 
         // grow the sticky shift-label rowspan to cover the new lane
