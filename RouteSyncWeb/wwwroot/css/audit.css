@@ -380,3 +380,20 @@
         color: var(--au-muted);
         font-family: 'Segoe UI', sans-serif;
     }
+
+@media (max-width: 599px) {
+
+    /* 320px is wider than the screen once the card's padding is taken off, so the
+       panel overflowed rather than wrapping. */
+    .au-detail-diff {
+        min-width: 0;
+    }
+
+    .au-detail {
+        flex-direction: column;
+    }
+
+    .au-detail-facts {
+        min-width: 0;
+    }
+}

@@ -2044,3 +2044,100 @@
         margin-left: 18px;
     }
 }
+
+/* ===========================================================================
+   Phone.
+
+   The trip grid keeps its shape rather than becoming cards: its shift column
+   spans every trip in a shift, so the cells do not line up with the header and
+   cannot be stacked. It scrolls sideways instead, with the shift held against
+   the left edge so a row never loses the thing that identifies it.
+   =========================================================================== */
+
+@media (max-width: 599px) {
+
+    /* The date sits under the title with room to be tapped, and the long form of
+       the operating window goes: the badge already carries the date. */
+    .dp-date-nav {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .dp-cycle-range {
+        display: none;
+    }
+
+    /* Search takes its own row above the actions, which then share the width two
+       at a time. Nothing is hidden behind another tap. */
+    .dp-toolbar {
+        gap: 8px;
+    }
+
+    .dp-search-wrap {
+        order: -1;
+        flex: 1 1 100%;
+    }
+
+    .dp-toolbar .dp-btn-primary,
+    .dp-toolbar .dp-btn-secondary,
+    .dp-toolbar .dp-btn-refresh {
+        flex: 1 1 calc(50% - 4px);
+        justify-content: center;
+    }
+
+    .dp-updated {
+        flex: 1 1 100%;
+        text-align: center;
+    }
+
+    /* Percentages of a 360px screen leave every column too narrow to read, so the
+       grid takes a real width and the wrapper's existing overflow does the rest. */
+    .dp-table {
+        min-width: 560px;
+    }
+
+    .dp-col-shift  { width: 88px; }
+    .dp-col-bus    { width: 128px; }
+    .dp-col-driver { width: 128px; }
+    .dp-col-status { width: 108px; }
+    .dp-col-actions{ width: 108px; }
+
+    .dp-table thead th:first-child,
+    .dp-shift-cell {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        background: #fff;
+        /* A shadow rather than the usual border: a collapsed table border does not
+           paint reliably on a cell that has been lifted out of the flow. */
+        border-right: none;
+        box-shadow: 1px 0 0 var(--rp-border);
+    }
+
+    .dp-table thead th:first-child {
+        z-index: 3;
+        background: #F8F9FA;
+    }
+
+    /* Full width for a dialog, anchored to the bottom where a thumb already is.
+       A 520px box inside a padded overlay left about 310px for a form. */
+    .tdm-overlay,
+    .atm-overlay,
+    .rtm-overlay,
+    .bm-overlay,
+    .dp-msg-overlay {
+        padding: 0;
+        align-items: flex-end;
+    }
+
+    .tdm-dialog,
+    .atm-dialog,
+    .rtm-dialog,
+    .bm-dialog,
+    .dp-msg-box {
+        max-width: none;
+        width: 100%;
+        max-height: 92vh;
+        border-radius: 16px 16px 0 0;
+    }
+}

@@ -127,7 +127,16 @@
 
                 refresh();
                 fetchPositions();
-                setInterval(fetchPositions, POLL_INTERVAL_MS);
+                setInterval(function () {
+                // A hidden tab is nobody looking. Skipping the request costs a
+                // few seconds of staleness on return, which the visibility
+                // handler below closes immediately.
+                if (document.hidden) return;
+                fetchPositions();
+            }, POLL_INTERVAL_MS);
+            document.addEventListener('visibilitychange', function () {
+                if (!document.hidden) fetchPositions();
+            });
 
                 // Safety nets: re-assert size after layout/paint settles and on full load.
                 setTimeout(refresh, 300);

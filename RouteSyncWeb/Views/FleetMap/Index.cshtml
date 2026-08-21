@@ -15,7 +15,17 @@
             <input type="text" id="fmSearch" class="fm-search-input" placeholder="Search" />
         </div>
 
-        <div class="fm-filters">
+        <button id="fmFilterToggle" class="fm-filter-toggle" type="button"
+                aria-expanded="false" aria-controls="fmFilters">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 5h18M6 12h12M10 19h4" />
+            </svg>
+            Filters
+        </button>
+
+        <div class="fm-filters" id="fmFilters">
             <div class="fm-filter">
                 <span class="fm-filter-label">Route:</span>
                 <div class="fm-select-wrap">
