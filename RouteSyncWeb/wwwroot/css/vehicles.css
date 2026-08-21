@@ -1,4 +1,4 @@
-/* Vehicles/_CameraCalibrateModal.cshtml */
+﻿/* Vehicles/_CameraCalibrateModal.cshtml */
     .cam-overlay {
         position: fixed;
         inset: 0;
@@ -1297,4 +1297,22 @@
         .vh-search-input { width: 100%; }
         .vh-filters { gap: 12px; }
         .vh-form-row { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 599px) {
+
+        .vh-action-overlay,
+        .cam-overlay {
+            padding: 0;
+            align-items: flex-end;
+        }
+
+        .vh-action-box,
+        .vh-action-box--wide,
+        .cam-panel {
+            max-width: none;
+            width: 100%;
+            max-height: 92vh;
+            border-radius: 16px 16px 0 0;
+        }
     }
