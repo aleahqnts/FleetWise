@@ -54,7 +54,11 @@
                             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                         </svg>
                     </span>
-                    <input asp-for="Password" class="input-field" placeholder="Password" />
+                    <input asp-for="Password" class="input-field" placeholder="Password" autocomplete="current-password" />
+                    <button type="button" class="eye" data-for="Password" aria-label="Show password">
+                        <svg class="i-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
+                        <svg class="i-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7c2 0 3.8.6 5.3 1.5M22 12s-3.5 7-10 7c-2 0-3.8-.6-5.3-1.5" /><path d="M3 3l18 18" /><circle cx="12" cy="12" r="3" /></svg>
+                    </button>
                 </div>
                 <span asp-validation-for="Password" class="field-error"></span>
 
@@ -68,3 +72,7 @@
 
     </div>
 </div>
+
+@section Scripts {
+    <script src="~/js/password-ui.js"></script>
+}
