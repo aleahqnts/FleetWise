@@ -734,12 +734,22 @@
         transform: translateY(0);
     }
 
-    /* Clear of the navigation button, which sits at the foot of the screen. */
+    /* Out of the way in the top corner, opposite Fit to buses, and closed until
+       asked for. It was over the map at the bottom left, where a phone has the
+       least room and the navigation bar already sits. */
     .fm-legend {
-        left: 12px;
-        bottom: 92px;
-        max-width: 172px;
-        padding: 8px 10px 10px;
+        left: auto;
+        bottom: auto;
+        top: 12px;
+        right: 12px;
+        max-width: 148px;
+        padding: 6px 8px 8px;
+    }
+
+    /* Pinching does this, and better. The buttons only take a corner of a screen
+       that has none to give. */
+    .leaflet-control-zoom {
+        display: none;
     }
 
     /* The map has no sidebar to clear any more. */
