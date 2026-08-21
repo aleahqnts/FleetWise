@@ -1,4 +1,4 @@
-@page "/profile"
+﻿@page "/profile"
 @implements IDisposable
 @using Microsoft.AspNetCore.Identity
 @inject SessionService Session
@@ -127,27 +127,13 @@ else
                 <div class="pw-row">
                     <input type="@(showCur ? "text" : "password")" @bind="curPwd" @bind:event="oninput" placeholder="Current password" />
                     <button type="button" class="eye" @onclick="@(() => showCur = !showCur)">
-                        @if (showCur)
-                        {
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7c2 0 3.8.6 5.3 1.5M22 12s-3.5 7-10 7c-2 0-3.8-.6-5.3-1.5" /><path d="M3 3l18 18" /><circle cx="12" cy="12" r="3" /></svg>
-                        }
-                        else
-                        {
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
-                        }
+                        <EyeIcon Shown="@showCur" />
                     </button>
                 </div>
                 <div class="pw-row">
                     <input type="@(showNew ? "text" : "password")" @bind="newPwd" @bind:event="oninput" placeholder="New password" />
                     <button type="button" class="eye" @onclick="@(() => showNew = !showNew)">
-                        @if (showNew)
-                        {
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7c2 0 3.8.6 5.3 1.5M22 12s-3.5 7-10 7c-2 0-3.8-.6-5.3-1.5" /><path d="M3 3l18 18" /><circle cx="12" cy="12" r="3" /></svg>
-                        }
-                        else
-                        {
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
-                        }
+                        <EyeIcon Shown="@showNew" />
                     </button>
                 </div>
                 @* Bound on oninput above, so these fill in as the driver types rather
@@ -161,14 +147,7 @@ else
                 <div class="pw-row">
                     <input type="@(showConfirm ? "text" : "password")" @bind="confirmPwd" @bind:event="oninput" placeholder="Confirm new password" />
                     <button type="button" class="eye" @onclick="@(() => showConfirm = !showConfirm)">
-                        @if (showConfirm)
-                        {
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7c2 0 3.8.6 5.3 1.5M22 12s-3.5 7-10 7c-2 0-3.8-.6-5.3-1.5" /><path d="M3 3l18 18" /><circle cx="12" cy="12" r="3" /></svg>
-                        }
-                        else
-                        {
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
-                        }
+                        <EyeIcon Shown="@showConfirm" />
                     </button>
                 </div>
 
