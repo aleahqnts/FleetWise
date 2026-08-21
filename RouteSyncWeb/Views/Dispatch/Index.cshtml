@@ -225,7 +225,9 @@
                                     <td>
                                         @if (trip.TripStatus == "Assignment Issue" && !string.IsNullOrEmpty(trip.AssignmentIssueReason))
                                         {
-                                            <span class="dp-badge @badgeClass dp-badge--hint" data-tip="@trip.AssignmentIssueReason">@badgeLabel</span>
+                                            <span class="dp-badge @badgeClass dp-badge--hint" data-tip="@trip.AssignmentIssueReason"
+                                                  tabindex="0" role="button"
+                                                  aria-label="@badgeLabel. Tap for the reason.">@badgeLabel</span>
                                         }
                                         else
                                         {
@@ -343,16 +345,34 @@
             current = null;
             if (tip) { tip.remove(); tip = null; }   // fully remove -> no ghost
         }
-        document.addEventListener('mouseover', e => {
+        if (window.matchMedia('(hover: hover)').matches) {
+            document.addEventListener('mouseover', e => {
+                const b = e.target.closest && e.target.closest('.dp-badge--hint');
+                if (b && b !== current) show(b);
+            });
+            // Any pointer movement away from the current badge clears the popup.
+            document.addEventListener('mousemove', e => {
+                if (!current) return;
+                const b = e.target.closest && e.target.closest('.dp-badge--hint');
+                if (b !== current) hide();
+            });
+        }
+
+        // A finger has no hover, and a keyboard has no pointer at all. Both open the
+        // popup the same way, and anything else on the page closes it.
+        // Opening only, never toggling: a tap on a focusable badge fires focusin
+        // before click, so a toggle would open the popup and shut it again in one
+        // touch. Tapping anywhere else closes it.
+        document.addEventListener('click', e => {
             const b = e.target.closest && e.target.closest('.dp-badge--hint');
-            if (b && b !== current) show(b);
+            if (b) show(b); else hide();
         });
-        // Any pointer movement away from the current badge clears the popup.
-        document.addEventListener('mousemove', e => {
-            if (!current) return;
+        document.addEventListener('focusin', e => {
             const b = e.target.closest && e.target.closest('.dp-badge--hint');
-            if (b !== current) hide();
+            if (b) show(b); else if (current) hide();
         });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+
         window.addEventListener('scroll', hide, true);
     })();
 
