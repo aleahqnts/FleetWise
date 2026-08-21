@@ -1,4 +1,4 @@
-/* Shared/_Sidebar.cshtml */
+﻿/* Shared/_Sidebar.cshtml */
     /* Variables. */
     :root {
         --fw-sidebar-collapsed: 72px;
@@ -246,3 +246,233 @@
         .fw-sidebar__logo-text,
         .fw-sidebar__profile-info { transition: none; }
     }
+
+/* ===========================================================================
+   Touch navigation.
+
+   Gated on the pointer, not the width. The rail's problem is that it opens on
+   hover, which is a property of the input device rather than the screen: a
+   desktop window dragged narrow still has a mouse and keeps the rail, while a
+   phone gets the fan at any width it reports.
+   =========================================================================== */
+
+.fw-fan {
+    display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+
+    .fw-sidebar {
+        display: none;
+    }
+
+    .main-area {
+        margin-left: 0;
+    }
+
+    .fw-fan {
+        display: block;
+        /* Chosen by measuring, not by eye: the widest button that keeps every pair
+           clear of its neighbours, and every button clear of the screen edge, at 360
+           through 414px and for every count of destinations a role can be granted.
+           Clearance at the tightest is about 10px. Changing either radius or the
+           button size below re-opens that, so change them together. */
+        --fan-rx: 138px;
+        --fan-ry: 210px;
+    }
+
+    .fw-fan__backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, .45);
+        z-index: 1190;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 180ms ease, visibility 0s 180ms;
+    }
+
+    .fw-fan--open .fw-fan__backdrop {
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 180ms ease;
+    }
+
+    /* The list is the arc's origin, sitting behind the button it fans out of. */
+    .fw-fan__list {
+        position: fixed;
+        left: 50%;
+        bottom: 50px;
+        width: 0;
+        height: 0;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        z-index: 1200;
+    }
+
+    .fw-fan__item {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        /* Collapsed onto the button, and released along its own angle when open. */
+        transform: translate(-50%, 50%) scale(.4);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: transform 260ms cubic-bezier(.2, .8, .3, 1), opacity 160ms ease,
+                    visibility 0s 260ms;
+    }
+
+    .fw-fan--open .fw-fan__item {
+        transform:
+            translate(-50%, 50%)
+            translate(calc(var(--fan-rx) * var(--fan-x)), calc(var(--fan-ry) * var(--fan-y)))
+            scale(1);
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transition: transform 260ms cubic-bezier(.2, .8, .3, 1), opacity 160ms ease;
+        /* Opens outward from the button rather than all at once. */
+        transition-delay: calc(var(--fan-i) * 28ms);
+    }
+
+    .fw-fan__link {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        width: 52px;
+        min-height: 52px;
+        padding: 7px 2px;
+        border-radius: 14px;
+        background: var(--fw-bg);
+        box-shadow: 0 6px 20px rgba(15, 23, 42, .22);
+        color: var(--fw-text-dark);
+        text-decoration: none;
+    }
+
+    .fw-fan__link--active {
+        background: var(--fw-teal);
+        color: #fff;
+    }
+
+    .fw-fan__icon svg {
+        width: 20px;
+        height: 22px;
+        display: block;
+    }
+
+    .fw-fan__label {
+        font-size: .6rem;
+        font-weight: 600;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    /* Name and sign-out. The rail keeps both behind hover, so without this a phone
+       has no way to see who is signed in or to sign out. */
+    .fw-fan__account {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        bottom: calc(50px + var(--fan-ry) + 44px);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 14px;
+        border-radius: 14px;
+        background: var(--fw-bg);
+        box-shadow: 0 6px 20px rgba(15, 23, 42, .22);
+        z-index: 1200;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(8px);
+        transition: opacity 180ms ease, transform 180ms ease, visibility 0s 180ms;
+    }
+
+    .fw-fan--open .fw-fan__account {
+        opacity: 1;
+        visibility: visible;
+        transform: none;
+        transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .fw-fan__who {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    .fw-fan__name {
+        font-size: .82rem;
+        font-weight: 700;
+        color: var(--fw-text-dark);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .fw-fan__role {
+        font-size: .7rem;
+        color: var(--fw-text-muted);
+    }
+
+    .fw-fan__logout {
+        border: 1px solid var(--fw-divider);
+        background: none;
+        border-radius: 10px;
+        padding: 9px 14px;
+        min-height: 44px;
+        font-size: .78rem;
+        font-weight: 600;
+        color: #C0392B;
+        white-space: nowrap;
+    }
+
+    .fw-fan__toggle {
+        position: fixed;
+        left: 50%;
+        bottom: 22px;
+        transform: translateX(-50%);
+        width: 56px;
+        height: 56px;
+        border: none;
+        border-radius: 50%;
+        background: var(--fw-teal);
+        color: #fff;
+        box-shadow: 0 8px 24px rgba(74, 173, 168, .45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1210;
+    }
+
+    .fw-fan__toggle svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    .fw-fan__toggle-close,
+    .fw-fan--open .fw-fan__toggle-open {
+        display: none;
+    }
+
+    .fw-fan--open .fw-fan__toggle-close {
+        display: block;
+    }
+
+    /* The button sits over the foot of every page, so the last row of content needs
+       somewhere to end that is not underneath it. */
+    .main-content {
+        padding-bottom: 96px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fw-fan__item,
+    .fw-fan__backdrop,
+    .fw-fan__account {
+        transition: none;
+    }
+}

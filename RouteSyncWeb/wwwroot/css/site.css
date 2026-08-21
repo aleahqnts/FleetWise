@@ -1,4 +1,4 @@
-* {
+﻿* {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
@@ -46,6 +46,19 @@
     padding: 40px 90px;
     background: #f8f9fa;
     overflow-y: auto;
+}
+
+/* Phone. The desktop padding above is wider than a handset can spare, and the topbar
+   is taller than one should give up to a bar with nothing in it. */
+@media (max-width: 599px) {
+    .topbar {
+        height: 56px;
+        padding: 0 16px;
+    }
+
+    .main-content {
+        padding: 16px;
+    }
 }
 
 /* ---------------------------------------------------------------------------
