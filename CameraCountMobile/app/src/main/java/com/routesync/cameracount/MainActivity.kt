@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -198,10 +199,13 @@ private fun SetupCard(vm: CounterViewModel, onBind: (String, String, (String?) -
         Text("Bind this phone to the bus it is mounted in.", color = RsColor.Muted)
         Spacer(Modifier.height(20.dp))
 
+        var showPasscode by remember { mutableStateOf(false) }
         OutlinedTextField(
             passcode, { passcode = it; bindError = null }, singleLine = true,
             label = { Text("Fleet passcode") }, modifier = Modifier.fillMaxWidth(),
-            visualTransformation = PasswordVisualTransformation(),
+            visualTransformation =
+                if (showPasscode) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = { PasscodeReveal(showPasscode) { showPasscode = !showPasscode } },
             supportingText = {
                 if (!passOk) Text("Enter the fleet passcode to load the bus list.", color = RsColor.Muted)
             }
@@ -432,10 +436,25 @@ private fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> 
     ) { Text(text, fontWeight = FontWeight.Bold) }
 }
 
+/**
+ * The button that reveals a passcode field, and the icon saying which state it is in.
+ * Shared by both passcode fields so the two cannot drift apart.
+ */
+@Composable
+private fun PasscodeReveal(shown: Boolean, onToggle: () -> Unit) {
+    IconButton(onClick = onToggle) {
+        Icon(
+            if (shown) RsIcons.EyeOpen else RsIcons.EyeOff,
+            contentDescription = if (shown) "Hide passcode" else "Show passcode"
+        )
+    }
+}
+
 @Composable
 private fun UnbindDialog(vm: CounterViewModel, dismiss: () -> Unit) {
     var passcode by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
+    var showPasscode by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = dismiss,
         title = { Text("Change vehicle", color = RsColor.Navy, fontWeight = FontWeight.Bold) },
@@ -446,7 +465,9 @@ private fun UnbindDialog(vm: CounterViewModel, dismiss: () -> Unit) {
                 OutlinedTextField(
                     passcode, { passcode = it; error = false }, singleLine = true,
                     label = { Text("Passcode") }, isError = error,
-                    visualTransformation = PasswordVisualTransformation()
+                    visualTransformation =
+                        if (showPasscode) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = { PasscodeReveal(showPasscode) { showPasscode = !showPasscode } }
                 )
                 if (error) Text("Wrong passcode.", color = RsColor.Error)
             }
