@@ -61,3 +61,61 @@
     }
     .sch-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
     .sch-toast-ico { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:rgba(255,255,255,.22); font-size:.8rem; }
+
+    /* The day picker is only a control on a phone. A wide screen shows the whole
+       week, so choosing a day there would hide six columns that already fit. */
+    .sch-days { display: none; }
+
+    @media (max-width: 599px) {
+
+        .sch-wrap { padding: 14px 12px 96px; }
+
+        .sch-toolbar { gap: 8px; }
+        .sch-week-label { min-width: 0; flex: 1 1 100%; order: -1; }
+        .sch-btn-save { margin-left: 0; flex: 1 1 100%; }
+        .sch-pick { flex: 1 1 100%; }
+        .sch-pick input[type=date] { flex: 1; min-width: 0; }
+
+        .sch-days {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            margin-bottom: 12px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .sch-day-chip {
+            flex: 0 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1px;
+            min-width: 56px;
+            min-height: 46px;
+            padding: 6px 8px;
+            border: 1.5px solid #E2E8F0;
+            border-radius: 10px;
+            background: #fff;
+            color: #2D3748;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        .sch-day-chip--on { border-color: #4AADA8; background: #EAF7F5; color: #26706c; }
+        .sch-chip-name { font-size: .76rem; font-weight: 700; }
+        .sch-chip-num { font-size: .64rem; color: #9AA5B4; }
+        .sch-day-chip--on .sch-chip-num { color: #4d8a86; }
+        .sch-day-chip--all { justify-content: center; font-size: .76rem; font-weight: 700; }
+
+        /* Hidden from view only. Every cell stays in the page, so a save still
+           carries the whole week whichever day is on screen. */
+        .sch-day-off { display: none; }
+
+        /* One column needs no scrolling, and the shift column has nothing to stick to. */
+        .sch-table { min-width: 0; }
+        .sch-cell-td { min-width: 0; }
+        .sch-shift-col { position: static; width: 88px; }
+
+        .sch-modal-overlay { padding: 0; align-items: flex-end; }
+        .sch-modal { max-width: none; border-radius: 16px 16px 0 0; }
+    }
