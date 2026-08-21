@@ -302,15 +302,17 @@ body {
         color: #3ab5a4;
     }
 
-    .eye .i-hide {
+    /* The icon reports the state of the field rather than the action on offer: a slashed
+       eye while the password is hidden, an open one while it is readable. */
+    .eye .i-eye {
         display: none;
     }
 
-    .eye.showing .i-show {
+    .eye.showing .i-eye-off {
         display: none;
     }
 
-    .eye.showing .i-hide {
+    .eye.showing .i-eye {
         display: block;
     }
 

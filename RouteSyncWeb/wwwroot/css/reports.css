@@ -871,7 +871,7 @@
     background: #fff;
     border-radius: 20px;
     width: 100%;
-    max-width: min(1180px, 96vw);
+    max-width: min(1240px, 96vw);
     max-height: 92vh;
     display: flex;
     flex-direction: column;
@@ -931,7 +931,7 @@
 
     .rg-body {
     display: grid;
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 320px 1fr;
     flex: 1;
     overflow: hidden;
     }
@@ -961,21 +961,25 @@
     gap: 5px;
     }
 
-    /* Two date boxes share the width the single one used to have, so adding an end
-       date did not make the filter column any taller. */
+    /* The two date boxes sit side by side while there is room for both, and drop one
+       under the other when there is not. A date box that cannot show dd/mm/yyyy in full
+       is worse than a taller filter column, and the column has vertical room to spare. */
     .rg-field-row {
     display: flex;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 10px;
     }
 
         .rg-field-row .rg-field {
-        flex: 1;
+        flex: 1 1 130px;
         min-width: 0;
         }
 
         .rg-field-row .rg-input {
         width: 100%;
         min-width: 0;
+        padding-left: 8px;
+        padding-right: 8px;
         }
 
     .rg-label {
