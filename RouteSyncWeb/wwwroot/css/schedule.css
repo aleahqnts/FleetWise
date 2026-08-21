@@ -1,4 +1,4 @@
-/* Schedule/Index.cshtml */
+﻿/* Schedule/Index.cshtml */
     .sch-wrap { padding: 20px 24px 60px; font-family: 'Segoe UI', sans-serif; }
     .sch-toolbar { display:flex; align-items:center; gap:18px; flex-wrap:wrap; margin-bottom:10px; }
     .sch-week-nav { display:flex; align-items:center; gap:10px; }
@@ -117,5 +117,6 @@
         .sch-shift-col { position: static; width: 88px; }
 
         .sch-modal-overlay { padding: 0; align-items: flex-end; }
-        .sch-modal { max-width: none; border-radius: 16px 16px 0 0; }
+        .sch-modal { max-width: none; max-height: 92vh; overflow-y: auto;
+                     border-radius: 16px 16px 0 0; }
     }

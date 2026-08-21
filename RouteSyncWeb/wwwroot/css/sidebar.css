@@ -251,12 +251,14 @@
    Touch navigation.
 
    Gated on the pointer, not the width. The rail's problem is that it opens on
-   hover, which is a property of the input device rather than the screen: a
-   desktop window dragged narrow still has a mouse and keeps the rail, while a
-   phone gets the fan at any width it reports.
+   hover, which belongs to the input device rather than the screen: a desktop
+   window dragged narrow still has a mouse and keeps the rail, while a phone
+   gets the bar at any width it reports.
    =========================================================================== */
 
-.fw-fan {
+.fw-bar,
+.fw-sheet,
+.fw-sheet-backdrop {
     display: none;
 }
 
@@ -270,142 +272,124 @@
         margin-left: 0;
     }
 
-    .fw-fan {
-        display: block;
-        /* Chosen by measuring, not by eye: the widest button that keeps every pair
-           clear of its neighbours, and every button clear of the screen edge, at 360
-           through 414px and for every count of destinations a role can be granted.
-           Clearance at the tightest is about 10px. Changing either radius or the
-           button size below re-opens that, so change them together. */
-        --fan-rx: 138px;
-        --fan-ry: 210px;
+    .fw-bar {
+        display: flex;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1000;
+        background: var(--fw-bg);
+        border-top: 1px solid var(--fw-divider);
+        /* Clears the home indicator on a phone that has one. */
+        padding-bottom: env(safe-area-inset-bottom, 0);
+        box-shadow: 0 -2px 12px rgba(15, 23, 42, .08);
     }
 
-    .fw-fan__backdrop {
+    .fw-bar__link {
+        flex: 1 1 0;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        min-height: 56px;
+        padding: 8px 2px;
+        border: none;
+        background: none;
+        color: var(--fw-text-muted);
+        font-family: 'Segoe UI', sans-serif;
+        text-decoration: none;
+    }
+
+    .fw-bar__link--active {
+        color: var(--fw-teal);
+    }
+
+    .fw-bar__icon svg {
+        width: 22px;
+        height: 22px;
+        display: block;
+    }
+
+    .fw-bar__label {
+        font-size: .64rem;
+        font-weight: 600;
+        line-height: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
+    /* What the bar has no room for, plus the account and the way out. */
+    .fw-sheet-backdrop {
+        display: block;
         position: fixed;
         inset: 0;
+        z-index: 1010;
         background: rgba(15, 23, 42, .45);
-        z-index: 1190;
         opacity: 0;
         visibility: hidden;
         transition: opacity 180ms ease, visibility 0s 180ms;
     }
 
-    .fw-fan--open .fw-fan__backdrop {
+    .fw-sheet {
+        display: block;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1020;
+        max-height: 76vh;
+        overflow-y: auto;
+        padding: 8px 0 calc(16px + env(safe-area-inset-bottom, 0));
+        background: var(--fw-bg);
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -8px 30px rgba(15, 23, 42, .22);
+        transform: translateY(100%);
+        transition: transform 220ms cubic-bezier(.2, .8, .3, 1);
+    }
+
+    .fw-sheet--open {
+        transform: translateY(0);
+    }
+
+    .fw-sheet--open + .fw-bar,
+    .fw-sheet-backdrop--open {
         opacity: 1;
         visibility: visible;
         transition: opacity 180ms ease;
     }
 
-    /* The list is the arc's origin, sitting behind the button it fans out of. */
-    .fw-fan__list {
-        position: fixed;
-        left: 50%;
-        bottom: 50px;
-        width: 0;
-        height: 0;
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        z-index: 1200;
+    .fw-sheet__grip {
+        width: 38px;
+        height: 4px;
+        margin: 4px auto 12px;
+        border-radius: 2px;
+        background: var(--fw-divider);
     }
 
-    .fw-fan__item {
-        position: absolute;
-        left: 0;
-        bottom: 0;
-        /* Collapsed onto the button, and released along its own angle when open. */
-        transform: translate(-50%, 50%) scale(.4);
-        opacity: 0;
-        visibility: hidden;
-        pointer-events: none;
-        transition: transform 260ms cubic-bezier(.2, .8, .3, 1), opacity 160ms ease,
-                    visibility 0s 260ms;
-    }
-
-    .fw-fan--open .fw-fan__item {
-        transform:
-            translate(-50%, 50%)
-            translate(calc(var(--fan-rx) * var(--fan-x)), calc(var(--fan-ry) * var(--fan-y)))
-            scale(1);
-        opacity: 1;
-        visibility: visible;
-        pointer-events: auto;
-        transition: transform 260ms cubic-bezier(.2, .8, .3, 1), opacity 160ms ease;
-        /* Opens outward from the button rather than all at once. */
-        transition-delay: calc(var(--fan-i) * 28ms);
-    }
-
-    .fw-fan__link {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 3px;
-        width: 52px;
-        min-height: 52px;
-        padding: 7px 2px;
-        border-radius: 14px;
-        background: var(--fw-bg);
-        box-shadow: 0 6px 20px rgba(15, 23, 42, .22);
-        color: var(--fw-text-dark);
-        text-decoration: none;
-    }
-
-    .fw-fan__link--active {
-        background: var(--fw-teal);
-        color: #fff;
-    }
-
-    .fw-fan__icon svg {
-        width: 20px;
-        height: 22px;
-        display: block;
-    }
-
-    .fw-fan__label {
-        font-size: .6rem;
-        font-weight: 600;
-        line-height: 1;
-        white-space: nowrap;
-    }
-
-    /* Name and sign-out. The rail keeps both behind hover, so without this a phone
-       has no way to see who is signed in or to sign out. */
-    .fw-fan__account {
-        position: fixed;
-        left: 16px;
-        right: 16px;
-        bottom: calc(50px + var(--fan-ry) + 44px);
+    .fw-sheet__account {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        padding: 10px 14px;
-        border-radius: 14px;
-        background: var(--fw-bg);
-        box-shadow: 0 6px 20px rgba(15, 23, 42, .22);
-        z-index: 1200;
-        opacity: 0;
-        visibility: hidden;
-        transform: translateY(8px);
-        transition: opacity 180ms ease, transform 180ms ease, visibility 0s 180ms;
+        margin: 0 16px 8px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #F8FAFB;
     }
 
-    .fw-fan--open .fw-fan__account {
-        opacity: 1;
-        visibility: visible;
-        transform: none;
-        transition: opacity 180ms ease, transform 180ms ease;
-    }
-
-    .fw-fan__who {
+    .fw-sheet__who {
         display: flex;
         flex-direction: column;
         min-width: 0;
     }
 
-    .fw-fan__name {
-        font-size: .82rem;
+    .fw-sheet__name {
+        font-size: .86rem;
         font-weight: 700;
         color: var(--fw-text-dark);
         overflow: hidden;
@@ -413,66 +397,63 @@
         white-space: nowrap;
     }
 
-    .fw-fan__role {
-        font-size: .7rem;
+    .fw-sheet__role {
+        font-size: .72rem;
         color: var(--fw-text-muted);
     }
 
-    .fw-fan__logout {
-        border: 1px solid var(--fw-divider);
-        background: none;
-        border-radius: 10px;
-        padding: 9px 14px;
+    .fw-sheet__logout {
+        flex-shrink: 0;
         min-height: 44px;
-        font-size: .78rem;
-        font-weight: 600;
+        padding: 9px 16px;
+        border: 1px solid var(--fw-divider);
+        border-radius: 10px;
+        background: #fff;
         color: #C0392B;
+        font-size: .8rem;
+        font-weight: 600;
         white-space: nowrap;
     }
 
-    .fw-fan__toggle {
-        position: fixed;
-        left: 50%;
-        bottom: 22px;
-        transform: translateX(-50%);
-        width: 56px;
-        height: 56px;
-        border: none;
-        border-radius: 50%;
-        background: var(--fw-teal);
-        color: #fff;
-        box-shadow: 0 8px 24px rgba(74, 173, 168, .45);
+    .fw-sheet__list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .fw-sheet__link {
         display: flex;
         align-items: center;
-        justify-content: center;
-        z-index: 1210;
+        gap: 14px;
+        min-height: 52px;
+        padding: 0 22px;
+        color: var(--fw-text-dark);
+        font-size: .92rem;
+        font-weight: 600;
+        text-decoration: none;
     }
 
-    .fw-fan__toggle svg {
-        width: 24px;
-        height: 24px;
+    .fw-sheet__link--active {
+        color: var(--fw-teal);
+        background: var(--fw-teal-light);
     }
 
-    .fw-fan__toggle-close,
-    .fw-fan--open .fw-fan__toggle-open {
-        display: none;
-    }
-
-    .fw-fan--open .fw-fan__toggle-close {
+    .fw-sheet__icon svg {
+        width: 20px;
+        height: 20px;
         display: block;
     }
 
-    /* The button sits over the foot of every page, so the last row of content needs
+    /* The bar sits over the foot of every page, so the last row of content needs
        somewhere to end that is not underneath it. */
     .main-content {
-        padding-bottom: 96px;
+        padding-bottom: calc(76px + env(safe-area-inset-bottom, 0));
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .fw-fan__item,
-    .fw-fan__backdrop,
-    .fw-fan__account {
+    .fw-sheet,
+    .fw-sheet-backdrop {
         transition: none;
     }
 }
