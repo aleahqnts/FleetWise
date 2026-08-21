@@ -9,7 +9,11 @@ var builder = WebApplication.CreateBuilder(args);
 // overrides the placeholder in appsettings.json when present. Added last, so it also takes
 // precedence over the environment: a deployed host with no such file sets Supabase__Key
 // instead and this line does nothing.
-builder.Configuration.AddJsonFile("appsettings.Secret.json", optional: true, reloadOnChange: true);
+//
+// The file is read once rather than watched. Watching costs a file system watcher, which a
+// container has few of, and buys nothing: the Supabase client is a singleton that reads the
+// key when it is first resolved, so a later reload could never reach it.
+builder.Configuration.AddJsonFile("appsettings.Secret.json", optional: true, reloadOnChange: false);
 
 // Refuse to start on the wrong key.
 //
