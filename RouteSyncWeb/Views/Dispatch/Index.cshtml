@@ -191,7 +191,8 @@
 
                                 <tr class="dp-trip-row"
                                     data-trip-status="@trip.TripStatus"
-                                    data-shift-id="@shiftId">
+                                    data-shift-id="@shiftId"
+                                    data-shift-label="@shift.ShiftType @(shift.ShiftStartTime) to @(shift.ShiftEndTime)@(shift.IsOvernight ? " +1" : "")">
                                     @if (i == 0)
                                     {
                                         <td class="dp-shift-cell" rowspan="@shiftTrips.Count">
@@ -203,7 +204,7 @@
                                             }
                                         </td>
                                     }
-                                    <td>
+                                    <td data-label="Bus">
                                         <div class="dp-status-wrap">
                                             <span class="dp-status-dot @vDotClass"></span>
                                             <span class="dp-tooltip">@vTooltip</span>
@@ -215,14 +216,14 @@
                                             }
                                         </div>
                                     </td>
-                                    <td>
+                                    <td data-label="Driver">
                                         <div class="dp-status-wrap">
                                             <span class="dp-status-dot @dDotClass"></span>
                                             <span class="dp-tooltip">@dTooltip</span>
                                             @trip.DriverName
                                         </div>
                                     </td>
-                                    <td>
+                                    <td data-label="Status">
                                         @if (trip.TripStatus == "Assignment Issue" && !string.IsNullOrEmpty(trip.AssignmentIssueReason))
                                         {
                                             <span class="dp-badge @badgeClass dp-badge--hint" data-tip="@trip.AssignmentIssueReason"
@@ -234,7 +235,7 @@
                                             <span class="dp-badge @badgeClass">@badgeLabel</span>
                                         }
                                     </td>
-                                    <td>
+                                    <td data-label="Actions">
                                         <div class="dp-actions-cell">
                                             <button class="rp-btn-view" onclick="openTripModal('@trip.TripId')">View</button>
                                             <button class="dp-btn-reassign"

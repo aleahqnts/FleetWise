@@ -186,8 +186,23 @@
 }
 
 <nav class="fw-bar" id="fwBar" aria-label="Main navigation">
-    @foreach (var item in barItems)
+    @{ var half = (barItems.Count + 1) / 2; }
+
+    @for (int i = 0; i < barItems.Count; i++)
     {
+        if (i == half)
+        {
+            <button type="button" class="fw-bar__more" id="fwMoreBtn"
+                    aria-expanded="false" aria-controls="fwSheet" aria-label="More">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                     stroke-linecap="round" aria-hidden="true">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+            </button>
+        }
+
+        var item = barItems[i];
         var active = IsActive(item.Controller, item.Action);
         <a asp-controller="@item.Controller" asp-action="@item.Action"
            class="fw-bar__link @(active ? "fw-bar__link--active" : "")"
@@ -196,19 +211,6 @@
             <span class="fw-bar__label">@item.Short</span>
         </a>
     }
-
-    <button type="button" class="fw-bar__link fw-bar__more" id="fwMoreBtn"
-            aria-expanded="false" aria-controls="fwSheet">
-        <span class="fw-bar__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round">
-                <line x1="4" y1="7" x2="20" y2="7" />
-                <line x1="4" y1="12" x2="20" y2="12" />
-                <line x1="4" y1="17" x2="20" y2="17" />
-            </svg>
-        </span>
-        <span class="fw-bar__label">More</span>
-    </button>
 </nav>
 
 <div class="fw-sheet-backdrop" id="fwSheetBackdrop"></div>

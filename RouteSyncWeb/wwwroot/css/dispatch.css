@@ -1,4 +1,4 @@
-/* Dispatch/Index.cshtml */
+﻿/* Dispatch/Index.cshtml */
     .dp-card-click { cursor:pointer; transition:box-shadow .15s, transform .15s; }
     .dp-card-click:hover { box-shadow:0 6px 20px rgba(231,76,60,.22); transform:translateY(-2px); }
     .dp-trip-row.dp-row-flag > td { background:#FEECEC !important; }
@@ -2048,16 +2048,17 @@
 /* ===========================================================================
    Phone.
 
-   The trip grid keeps its shape rather than becoming cards: its shift column
-   spans every trip in a shift, so the cells do not line up with the header and
-   cannot be stacked. It scrolls sideways instead, with the shift held against
-   the left edge so a row never loses the thing that identifies it.
+   The trip grid becomes a list of cards. Scrolling a table sideways to reach the
+   Reassign button is not something anyone should have to do while standing at a
+   terminal, so the columns are stacked and each value is named.
+
+   The shift is the one thing that cannot come from the header, because its cell
+   spans every trip in the shift. It rides on the row instead and prints as the
+   card's heading.
    =========================================================================== */
 
 @media (max-width: 599px) {
 
-    /* The date sits under the title with room to be tapped, and the long form of
-       the operating window goes: the badge already carries the date. */
     .dp-date-nav {
         width: 100%;
         justify-content: space-between;
@@ -2067,8 +2068,6 @@
         display: none;
     }
 
-    /* Search takes its own row above the actions, which then share the width two
-       at a time. Nothing is hidden behind another tap. */
     .dp-toolbar {
         gap: 8px;
     }
@@ -2090,37 +2089,123 @@
         text-align: center;
     }
 
-    /* Percentages of a 360px screen leave every column too narrow to read, so the
-       grid takes a real width and the wrapper's existing overflow does the rest. */
-    .dp-table {
-        min-width: 560px;
+    /* Cards, not columns. Nothing scrolls sideways. */
+    .dp-table,
+    .dp-table tbody,
+    .dp-table tr,
+    .dp-table td {
+        display: block;
+        width: 100%;
+        min-width: 0;
     }
 
-    .dp-col-shift  { width: 88px; }
-    .dp-col-bus    { width: 128px; }
-    .dp-col-driver { width: 128px; }
-    .dp-col-status { width: 108px; }
-    .dp-col-actions{ width: 108px; }
-
-    .dp-table thead th:first-child,
+    .dp-table thead,
+    .dp-table colgroup,
     .dp-shift-cell {
-        position: sticky;
-        left: 0;
-        z-index: 2;
+        display: none;
+    }
+
+    .rp-table-wrap {
+        overflow-x: visible;
+    }
+
+    .dp-trip-row {
+        position: relative;
+        margin: 0 12px 10px;
+        padding: 8px 14px 10px;
+        border: 1px solid var(--rp-border);
+        border-radius: 12px;
         background: #fff;
-        /* A shadow rather than the usual border: a collapsed table border does not
-           paint reliably on a cell that has been lifted out of the flow. */
-        border-right: none;
-        box-shadow: 1px 0 0 var(--rp-border);
     }
 
-    .dp-table thead th:first-child {
-        z-index: 3;
-        background: #F8F9FA;
+    /* The shift the card belongs to, carried on the row itself. */
+    .dp-trip-row[data-shift-label]::before {
+        content: attr(data-shift-label);
+        display: block;
+        margin-bottom: 6px;
+        color: var(--rp-muted);
+        font-size: .7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .03em;
     }
 
-    /* Full width for a dialog, anchored to the bottom where a thumb already is.
-       A 520px box inside a padded overlay left about 310px for a form. */
+    .dp-table td {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 7px 0;
+        border: none;
+        text-align: right;
+    }
+
+    .dp-table td + td {
+        border-top: 1px solid #F1F5F9;
+    }
+
+    .dp-table td[data-label]::before {
+        content: attr(data-label);
+        flex: 0 0 auto;
+        color: var(--rp-muted);
+        font-size: .72rem;
+        font-weight: 600;
+        text-align: left;
+    }
+
+    /* The empty state spans the card rather than sitting against its right edge. */
+    .dp-empty-row {
+        margin: 0 12px 10px;
+    }
+
+    .dp-empty-cell {
+        justify-content: center;
+        text-align: center;
+    }
+
+    .dp-status-wrap {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        row-gap: 2px;
+    }
+
+    /* The dot's meaning was only available by hovering it, which a finger cannot do. */
+    .dp-tooltip {
+        position: static;
+        order: 9;
+        flex-basis: 100%;
+        opacity: 1;
+        padding: 0;
+        background: none;
+        border-radius: 0;
+        color: var(--rp-muted);
+        font-size: .68rem;
+        text-align: right;
+        white-space: normal;
+    }
+
+    /* Three actions across the card, each wide enough to hit. */
+    .dp-actions-cell {
+        display: flex;
+        flex: 1;
+        gap: 8px;
+    }
+
+    .dp-actions-cell > button {
+        flex: 1;
+        min-height: 40px;
+        justify-content: center;
+    }
+
+    .dp-actions-cell > .dp-btn-msg {
+        flex: 0 0 44px;
+    }
+
+    /* The legend is a reference, not something to read on the way past. */
+    .dp-legend-card {
+        margin: 0 12px 12px;
+    }
+
     .tdm-overlay,
     .atm-overlay,
     .rtm-overlay,
@@ -2138,6 +2223,7 @@
         max-width: none;
         width: 100%;
         max-height: 92vh;
+        overflow-y: auto;
         border-radius: 16px 16px 0 0;
     }
 }
