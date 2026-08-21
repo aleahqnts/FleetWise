@@ -1,8 +1,6 @@
-using FleetWise.Data;
-using FleetWise.Services;
+﻿using FleetWise.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.HttpOverrides;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -32,14 +30,22 @@ if (supabaseKey is null || !supabaseKey.StartsWith("sb_secret_", StringCompariso
         "The key is never committed, so ask for it directly.");
 }
 
-// Add services to the container.
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString));
-builder.Services.AddDatabaseDeveloperPageExceptionFilter();
-
-builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
-    .AddEntityFrameworkStores<ApplicationDbContext>();
+// A hosting platform terminates TLS at its edge and passes plain HTTP to the container, so
+// the request arrives claiming to be insecure and carrying the edge's address rather than
+// the caller's. Reading the forwarding headers restores both. Without it the HTTPS redirect
+// below never sees a secure request and loops, and the sign-in rate limit partitions every
+// caller into one shared bucket.
+//
+// The headers are accepted from any source, since the platform assigns the proxy address
+// and it is not known ahead of time. That is safe only while the edge is the sole route in.
+// Publishing the container port directly would let a caller state its own address and step
+// around the limit.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -121,15 +127,16 @@ builder.Services.AddHostedService<TripReaperService>();
 
 var app = builder.Build();
 
+// Runs before anything reads the scheme or the caller address, so the rest of the pipeline
+// sees the request as the browser made it.
+app.UseForwardedHeaders();
+
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseMigrationsEndPoint();
-}
-else
+if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+    // HSTS holds for 30 days, so a browser that receives it keeps refusing plain HTTP for
+    // the domain long afterwards. Settle on the final domain before this reaches anyone.
     app.UseHsts();
 }
 
@@ -201,8 +208,5 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}")
     .WithStaticAssets();
-
-app.MapRazorPages()
-   .WithStaticAssets();
 
 app.Run();
