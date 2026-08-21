@@ -309,9 +309,15 @@
             <div class="rg-filters">
                 <div class="rg-filters-heading">Filters</div>
 
-                <div class="rg-field">
-                    <label class="rg-label">Date</label>
-                    <input type="date" class="rg-input" id="rgDate" />
+                <div class="rg-field-row">
+                    <div class="rg-field">
+                        <label class="rg-label">From</label>
+                        <input type="date" class="rg-input" id="rgDate" />
+                    </div>
+                    <div class="rg-field">
+                        <label class="rg-label">To</label>
+                        <input type="date" class="rg-input" id="rgDateTo" />
+                    </div>
                 </div>
 
                 <div class="rg-field">
@@ -1027,6 +1033,7 @@
     const fmtPdfBtn     = document.getElementById('rgFmtPdf');
     const fmtCsvBtn     = document.getElementById('rgFmtCsv');
     const dateInput     = document.getElementById('rgDate');
+    const dateToInput   = document.getElementById('rgDateTo');
     const routeSelect   = document.getElementById('rgRoute');
     const driverSelect  = document.getElementById('rgDriver');
     const vehicleSelect = document.getElementById('rgVehicle');
@@ -1055,8 +1062,11 @@
     driverField.style.display  = cfg.showDriver  ? '' : 'none';
     vehicleField.style.display = cfg.showVehicle ? '' : 'none';
 
-    // Default date to today
-    dateInput.value = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Manila' }).split(',')[0];
+    // Both ends default to today, so opening the dialog offers the single day it always did.
+    const today = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Manila' }).split(',')[0];
+    dateInput.value   = today;
+    dateToInput.value = today;
+    syncDateBounds();
 
     // Reset all selects
     routeSelect.value  = '';
@@ -1186,6 +1196,7 @@
     function buildParams() {
     const p = new URLSearchParams({ reportType: currentReportType });
     if (dateInput.value)     p.set('date',      dateInput.value);
+    if (dateToInput.value)   p.set('dateTo',    dateToInput.value);
     if (routeSelect.value)   p.set('routeId',   routeSelect.value);
     if (driverSelect.value)  p.set('driverId',  driverSelect.value);
     if (vehicleSelect.value) p.set('vehicleId', vehicleSelect.value);
@@ -1193,11 +1204,7 @@
     }
 
     function renderPreview(data) {
-    const dateLabel = dateInput.value
-    ? new Date(dateInput.value + 'T00:00:00').toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
-    : new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
-
-    previewMeta.textContent  = dateLabel;
+    previewMeta.textContent  = data.period || '';
     previewTitle.textContent = REPORT_CONFIG[currentReportType].title + ' Summary';
     previewTables.innerHTML  = '';
 
@@ -1301,9 +1308,17 @@
     if (e.key === 'Escape' && overlay.style.display !== 'none') closeReportModal();
     });
 
+    function syncDateBounds() {
+    dateToInput.min = dateInput.value || '';
+    dateInput.max   = dateToInput.value || '';
+    }
+
     // Re-preview on filter change; cascade drivers/vehicles when route changes
     routeSelect.addEventListener('change', () => { refreshCascade(); schedulePreview(); });
-    [dateInput, driverSelect, vehicleSelect].forEach(el => {
+    [dateInput, dateToInput].forEach(el => {
+    el.addEventListener('change', () => { syncDateBounds(); schedulePreview(); });
+    });
+    [driverSelect, vehicleSelect].forEach(el => {
     el.addEventListener('change', schedulePreview);
     });
 
