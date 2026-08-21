@@ -2010,3 +2010,37 @@
             transform: translateX(-50%) translateY(0);
         }
     }
+
+/* ===========================================================================
+   Touch: what hover used to reveal.
+
+   Gated on the pointer rather than the width, because the thing that fails is
+   hovering, not the size of the screen.
+   =========================================================================== */
+
+@media (hover: none) and (pointer: coarse) {
+
+    /* The dot's meaning was only ever available by hovering it, which left a
+       phone with a coloured circle and no legend. The word is shown outright
+       instead, on its own line under the name it belongs to. Colour then stops
+       being the only thing carrying the status, which it should not have been. */
+    .dp-status-wrap {
+        flex-wrap: wrap;
+        row-gap: 2px;
+    }
+
+    .dp-tooltip {
+        position: static;
+        order: 9;
+        flex-basis: 100%;
+        opacity: 1;
+        padding: 0;
+        background: none;
+        border-radius: 0;
+        color: var(--rp-muted);
+        font-size: .68rem;
+        white-space: normal;
+        /* Lines up under the name rather than under the dot. */
+        margin-left: 18px;
+    }
+}

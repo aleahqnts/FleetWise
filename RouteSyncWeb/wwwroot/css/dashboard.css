@@ -614,3 +614,12 @@
         align-items: stretch;
         }
         }
+
+/* The card is a link to the Fleet Map, and the overlay is what says so. It faded
+   in on hover, so on a phone the card looked inert. Shown outright instead. */
+@media (hover: none) and (pointer: coarse) {
+    .db-map-overlay {
+        opacity: 1;
+        background: rgba(45, 55, 72, .18);
+    }
+}
