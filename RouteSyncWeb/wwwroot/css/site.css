@@ -218,3 +218,83 @@
     background: #1e293b;
     color: #fff;
 }
+
+/* ===========================================================================
+   Tables as cards.
+
+   A table is the one layout that cannot be made narrow by reflowing: nine
+   columns need nine columns' worth of width. Below the breakpoint each row
+   becomes a card and each cell carries its column's name, written by
+   responsive-tables.js from the header the table already has.
+
+   Marked per table with .rs-cards, because it does not suit every one. A grid
+   whose cells span rows, like the Dispatch shift column, cannot be unstacked
+   this way and scrolls sideways instead.
+   =========================================================================== */
+
+@media (max-width: 599px) {
+
+    .rs-cards,
+    .rs-cards tbody,
+    .rs-cards tr,
+    .rs-cards td {
+        display: block;
+        width: 100%;
+    }
+
+    /* The header's job is done by the per-cell names below. */
+    .rs-cards thead {
+        display: none;
+    }
+
+    .rs-cards tr {
+        margin-bottom: 10px;
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        background: #fff;
+    }
+
+    .rs-cards td {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 6px 0;
+        border: none;
+        text-align: right;
+    }
+
+    .rs-cards td + td {
+        border-top: 1px solid #f1f5f9;
+    }
+
+    .rs-cards td[data-label]::before {
+        content: attr(data-label);
+        flex: 0 0 auto;
+        max-width: 45%;
+        color: #64748b;
+        font-size: .74rem;
+        font-weight: 600;
+        text-align: left;
+    }
+
+    /* A cell with nothing in it would otherwise print its name against a blank,
+       which reads as missing data rather than as nothing to say. */
+    .rs-cards td:empty {
+        display: none;
+    }
+
+    /* The empty state and the loading spinner span the table and have no column. */
+    .rs-cards td:not([data-label]) {
+        justify-content: center;
+        text-align: center;
+    }
+
+    /* Row actions get the full width of the card rather than being squeezed
+       against the right edge. */
+    .rs-cards td[data-label="Actions"] {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+}
