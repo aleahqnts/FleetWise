@@ -32,5 +32,14 @@ ENV ASPNETCORE_URLS=http://+:8080
 # configuration after startup anyway, so a deploy is what picks up a change.
 ENV DOTNET_hostBuilder__reloadConfigOnChange=false
 
+# Notice file changes by checking, not by asking the kernel to report them.
+#
+# A container is allotted 128 inotify instances, shared with everything else running under
+# the same account on the host, and the view engine claims one as it resolves each view. On
+# a busy host the allowance is gone before the first page renders, and the request fails.
+# Polling needs none of them. Nothing here edits its own files while running, so the checks
+# find nothing and cost close to nothing.
+ENV DOTNET_USE_POLLING_FILE_WATCHER=true
+
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "FleetWise.dll"]

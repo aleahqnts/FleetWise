@@ -1,3 +1,4 @@
+﻿using System.Diagnostics;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -264,6 +265,22 @@ namespace FleetWise.Controllers
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return RedirectToAction("Index", "Home");
         }
+
+        /// <summary>
+        /// Where UseExceptionHandler sends a request that faulted.
+        /// </summary>
+        /// <remarks>
+        /// Without this the handler path resolves to nothing, the handler answers 404, and
+        /// the browser shows its own blank page instead of the error view.
+        ///
+        /// The identifier shown is the one the server logs against the same request, so a
+        /// report of a failure can be matched to the entry that describes it.
+        /// </remarks>
+        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+        public IActionResult Error() => View(new ErrorViewModel
+        {
+            RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier,
+        });
 
         /// <summary>
         /// The email as typed on a failed attempt. Untrusted input, so it is length-capped
