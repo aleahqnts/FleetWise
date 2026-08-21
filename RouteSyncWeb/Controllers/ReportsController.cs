@@ -470,13 +470,14 @@ namespace FleetWise.Controllers
         public async Task<IActionResult> GenerateReport(
             string reportType,
             DateTime? date,
+            DateTime? dateTo,
             int? routeId,
             int? driverId,
             string? vehicleId)
         {
             // Defaults to the current operational day, 06:00 to 05:59 the next morning,
             // rather than the calendar day. Before 6 AM that is still the previous day.
-            var anchor = (date ?? PhClock.OperationalDay).Date;
+            var (from, to) = Period(date, dateTo);
 
             // Reference data.
             var routesResp = await _supabase.From<BusRoute>().Get();
@@ -494,7 +495,7 @@ namespace FleetWise.Controllers
             int Passengers(Trip t) => t.TotalBoarded;
 
             // Apply filters.
-            var filtered = ReportableTrips(allTrips, anchor, routeId, driverId, vehicleId);
+            var filtered = ReportableTrips(allTrips, from, to, routeId, driverId, vehicleId);
 
             object groups = reportType switch
             {
@@ -511,7 +512,9 @@ namespace FleetWise.Controllers
                 revenue = filtered.Where(Earned).Sum(t => t.EstimatedRevenue),
             };
 
-            return Json(new { groups, totals });
+            // The heading is written here rather than in the browser, so the preview and the
+            // downloaded file name the same days in the same words.
+            return Json(new { groups, totals, period = PeriodLabel(from, to) });
         }
 
         /// <summary>The trips a report covers, filtered and in reading order.</summary>
@@ -525,15 +528,42 @@ namespace FleetWise.Controllers
         /// better than it did.
         /// </remarks>
         private static List<Trip> ReportableTrips(
-            IEnumerable<Trip> all, DateTime anchor, int? routeId, int? driverId, string? vehicleId) =>
-            all.Where(t => t.Date.Date == anchor)
+            IEnumerable<Trip> all, DateTime from, DateTime to,
+            int? routeId, int? driverId, string? vehicleId) =>
+            all.Where(t => t.Date.Date >= from && t.Date.Date <= to)
                .Where(t => !routeId.HasValue || t.RouteId == routeId.Value)
                .Where(t => !driverId.HasValue || t.DriverId == driverId.Value)
                .Where(t => string.IsNullOrEmpty(vehicleId) || t.VehicleId == vehicleId)
                .Where(Concluded)
                .OrderBy(t => t.RouteId)
+               .ThenBy(t => t.Date)
                .ThenBy(t => t.ShiftStartTime)
                .ToList();
+
+        /// <summary>The days a report covers, as a pair of operational days.</summary>
+        /// <remarks>
+        /// Both ends default to the current operational day, so asking for no dates gives
+        /// the same single day it always did. A pair given backwards is read as the range
+        /// the reader meant rather than refused, since the two boxes carry no order of
+        /// their own and an empty report would not say why.
+        /// </remarks>
+        private static (DateTime From, DateTime To) Period(DateTime? from, DateTime? to)
+        {
+            var a = (from ?? PhClock.OperationalDay).Date;
+            var b = (to ?? from ?? PhClock.OperationalDay).Date;
+            return b < a ? (b, a) : (a, b);
+        }
+
+        /// <summary>How the covered days read on the report itself.</summary>
+        private static string PeriodLabel(DateTime from, DateTime to) =>
+            from == to
+                ? OpDayLabel(from)
+                : $"{from:MMMM d, yyyy} to {to:MMMM d, yyyy}"
+                  + $"  •  {(to - from).Days + 1} operational days";
+
+        /// <summary>The covered days as a file name fragment.</summary>
+        private static string PeriodStamp(DateTime from, DateTime to) =>
+            from == to ? $"{from:yyyy-MM-dd}" : $"{from:yyyy-MM-dd}_to_{to:yyyy-MM-dd}";
 
         /// <summary>Whether a trip has finished, whether by running or by being missed.</summary>
         private static bool Concluded(Trip t) => DeriveStatus(t) is "Completed" or "Missed";
@@ -642,13 +672,14 @@ namespace FleetWise.Controllers
         public async Task<IActionResult> DownloadReport(
             string reportType,
             DateTime? date,
+            DateTime? dateTo,
             int? routeId,
             int? driverId,
             string? vehicleId)
         {
             // Defaults to the current operational day, 06:00 to 05:59 the next morning,
             // rather than the calendar day. Before 6 AM that is still the previous day.
-            var anchor = (date ?? PhClock.OperationalDay).Date;
+            var (from, to) = Period(date, dateTo);
 
             var routesResp = await _supabase.From<BusRoute>().Get();
             var routeNames = routesResp.Models.ToDictionary(r => r.RouteId, r => r.RouteName);
@@ -663,7 +694,7 @@ namespace FleetWise.Controllers
 
             int Passengers(Trip t) => t.TotalBoarded;
 
-            var filtered = ReportableTrips(tripsResp.Models, anchor, routeId, driverId, vehicleId);
+            var filtered = ReportableTrips(tripsResp.Models, from, to, routeId, driverId, vehicleId);
 
             // Build report data.
             string reportTitle = reportType switch
@@ -675,9 +706,9 @@ namespace FleetWise.Controllers
 
             string fileName = reportType switch
             {
-                "Passenger" => $"PassengerReport_{anchor:yyyy-MM-dd}.pdf",
-                "Revenue" => $"RevenueReport_{anchor:yyyy-MM-dd}.pdf",
-                _ => $"DailyTripReport_{anchor:yyyy-MM-dd}.pdf"
+                "Passenger" => $"PassengerReport_{PeriodStamp(from, to)}.pdf",
+                "Revenue" => $"RevenueReport_{PeriodStamp(from, to)}.pdf",
+                _ => $"DailyTripReport_{PeriodStamp(from, to)}.pdf"
             };
 
             string[] columns = reportType switch
@@ -771,7 +802,7 @@ namespace FleetWise.Controllers
                             {
                                 inner.Item().Text("Operational Day")
                                     .Bold().FontSize(8).FontColor("#9AA5B4").LetterSpacing(0.06f);
-                                inner.Item().Text(OpDayLabel(anchor))
+                                inner.Item().Text(PeriodLabel(from, to))
                                     .Bold().FontSize(9.5f).FontColor("#2D3748");
                                 inner.Item().Text($"Generated: {PhClock.Now:MMM dd, yyyy hh:mm tt}")
                                     .FontSize(8).FontColor("#9AA5B4");
@@ -884,13 +915,14 @@ namespace FleetWise.Controllers
         public async Task<IActionResult> DownloadReportCsv(
             string reportType,
             DateTime? date,
+            DateTime? dateTo,
             int? routeId,
             int? driverId,
             string? vehicleId)
         {
             // Defaults to the current operational day, 06:00 to 05:59 the next morning,
             // rather than the calendar day. Before 6 AM that is still the previous day.
-            var anchor = (date ?? PhClock.OperationalDay).Date;
+            var (from, to) = Period(date, dateTo);
 
             var routesResp = await _supabase.From<BusRoute>().Get();
             var routeNames = routesResp.Models.ToDictionary(r => r.RouteId, r => r.RouteName);
@@ -905,7 +937,7 @@ namespace FleetWise.Controllers
 
             int Passengers(Trip t) => t.TotalBoarded;
 
-            var filtered = ReportableTrips(tripsResp.Models, anchor, routeId, driverId, vehicleId);
+            var filtered = ReportableTrips(tripsResp.Models, from, to, routeId, driverId, vehicleId);
 
             string CsvEscape(string s) =>
                 s != null && (s.Contains(',') || s.Contains('"') || s.Contains('\n'))
@@ -923,13 +955,13 @@ namespace FleetWise.Controllers
                 _ => "Daily Trip Report"
             };
             sb.AppendLine("RouteSync - " + reportLabel);
-            sb.AppendLine("Operational Day," + CsvEscape(OpDayLabel(anchor)));
+            sb.AppendLine((from == to ? "Operational Day," : "Period,") + CsvEscape(PeriodLabel(from, to)));
             sb.AppendLine();
 
             switch (reportType)
             {
                 case "Passenger":
-                    fileName = $"PassengerReport_{anchor:yyyy-MM-dd}.csv";
+                    fileName = $"PassengerReport_{PeriodStamp(from, to)}.csv";
                     sb.AppendLine("Trip ID,Date,Driver,Route,Shift,Shift Time,Status,Passengers");
                     foreach (var t in filtered)
                         sb.AppendLine(string.Join(",",
@@ -944,7 +976,7 @@ namespace FleetWise.Controllers
                     break;
 
                 case "Revenue":
-                    fileName = $"RevenueReport_{anchor:yyyy-MM-dd}.csv";
+                    fileName = $"RevenueReport_{PeriodStamp(from, to)}.csv";
                     sb.AppendLine("Trip ID,Date,Driver,Bus ID,Route,Shift,Status,Revenue");
                     foreach (var t in filtered)
                         sb.AppendLine(string.Join(",",
@@ -959,7 +991,7 @@ namespace FleetWise.Controllers
                     break;
 
                 default:
-                    fileName = $"DailyTripReport_{anchor:yyyy-MM-dd}.csv";
+                    fileName = $"DailyTripReport_{PeriodStamp(from, to)}.csv";
                     sb.AppendLine("Trip ID,Date,Driver,Bus ID,Route,Shift,Shift Time,Actual Start,Actual End,Status,Passengers,Revenue");
                     foreach (var t in filtered)
                         sb.AppendLine(string.Join(",",
