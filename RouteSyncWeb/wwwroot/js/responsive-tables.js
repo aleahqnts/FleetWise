@@ -32,6 +32,18 @@
         document.querySelectorAll('table.rs-cards').forEach(label);
     }
 
+    // Cards that open. A tap anywhere on the card that is not a control shows the
+    // rest of its values, so a list of twenty vehicles reads as twenty headings
+    // rather than a hundred and twenty lines.
+    document.addEventListener('click', function (e) {
+        var row = e.target.closest && e.target.closest('.rs-collapse tbody tr');
+        if (!row) return;
+        // A button, a link or a field is doing its own job; opening the card on top
+        // of that would fight it.
+        if (e.target.closest('button, a, input, select, textarea, label')) return;
+        row.classList.toggle('rs-open');
+    });
+
     document.addEventListener('DOMContentLoaded', function () {
         labelAll();
 
