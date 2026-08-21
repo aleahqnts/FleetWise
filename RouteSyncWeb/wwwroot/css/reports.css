@@ -1,4 +1,4 @@
-/* Reports/Index.cshtml */
+﻿/* Reports/Index.cshtml */
     :root {
     --rp-text: #2D3748;
     --rp-muted: #9AA5B4;
@@ -960,6 +960,23 @@
     flex-direction: column;
     gap: 5px;
     }
+
+    /* Two date boxes share the width the single one used to have, so adding an end
+       date did not make the filter column any taller. */
+    .rg-field-row {
+    display: flex;
+    gap: 8px;
+    }
+
+        .rg-field-row .rg-field {
+        flex: 1;
+        min-width: 0;
+        }
+
+        .rg-field-row .rg-input {
+        width: 100%;
+        min-width: 0;
+        }
 
     .rg-label {
     font-size: 0.8rem;
