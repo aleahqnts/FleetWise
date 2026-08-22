@@ -1,0 +1,11 @@
+/* The icon sizes itself.
+
+   Every page that uses it styles the button around it in its own scoped
+   stylesheet, but scoped rules only reach elements the component wrote. The svg
+   is written here now, so a rule in Login or Profile cannot see it. */
+
+svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}

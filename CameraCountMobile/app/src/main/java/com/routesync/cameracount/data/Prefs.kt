@@ -177,6 +177,9 @@ class Prefs(private val context: Context) {
         context.dataStore.edit {
             it.remove(VEHICLE_ID)
             it.remove(PLATE)
+            // The passcode only exists to gate the unbind that just happened. Keeping
+            // it would leave the fleet secret on a phone bound to nothing.
+            it.remove(PASSCODE)
         }
     }
 }

@@ -65,7 +65,7 @@
                 <div class="rtm-field">
                     <label class="rtm-label" for="rtm-driver">Driver Name</label>
                     <div class="rtm-select-wrap">
-                        <select id="rtm-driver" class="rtm-select">
+                        <select id="rtm-driver" class="rtm-select rs-id-list">
                             <option value="">Loading…</option>
                         </select>
                     </div>
@@ -256,10 +256,12 @@
 
             const list = _rtmOptions.drivers;
 
+            // Two drivers can share a name, so the identifier travels with it, in a
+            // column of its own so the numbers can be read down the list.
+            const rtmLabels = rsIdLabels(list.map(d => ({ name: d.driverName, id: d.driverId })));
             rtmFillSelect(driverSel,
                 list.length === 0 ? 'No drivers available for this shift' : 'Select a driver…',
-                // Two drivers can share a name, so the identifier travels with it.
-                list.map(d => ({ value: d.driverId, label: `${d.driverName} · ${d.driverId}` })),
+                list.map((d, i) => ({ value: d.driverId, label: rtmLabels[i] })),
                 selectedId);
 
             driverHint.textContent = list.length === 0

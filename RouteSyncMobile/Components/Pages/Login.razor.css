@@ -1,4 +1,4 @@
-.login-bg {
+﻿.login-bg {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -99,7 +99,6 @@
     align-items: center;
 }
 
-.field .eye svg { width: 18px; height: 18px; display: block; }
 
 .forgot {
     text-align: right;

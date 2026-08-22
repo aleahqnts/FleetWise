@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 
 namespace FleetWise.Models
 {
@@ -65,6 +65,14 @@ namespace FleetWise.Models
 
         /// <summary>Whether the bus has left the fleet, which no service action can undo.</summary>
         public bool Retired { get; set; }
+
+        /// <summary>
+        /// Whether the bus is out on a trip right now, which no service action may
+        /// interrupt: grounding it would strand a driver mid-route with passengers
+        /// aboard, and dispatch would show a bus that cannot be assigned to the trip
+        /// it is already running.
+        /// </summary>
+        public bool OnTrip { get; set; }
         /// <summary>The unresolved incident to act on, or null when none is open.</summary>
         public int? OpenLogId { get; set; }
 

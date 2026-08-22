@@ -646,6 +646,7 @@ namespace FleetWise.Controllers
             // most recent one when nothing is open.
             vm.OutOfService = vehicle.OutOfService;
             vm.Retired = vehicle.RetiredAt != null;
+            vm.OnTrip = await OnActiveTripAsync(vehicle.VehicleId);
             var openLog = logs.FirstOrDefault(l => l.ResolvedAt == null);
             vm.OpenLogId = openLog?.LogId;
             vm.OpenIncidentCritical = openLog?.IssueDetails?.IsCritical == true;
@@ -766,12 +767,7 @@ namespace FleetWise.Controllers
             if (retired)
             {
                 // A bus on a trip right now cannot be retired from under its driver.
-                var active = await _supabase.From<Trip>()
-                    .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
-                    .Filter("trip_status", Postgrest.Constants.Operator.Equals, "Active")
-                    .Get();
-
-                if (active.Models.Count > 0)
+                if (await OnActiveTripAsync(vehicleId))
                     return BadRequest($"{vehicleId} is on a trip. End the trip before retiring it.");
 
                 // A counter left attached would keep reporting against a bus that is no
@@ -853,6 +849,17 @@ namespace FleetWise.Controllers
         /// <summary>Grounds a bus so dispatch cannot assign it, or returns it to service.</summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
+        /// <summary>Whether the bus is out on a trip at this moment.</summary>
+        /// <remarks>
+        /// Asked before retiring a bus and before grounding one. Both take it off the
+        /// road, and neither may do so while it is carrying passengers.
+        /// </remarks>
+        private async Task<bool> OnActiveTripAsync(string vehicleId) =>
+            (await _supabase.From<Trip>()
+                .Filter("vehicle_id", Postgrest.Constants.Operator.Equals, vehicleId)
+                .Filter("trip_status", Postgrest.Constants.Operator.Equals, "Active")
+                .Get()).Models.Count > 0;
+
         public async Task<IActionResult> SetServiceState(string vehicleId, bool outOfService, int? logId, string? note)
         {
             if (string.IsNullOrWhiteSpace(vehicleId)) return BadRequest("Vehicle required.");
@@ -890,6 +897,13 @@ namespace FleetWise.Controllers
 
             if (outOfService)
             {
+                // Grounding a bus mid-route would strand its driver with passengers
+                // aboard, and leave dispatch showing a bus that cannot be assigned to
+                // the trip it is already running.
+                if (await OnActiveTripAsync(vehicleId))
+                    return BadRequest(
+                        $"{vehicleId} is on a trip. End the trip before taking it off the road.");
+
                 // One order carries the grounding, whether the bus already had faults
                 // or not. Booking it into the workshop is Schedule Maintenance, which is
                 // what promotes the order to under repair.

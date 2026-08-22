@@ -8,6 +8,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -175,12 +178,11 @@ private fun SetupCard(vm: CounterViewModel, onBind: (String, String, (String?) -
 
     val passOk = passcode.length >= CounterViewModel.MIN_PASSCODE
 
-    // Debounced: retyping cancels the previous attempt (LaunchedEffect restart).
-    LaunchedEffect(passcode) {
-        fleet = null; fleetError = null; serverDown = false; vehicle = ""
-        if (!passOk) return@LaunchedEffect
-        kotlinx.coroutines.delay(900)
+    fun submitPasscode() {
+        if (!passOk || checking) return
         checking = true
+        fleetError = null
+        serverDown = false
         vm.prepareFleet(passcode) { list, err ->
             checking = false
             fleet = list
@@ -201,16 +203,32 @@ private fun SetupCard(vm: CounterViewModel, onBind: (String, String, (String?) -
 
         var showPasscode by remember { mutableStateOf(false) }
         OutlinedTextField(
-            passcode, { passcode = it; bindError = null }, singleLine = true,
+            passcode,
+            {
+                passcode = it
+                bindError = null
+                fleet = null
+                fleetError = null
+                serverDown = false
+                vehicle = ""
+            },
+            singleLine = true,
             label = { Text("Fleet passcode") }, modifier = Modifier.fillMaxWidth(),
             visualTransformation =
                 if (showPasscode) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = { PasscodeReveal(showPasscode) { showPasscode = !showPasscode } },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { submitPasscode() }),
             supportingText = {
                 if (!passOk) Text("Enter the fleet passcode to load the bus list.", color = RsColor.Muted)
             }
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
+
+        if (fleet == null && !serverDown && !checking) {
+            PrimaryButton("Confirm passcode", enabled = passOk) { submitPasscode() }
+            Spacer(Modifier.height(12.dp))
+        }
 
         when {
             checking -> Row(verticalAlignment = Alignment.CenterVertically) {

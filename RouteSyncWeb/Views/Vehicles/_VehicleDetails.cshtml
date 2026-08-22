@@ -1,4 +1,4 @@
-@model VehicleDetailsViewModel
+﻿@model VehicleDetailsViewModel
 @*
     Vehicle details, fetched per vehicle into the details modal.
     Renders the modal header + body; the shell lives in _ViewVehicleModal.cshtml.
@@ -186,6 +186,14 @@
                                 driver must pass a new inspection first.
                             </text>
                         }
+                        else if (Model.OnTrip)
+                        {
+                            <text>
+                                <strong>@Model.VehicleId is on a trip.</strong> A bus cannot be taken
+                                off the road while it is carrying passengers. End the trip from
+                                <strong>Dispatch</strong> first.
+                            </text>
+                        }
                         else if (Model.OpenLogId.HasValue)
                         {
                             <text>
@@ -211,7 +219,10 @@
                         }
                         else
                         {
-                            <button type="button" class="vh-btn vh-btn--danger" onclick="vhMarkOutOfService('@Model.VehicleId', @(Model.OpenLogId?.ToString() ?? "null"))">Mark Out of Service</button>
+                            <button type="button" class="vh-btn vh-btn--danger"
+                                    onclick="vhMarkOutOfService('@Model.VehicleId', @(Model.OpenLogId?.ToString() ?? "null"))"
+                                    disabled="@Model.OnTrip"
+                                    title="@(Model.OnTrip ? "The bus is on a trip. End it from Dispatch first." : null)">Mark Out of Service</button>
                         }
                     </div>
                 }
