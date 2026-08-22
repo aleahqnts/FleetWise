@@ -1,4 +1,4 @@
-.muted { color: #8a93a2; }
+﻿.muted { color: #8a93a2; }
 
 .profile {
     padding: 52px 22px 28px;
@@ -374,11 +374,6 @@
     align-items: center;
 }
 
-    .pform .eye svg {
-        width: 18px;
-        height: 18px;
-        display: block;
-    }
 
 /* Rule checklist. Hollow circle until met, filled green after. */
 .pform .pw-rules {

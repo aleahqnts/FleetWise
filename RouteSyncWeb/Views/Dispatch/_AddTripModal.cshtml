@@ -64,7 +64,7 @@
                 <div class="atm-field">
                     <label class="atm-label" for="atm-driver">Driver Name</label>
                     <div class="atm-select-wrap">
-                        <select id="atm-driver" class="atm-select">
+                        <select id="atm-driver" class="atm-select rs-id-list">
                             <option value="">Select shift first…</option>
                         </select>
                     </div>
@@ -293,9 +293,11 @@
                 : '<option value="">Select shift first…</option>';
             return;
         }
+        // Two drivers can share a name, so the identifier travels with it, in a
+        // column of its own so the numbers can be read down the list.
+        const atmLabels = rsIdLabels(drivers.map(d => ({ name: d.driverName, id: d.driverId })));
         atmFillSelect(sel, 'Select a driver…',
-            // Two drivers can share a name, so the identifier travels with it.
-            drivers.map(d => ({ value: d.driverId, label: `${d.driverName} · ${d.driverId}` })));
+            drivers.map((d, i) => ({ value: d.driverId, label: atmLabels[i] })));
     }
 
     function hideHint(id) {

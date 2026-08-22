@@ -203,6 +203,8 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
             // the database lock for an admin to clear from vehicles.counter_device_id.
             runCatching { SupabaseApi.releaseVehicle(vehicleId, deviceId) }
             prefs.unbind()
+            vehicleId = ""
+            tripId = null
             _state.value = UiState.NeedsSetup
             onResult(true)
         }
@@ -293,6 +295,11 @@ class CounterViewModel(app: Application) : AndroidViewModel(app) {
                         }
                         _state.value = waiting()
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // The job is being shut down, by an unbind or by the view model
+                    // going away. Rethrow so the loop actually stops rather than
+                    // reporting its own cancellation as a failed poll.
+                    throw e
                 } catch (e: Exception) {
                     if (tripId == null) _state.value = waiting(e.message)
                     // While counting, poll errors are tolerated. The flush loop keeps trying.
