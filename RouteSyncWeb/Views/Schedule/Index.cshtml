@@ -2,6 +2,18 @@
 @{
     ViewData["Title"] = "Edit Schedule";
     string CellKey(int routeId, string shift, DateTime day) => $"{routeId}|{shift}|{day:yyyy-MM-dd}";
+
+    // The identifier prints in a column of its own, so the numbers can be read down
+    // the list rather than hunted for after names of every length. A native option
+    // cannot be laid out, so the padding is the text itself, in a space that does not
+    // collapse, and the select is set in a monospace face to hold the column steady.
+    var driverNameWidth = Model.Drivers.Count == 0 ? 0 : Model.Drivers.Max(d => d.DriverName.Length);
+
+    string DriverLabel(string name, int id, bool offered) =>
+        name
+        + new string(' ', Math.Max(0, driverNameWidth - name.Length) + 2)
+        + id
+        + (offered ? "" : " (unavailable)");
 }
 
 <div class="sch-wrap">
@@ -106,11 +118,11 @@
                                                             <option value="@v.VehicleId" selected="@(cell?.VehicleId == v.VehicleId)">@v.VehicleId · @v.PlateNumber@(v.Offered ? "" : " (unavailable)")</option>
                                                         }
                                                     </select>
-                                                    <select class="sch-sel sch-drv">
+                                                    <select class="sch-sel sch-drv rs-id-list">
                                                         <option value="">Driver…</option>
                                                         @foreach (var dr in Model.Drivers.Where(d => d.Offered || (cell != null && cell.DriverId == d.DriverId)))
                                                         {
-                                                            <option value="@dr.DriverId" selected="@(cell != null && cell.DriverId == dr.DriverId)">@dr.DriverName · @dr.DriverId@(dr.Offered ? "" : " (unavailable)")</option>
+                                                            <option value="@dr.DriverId" selected="@(cell != null && cell.DriverId == dr.DriverId)">@DriverLabel(dr.DriverName, dr.DriverId, dr.Offered)</option>
                                                         }
                                                     </select>
                                                 </div>
@@ -181,12 +193,16 @@
     const SCH_VEHICLES = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
         Model.Vehicles.Where(v => v.Offered).Select(v => new { id = v.VehicleId, label = $"{v.VehicleId} · {v.PlateNumber}" })));
     const SCH_DRIVERS = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-        Model.Drivers.Where(d => d.Offered).Select(d => new { id = d.DriverId, label = $"{d.DriverName} · {d.DriverId}" })));
+        Model.Drivers.Where(d => d.Offered)
+             .Select(d => new { id = d.DriverId, name = d.DriverName })));
+    // Names padded to a shared width so the identifiers line up down the list.
+    rsIdLabels(SCH_DRIVERS.map(function (d) { return { name: d.name, id: d.id }; }))
+        .forEach(function (label, i) { SCH_DRIVERS[i].label = label; });
 
     // One <select>, built from the data above. textContent, never innerHTML.
     function schBuildSelect(cls, placeholder, items) {
         const sel = document.createElement('select');
-        sel.className = 'sch-sel ' + cls;
+        sel.className = 'sch-sel ' + cls + (cls === 'sch-drv' ? ' rs-id-list' : '');
         const blank = document.createElement('option');
         blank.value = '';
         blank.textContent = placeholder;

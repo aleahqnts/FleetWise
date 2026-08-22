@@ -485,3 +485,10 @@
         gap: 8px;
     }
 }
+
+/* An identifier printed in a column of its own only stays in that column if every
+   character is the same width, so the lists that do it are set in a monospace face.
+   Applies to the option rows, not the closed control, which shows one name. */
+.rs-id-list option {
+    font-family: ui-monospace, "Cascadia Mono", "Consolas", "Courier New", monospace;
+}
